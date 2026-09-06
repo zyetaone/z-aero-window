@@ -4,6 +4,19 @@ import { Location, LOCATIONS } from '#lib/settings/locations.js';
 import { SENTINEL2_PLACES, WATER_PLACES } from '#lib/settings/tiles.js';
 
 describe('every location is actually reachable', () => {
+	/**
+	 * A catalog entry with floor above ceiling would fly the whole visit pinned
+	 * to the ceiling, silently discarding the floor — and the floor is the bound
+	 * that "must clear local peaks". `PaneSettings.orderClimbBand` repairs an
+	 * inverted band arriving from a URL or a slider, but `setPlace` assigns these
+	 * two straight from the catalog, so a bad entry here is not covered by it.
+	 */
+	it('declares a climb band the right way up', () => {
+		for (const l of LOCATIONS) {
+			expect(l.climbFloorM, `${l.id} floor above ceiling`).toBeLessThanOrEqual(l.climbCeilingM);
+		}
+	});
+
 	it('has the whole catalogue in the rotation pool', () => {
 		expect(LOCATIONS.map((l) => l.id).sort()).toEqual(Location.CATALOG.map((l) => l.id).sort());
 	});

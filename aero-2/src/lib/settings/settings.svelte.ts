@@ -260,6 +260,12 @@ export class PaneSettings {
 		this.pitchDeg = parseNum(url.searchParams, 'pitch', DEFAULT_PITCH_DEG, 'pitchDeg');
 		this.floorM = parseNum(url.searchParams, 'floor', this.floorM, 'floorM');
 		this.ceilingM = parseNum(url.searchParams, 'ceiling', this.ceilingM, 'ceilingM');
+		/**
+		 * Both parsed, THEN ordered. Per-knob clamping cannot see a pair, and an
+		 * inverted band silently discards the floor — see `orderClimbBand`. The
+		 * ceiling yields here because `?floor=` is the safety bound.
+		 */
+		this.orderClimbBand('floorM');
 		this.clockOffsetH = parseNum(url.searchParams, 'clock', 0, 'clockOffsetH');
 		this.shade = parseNum(url.searchParams, 'shade', HILLSHADE_DEFAULT, 'shade');
 		this.exaggeration = parseNum(url.searchParams, 'exaggeration', TERRAIN_EXAGGERATION, 'exaggeration');
@@ -416,6 +422,39 @@ export class PaneSettings {
 		}
 		const [lo, hi] = KNOB_RANGE[key];
 		this[key] = Math.min(hi, Math.max(lo, value));
+		if (key === 'floorM' || key === 'ceilingM') this.orderClimbBand(key);
+	}
+
+	/**
+	 * Keep the climb band the right way up.
+	 *
+	 * `KNOB_RANGE` clamps each knob against its OWN bounds, and floor and
+	 * ceiling share the same [0, 20_000] range, so every individual value that
+	 * inverts the band is legal on its own terms. Nothing else checks the pair:
+	 * `?floor=4600&ceiling=1000` passes both clamps, and the two drawer sliders
+	 * can be dragged past each other by hand.
+	 *
+	 * `altitudeAt` then computes a NEGATIVE band and its final
+	 * `min(ceiling, max(floor, …))` resolves floor-first-then-ceiling, so the
+	 * ceiling wins and the aircraft pins to it for the whole flight. The floor
+	 * is silently discarded — and the floor is the safety number: its docstring
+	 * says "must clear local peaks", and the Himalayas entry exists at 4,600 m
+	 * precisely because 3,500 m put the camera below Everest's summit.
+	 *
+	 * Measured, over the Himalayas' 5,000 m mean:
+	 *   floor=4600 ceiling=13000 → camera 9,600 m MSL, clear of the 8,849 m summit
+	 *   floor=4600 ceiling=1000  → camera 6,000 m MSL, 2,849 m INSIDE the mountain
+	 *
+	 * The window fills with rock, which is the exact failure the location
+	 * catalog was tuned to prevent, reachable from a provisioning URL typo.
+	 *
+	 * The knob that MOVED wins and the other yields, so a drag stays predictable
+	 * rather than snapping back under the operator's finger.
+	 */
+	private orderClimbBand(moved: 'floorM' | 'ceilingM'): void {
+		if (this.floorM <= this.ceilingM) return;
+		if (moved === 'floorM') this.ceilingM = this.floorM;
+		else this.floorM = this.ceilingM;
 	}
 
 	reverse(): void {
