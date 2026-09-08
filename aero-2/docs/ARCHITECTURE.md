@@ -449,13 +449,13 @@ which is exactly the kind of finding that gets re-litigated otherwise.
 The natural instinct on a codebase this size is to reach for an event bus. It
 would be wrong here, and the numbers say why:
 
-| mechanism | count |
-|---|---|
-| `useDisplay()` — context | 50 components |
-| callback props (`onselect`) | the Segmented control and its 5 call sites |
-| `$bindable` | 1 (drawer open/closed) |
-| `dispatchEvent` / `CustomEvent` / emitters | **0** |
-| mutable global singletons | **0** (only debug hooks) |
+| mechanism                                  | count                                      |
+| ------------------------------------------ | ------------------------------------------ |
+| `useDisplay()` — context                   | 50 components                              |
+| callback props (`onselect`)                | the Segmented control and its 5 call sites |
+| `$bindable`                                | 1 (drawer open/closed)                     |
+| `dispatchEvent` / `CustomEvent` / emitters | **0**                                      |
+| mutable global singletons                  | **0** (only debug hooks)                   |
 
 Nothing dispatches an event because nothing needs to. A bus solves "A must tell
 B something happened when A does not know B exists". This app has no such

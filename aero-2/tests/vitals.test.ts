@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-	recordVitals,
-	readVitals,
-	resetVitals,
-	VITALS_MAX_AGE_MS
-} from '#lib/server/vitals.js';
+import { recordVitals, readVitals, resetVitals, VITALS_MAX_AGE_MS } from '#lib/server/vitals.js';
 import { GET } from '../src/routes/api/status/+server.js';
 
 /**
@@ -18,10 +13,12 @@ import { GET } from '../src/routes/api/status/+server.js';
 beforeEach(() => resetVitals());
 
 const status = async () =>
-	(await (GET as unknown as (e: unknown) => Promise<Response>)({
-		request: new Request('http://pane/api/status'),
-		getClientAddress: () => '127.0.0.1'
-	})).json();
+	(
+		await (GET as unknown as (e: unknown) => Promise<Response>)({
+			request: new Request('http://pane/api/status'),
+			getClientAddress: () => '127.0.0.1'
+		})
+	).json();
 
 describe('render vitals', () => {
 	it('reports nothing before the tab has said anything', async () => {

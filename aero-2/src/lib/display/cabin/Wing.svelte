@@ -273,9 +273,7 @@
 						'aoMap',
 						'alphaMap'
 					] as const) {
-						(m as unknown as Record<string, { dispose?: () => void } | null>)[
-							slot
-						]?.dispose?.();
+						(m as unknown as Record<string, { dispose?: () => void } | null>)[slot]?.dispose?.();
 					}
 					m.dispose();
 				}

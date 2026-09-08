@@ -66,7 +66,7 @@ describe('real time vs the clock offset', () => {
 		expect(new Set([...seen.values()].map((v) => Math.round(v))).size).toBeGreaterThan(1);
 		// And each must match its own declared UTC offset.
 		for (const [id, tod] of seen) {
-			const want = ((12 + Location.byId(id).utcOffset) % 24 + 24) % 24;
+			const want = (((12 + Location.byId(id).utcOffset) % 24) + 24) % 24;
 			expect(tod, `${id} is not on its own clock`).toBeCloseTo(want, 3);
 		}
 	});

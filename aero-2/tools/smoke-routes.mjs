@@ -213,7 +213,12 @@ const chrome = spawn(
 		 * unavailable in most containers, and Chrome refuses to start without it.
 		 */
 		...(process.env.CI
-			? ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--disable-dev-shm-usage']
+			? [
+					'--use-gl=swiftshader',
+					'--enable-unsafe-swiftshader',
+					'--no-sandbox',
+					'--disable-dev-shm-usage'
+				]
 			: ['--use-gl=angle']),
 		`--remote-debugging-port=${CDP_PORT}`,
 		`--user-data-dir=${profile}`,

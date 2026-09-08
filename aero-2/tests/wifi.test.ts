@@ -22,9 +22,8 @@ vi.mock('#lib/server/wifi.js', async (importOriginal) => ({
 	wifiRecoveryAvailable: vi.fn(() => ({ ok: true }))
 }));
 
-const { PORTAL_BIN, PORTAL_UNIT, wifiRecoveryAvailable } = await vi.importActual<
-	typeof import('#lib/server/wifi.js')
->('#lib/server/wifi.js');
+const { PORTAL_BIN, PORTAL_UNIT, wifiRecoveryAvailable } =
+	await vi.importActual<typeof import('#lib/server/wifi.js')>('#lib/server/wifi.js');
 
 import { POST } from '../src/routes/api/wifi/reset/+server.js';
 

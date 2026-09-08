@@ -92,7 +92,9 @@ describe('the wall cannot drift', () => {
 				);
 				expect(Number.isFinite(v.aglM), `${id} produced a non-finite altitude`).toBe(true);
 				expect(v.aglM, `${id} sank below its floor`).toBeGreaterThanOrEqual(place.climbFloorM - 1);
-				expect(v.aglM, `${id} climbed past its ceiling`).toBeLessThanOrEqual(place.climbCeilingM + 1);
+				expect(v.aglM, `${id} climbed past its ceiling`).toBeLessThanOrEqual(
+					place.climbCeilingM + 1
+				);
 			}
 		}
 	});

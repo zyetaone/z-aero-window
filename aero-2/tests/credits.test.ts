@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import {
-	PRODUCT_NAME,
-	PRODUCT_OWNER,
-	ENGINEERED_BY,
-	PRODUCT_PARTNERS
-} from '#lib/credits.js';
+import { PRODUCT_NAME, PRODUCT_OWNER, ENGINEERED_BY, PRODUCT_PARTNERS } from '#lib/credits.js';
 
 /**
  * Attribution that is declared but rendered nowhere is not attribution.
@@ -46,10 +41,9 @@ describe('product attribution reaches a surface', () => {
 			const src = template(path);
 			expect(src, `${label} does not name the owner`).toContain('PRODUCT_OWNER');
 			expect(src, `${label} does not name the engineer`).toContain('ENGINEERED_BY');
-			expect(
-				src,
-				`${label} declares no partners — SWA appears nowhere on this surface`
-			).toContain('PRODUCT_PARTNERS');
+			expect(src, `${label} declares no partners — SWA appears nowhere on this surface`).toContain(
+				'PRODUCT_PARTNERS'
+			);
 		});
 	}
 

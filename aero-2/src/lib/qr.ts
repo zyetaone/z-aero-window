@@ -102,7 +102,7 @@ class Bits {
 		for (let i = width - 1; i >= 0; i--) {
 			const bit = (value >>> i) & 1;
 			if (this.length % 8 === 0) this.bytes.push(0);
-			if (bit) this.bytes[this.bytes.length - 1] |= 0x80 >>> this.length % 8;
+			if (bit) this.bytes[this.bytes.length - 1] |= 0x80 >>> (this.length % 8);
 			this.length++;
 		}
 	}

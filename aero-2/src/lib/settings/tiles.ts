@@ -92,11 +92,7 @@ export const SENTINEL2_MINZOOM = 8;
  *
  * Keep in step with `data/tiles/water/source-*.json`.
  */
-export const WATER_PLACES: ReadonlySet<string> = new Set([
-	'chicago_midway',
-	'dubai',
-	'mumbai'
-]);
+export const WATER_PLACES: ReadonlySet<string> = new Set(['chicago_midway', 'dubai', 'mumbai']);
 
 /** Below this the mask is not packed, and the coastline is not resolvable anyway. */
 export const WATER_MINZOOM = 8;

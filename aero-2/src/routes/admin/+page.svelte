@@ -3,7 +3,13 @@
 	 * /admin — Fleet Management, Multi-Screen Remote Control Cockpit & Diagnostics.
 	 */
 	import { onMount } from 'svelte';
-	import { PRODUCT_NAME, PRODUCT_OWNER, ENGINEERED_BY, PRODUCT_STAGE, PRODUCT_PARTNERS } from '#lib/credits.js';
+	import {
+		PRODUCT_NAME,
+		PRODUCT_OWNER,
+		ENGINEERED_BY,
+		PRODUCT_STAGE,
+		PRODUCT_PARTNERS
+	} from '#lib/credits.js';
 	import { LOCATIONS } from '#lib/settings/locations.js';
 	import { SCENE_PRESETS } from '#lib/settings/presets.js';
 	import {
@@ -228,7 +234,7 @@
 				<div class="network-interfaces">
 					<h3>Local LAN Access IP Addresses:</h3>
 					<div class="ip-list">
-					<!-- Keyed: this list is refetched every 20 s and interfaces come and
+						<!-- Keyed: this list is refetched every 20 s and interfaces come and
 					     go (WiFi associating, a tunnel raising utun). Unkeyed, Svelte
 					     patches in place, so a removed interface leaves the row below it
 					     wearing the wrong copy-button target. The other `{#each}` blocks

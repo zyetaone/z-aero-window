@@ -55,7 +55,10 @@ describe('parseWallState refuses what it should', () => {
 
 	it('refuses non-boolean booleans, including truthy strings', () => {
 		for (const v of ['true', 1, 0, null, {}]) {
-			expect(parseWallState({ ...good(), blindOpen: v }), `blindOpen ${JSON.stringify(v)}`).toBeNull();
+			expect(
+				parseWallState({ ...good(), blindOpen: v }),
+				`blindOpen ${JSON.stringify(v)}`
+			).toBeNull();
 			expect(parseWallState({ ...good(), rotate: v }), `rotate ${JSON.stringify(v)}`).toBeNull();
 		}
 	});

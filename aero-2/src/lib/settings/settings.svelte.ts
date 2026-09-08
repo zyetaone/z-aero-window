@@ -256,7 +256,12 @@ export class PaneSettings {
 		const placeParam = url.searchParams.get('place');
 		this.rotate = placeParam === null;
 		this.setPlace(Location.byId(placeParam));
-		this.azimuthDeg = parseNum(url.searchParams, 'azimuth', DEFAULT_WINDOW_AZIMUTH_DEG, 'azimuthDeg');
+		this.azimuthDeg = parseNum(
+			url.searchParams,
+			'azimuth',
+			DEFAULT_WINDOW_AZIMUTH_DEG,
+			'azimuthDeg'
+		);
 		this.pitchDeg = parseNum(url.searchParams, 'pitch', DEFAULT_PITCH_DEG, 'pitchDeg');
 		this.floorM = parseNum(url.searchParams, 'floor', this.floorM, 'floorM');
 		this.ceilingM = parseNum(url.searchParams, 'ceiling', this.ceilingM, 'ceilingM');
@@ -268,7 +273,12 @@ export class PaneSettings {
 		this.orderClimbBand('floorM');
 		this.clockOffsetH = parseNum(url.searchParams, 'clock', 0, 'clockOffsetH');
 		this.shade = parseNum(url.searchParams, 'shade', HILLSHADE_DEFAULT, 'shade');
-		this.exaggeration = parseNum(url.searchParams, 'exaggeration', TERRAIN_EXAGGERATION, 'exaggeration');
+		this.exaggeration = parseNum(
+			url.searchParams,
+			'exaggeration',
+			TERRAIN_EXAGGERATION,
+			'exaggeration'
+		);
 		const crParam = url.searchParams.get('colorRelief');
 		if (crParam !== null) this.colorRelief = crParam === '1' || crParam === 'true';
 		const rampParam = url.searchParams.get('ramp');
