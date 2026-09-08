@@ -7,8 +7,10 @@ export const TILE_SIZE = 256;
 export const TILE_MAXZOOM = {
 	/**
 	 * Sentinel-2 is 10 m and a z14 web-mercator pixel is 9.55 m, so z14 is the
-	 * last zoom backed by real source pixels. Packed to z13 today; raising this
-	 * beyond 14 only upscales.
+	 * last zoom backed by real source pixels. Packed to z13 today, except
+	 * Dubai and Mumbai which hold z14 (110 MB); the other seven stop at 13,
+	 * so raising the cap now would 404 over them. Complete z14 coverage
+	 * first (Phase 1), then raise. Beyond 14 only upscales.
 	 */
 	sentinel2: 13,
 	gibs: 9,
@@ -19,9 +21,10 @@ export const TILE_MAXZOOM = {
 	 * Packed to z11 today, not the tool's z13 default.
 	 *
 	 * The manifest is the authority — `data/tiles/water/source-*.json` records
-	 * what actually got written, and z12/z13 are empty. Declaring 13 here would
-	 * ask MapLibre for tiles the archive does not hold and 404 every one on
-	 * approach, which is the same trap the DEM's missing zoom range set.
+	 * what actually got written. Dubai and Mumbai hold z12/z13 (14 MB); Chicago
+	 * stops at 11, so declaring 13 here would 404 every tile on approach over
+	 * Chicago — the same trap the DEM's missing zoom range set. Raise the cap
+	 * once Chicago is packed to 13 (Phase 1), not before.
 	 */
 	water: 11
 } as const;
@@ -44,16 +47,19 @@ export const SENTINEL2_MINZOOM = 8;
  * an overlay — but it is a request storm for imagery that cannot exist, the
  * same waste `raster-opacity: 0` used to cause and that unmounting fixed.
  *
- * Four of the eleven are absent, and for two different reasons worth keeping
- * straight:
+ * Two places are absent, for two different reasons worth keeping straight:
  *
  *   ocean          Sentinel-2 does not image open water. No date helps.
- *   dubai, desert, mumbai
- *                  no SINGLE acquisition covers the visible box. Verified
+ *   desert         no SINGLE acquisition covers the visible box. Verified
  *                  against a full year at 12% cloud: the mosaic came out
  *                  17-35% empty every time and the packager refused to tile
  *                  it, which is correct — black wedges are worse than a soft
  *                  basemap.
+ *
+ *                  Dubai and Mumbai were in this second bucket and have since
+ *                  been packed (multi-date envelopes: dubai summer 2026,
+ *                  mumbai Jan–Apr dodging the monsoon). Their gaps are closed
+ *                  by mosaicking, which is the Phase 1 recipe for `desert`.
  *
  *                  Two of the three are coastal, so the obvious suspicion is
  *                  that the "empty" area is SEA being miscounted as nodata.
@@ -110,8 +116,8 @@ export const SENTINEL2_PLACES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Both sources are credited because both are drawn: Sentinel-2 over the eleven
- * locations, MODIS everywhere else and under the gaps.
+ * Both sources are credited because both are drawn: Sentinel-2 over the nine
+ * packed locations, MODIS everywhere else and under the gaps.
  *
  * The Copernicus notice is not decoration — the licence REQUIRES attribution,
  * and "Contains modified Copernicus Sentinel data" is the exact wording it

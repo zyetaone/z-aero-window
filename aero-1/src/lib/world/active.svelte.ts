@@ -12,9 +12,25 @@
  * SSR is disabled (kiosk-only) there's no cross-request contamination risk.
  */
 
-import type { CesiumManager } from './compose';
+import type * as CesiumType from 'cesium';
+import type { Viewer } from 'cesium';
+import type { CameraRead } from './camera-read';
+
+/**
+ * Minimal structural surface the holder needs: the viewer and the Cesium
+ * namespace for native geo-effects, the plain camera read for mirrors.
+ * `CesiumManager` satisfies this structurally, so this module no longer
+ * imports the orchestrator — that edge was the
+ * `active → compose → camera → active` import cycle (type-only, but
+ * nothing reported it either way).
+ */
+export interface ActiveManager {
+	getViewer(): Viewer;
+	getCesium(): typeof CesiumType;
+	getCameraRead(): CameraRead | null;
+}
 
 class ActiveCesium {
-	manager = $state<CesiumManager | null>(null);
+	manager = $state<ActiveManager | null>(null);
 }
 export const activeCesium = new ActiveCesium();

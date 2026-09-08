@@ -21,14 +21,11 @@ import { SEAT_LOOK_DEG } from '$lib/flight/screen-conventions';
 import type { Cartesian3, Viewer } from 'cesium';
 import type * as CesiumType from 'cesium';
 import { activeCesium } from './active.svelte';
+import type { CameraRead } from './camera-read';
 
-/** Plain shape returned to cross-boundary readers — no Cesium types leave the world layer. */
-export interface CameraRead {
-	position: { x: number; y: number; z: number };
-	direction: { x: number; y: number; z: number };
-	up: { x: number; y: number; z: number };
-	fovDeg: number;
-}
+// Re-exported so existing `import ... from './camera'` / `$lib/world/camera`
+// type imports keep working; the canonical home is `./camera-read`.
+export type { CameraRead } from './camera-read';
 
 /** The model fields the camera module reads. Narrower than CesiumModelView so
  * the orchestrator's full shape stays private. */

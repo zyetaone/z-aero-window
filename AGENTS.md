@@ -329,7 +329,7 @@ $effect(() => {
 
 - **Runtime**: Bun (lockfile: `bun.lock`). Do NOT use npm, yarn, or pnpm.
 - **Build**: Vite 7 + SvelteKit 2 + `@sveltejs/adapter-node` (v5). Route-split client output (SvelteKit default) — `/` no longer parses the admin/lab UI at kiosk boot. Was `bundleStrategy: 'single'`; see the note in `svelte.config.js` for why it was reverted.
-- **3D stack**: Cesium v1.141, Three.js v0.183, @threlte/core v8, postprocessing v6.
+- **3D stack**: Cesium v1.143, Three.js v0.183, @threlte/core v8, postprocessing v6.
 - **Styling**: hand-rolled component-scoped `<style>` blocks — no Tailwind. Shared design tokens + global chrome (focus ring, selection, scrollbars) live in `src/app.css`; the kiosk's brand `--sw-*` set is declared on the `/` route body in `src/routes/+page.svelte`.
 - **Environment variables** (see `.env.example`):
   - `VITE_CESIUM_ION_TOKEN` — required for terrain/imagery at dev time
