@@ -37,12 +37,17 @@ Environment=PORT=3000
 # exits 1 on a missing build, on the argument that a 503 keeps the unit green
 # while the kiosk shows an error page, so nothing ever restarts and nothing
 # ever reports. Both positions are defensible; they need different units.
-# When WorkingDirectory is repointed at aero-2 (see the migration plan,
-# Phase 4), add:
+# When WorkingDirectory is repointed at aero-2, add:
 #     ConditionPathExists=__AERO_APP_DIR__/build/index.js
 # so systemd skips a start it knows will fail — a clean "Condition check
 # failed" line rather than a crash entry. Not added now, because on v1 it
 # would override the degrade-don't-crash behaviour this comment describes.
+#
+# This used to say "see the migration plan, Phase 4". There is no migration
+# plan. The nearest document, ADR-004, is a renderer migration INSIDE aero-1
+# and does not mention aero-2. The cutover gates are listed in
+# docs/AERO-1-VS-AERO-2.md section 9; the first of them is a frame measured
+# on a real Pi 5, which has never been run.
 ExecStart=__BUN_BIN__ run serve
 
 Restart=always
