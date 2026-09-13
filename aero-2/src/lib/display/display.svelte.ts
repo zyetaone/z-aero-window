@@ -3,13 +3,56 @@
  * Owns the reactive aircraft view pose, reactive PaneSettings, and simulation tick loop.
  */
 import { createContext, untrack } from 'svelte';
-import { calculateCameraView, type CameraView } from './flight/view.js';
+import {
+	blendViews,
+	calculateCameraView,
+	type CameraParams,
+	type CameraView
+} from './flight/view.js';
+
+/**
+ * Seconds a destination change glides instead of teleporting.
+ *
+ * aero-1 flies it (cruise_departure → cruise_transit → orbit, ~4 s); 3.5 s
+ * reads the same here.
+ *
+ * This used to note that the blend START is the frame that notices the change,
+ * so panes disagree by "16 ms of a 3,500 ms glide, invisible". True at 60 fps.
+ * The fielded frame rate is the one number this repo has never measured for
+ * aero-2 (docs/AERO-1-VS-AERO-2.md §9, gate 1), and the previous generation
+ * measured 1.9–3.1 fps on the same hardware — where one frame is 14% of the
+ * glide, and the blend interpolates lat/lon, not just yaw. An invariant should
+ * not rest on an unmeasured number, so `cruiseStartSec` derives the start
+ * instead of observing it.
+ */
+const CRUISE_BLEND_SEC = 3.5;
+
 import { phaseFor } from './flight/flight-path.js';
-import { FlightDirector } from './flight/director.svelte.js';
+import { DWELL_SEC, FlightDirector } from './flight/director.svelte.js';
 import { resolveAtmosphere, type AtmosphereState } from './world/atmosphere.js';
 import { nightAmount, sunPosition, type SunPosition } from './world/sun.js';
 import { createSettings, type PaneSettings } from '#lib/settings/settings.svelte.js';
 import { WallSync } from '#lib/settings/wall.svelte.js';
+
+/**
+ * When the glide that is starting now actually began, in wall-absolute seconds.
+ *
+ * The director moves the window on a slot boundary — `floor(wallSec /
+ * DWELL_SEC) * DWELL_SEC` — which every pane can compute without being told.
+ * A pane notices on its next frame, some unknown fraction of a frame period
+ * later; snapping back to the boundary removes that observation from the pose.
+ *
+ * Changes that are NOT slot-driven keep `wallSec`: a manual blind-pull skip is
+ * pane-local by design (see `FlightDirector.manualSkips`), and an operator
+ * changing one pane's place from the settings panel is too. Blending those from
+ * a boundary minutes in the past would compute t > 1 and cut instead of glide.
+ * The boundary only wins while it is inside the blend window, which a
+ * slot-driven change always is and a mid-slot change never is.
+ */
+export function cruiseStartSec(wallSec: number): number {
+	const slotStart = Math.floor(wallSec / DWELL_SEC) * DWELL_SEC;
+	return wallSec - slotStart < CRUISE_BLEND_SEC ? slotStart : wallSec;
+}
 
 /**
  * Type-safe context, rather than a Symbol key plus two casts.
@@ -163,6 +206,29 @@ export class AeroDisplay {
 		)
 	);
 
+	/**
+	 * The wall clock the SCENE is composed at, not the one the room is in.
+	 *
+	 * `clockOffsetH` is how a preset says "show me Dubai at midnight" while it
+	 * is really lunchtime. `sun` above folds it into the utcOffset argument,
+	 * which is the same arithmetic as shifting the instant --
+	 * `resolveLocalHours(t, utc + off)` === `resolveLocalHours(t + off*3600, utc)`
+	 * -- but only reaches code that takes a utcOffset. Anything asking a GLOBAL
+	 * question ("where is the sub-solar point?") has no such argument, so it
+	 * has nothing to fold the offset into and silently answers for real now.
+	 *
+	 * That is not hypothetical. `Terminator` and `SunMoon` each sampled a
+	 * private `Date.now()`, so at `?preset=alpine-ridge` the ground, sky and
+	 * wing were lit for a +14.4 deg sun while the night bands and the sun disc
+	 * were placed for the real one at -39.5 deg. Two suns, 54 deg apart, in one
+	 * frame.
+	 *
+	 * Read this instead of the clock. It is still absolute (invariant 2): three
+	 * panes on the same preset derive the same value from the same second, with
+	 * nothing exchanged.
+	 */
+	solarSec: number = $derived.by(() => this.view.wallSec + this.config.clockOffsetH * 3600);
+
 	advanceLocation(): void {
 		this.director.advanceDestination(Date.now() / 1000);
 	}
@@ -223,9 +289,66 @@ export class AeroDisplay {
 		// second, so every pane lands on the same place without being told.
 		this.director.tick(wallSec);
 
-		const next = calculateCameraView(wallSec, this.config);
+		let next = calculateCameraView(wallSec, this.config);
+		// Carry the Stage-sampled datum across the fresh object so the Hud's
+		// GND number does not blink on frames the Stage loop has not rerun.
+		next.groundM = this.view.groundM;
+		next = this.applyCruiseBlend(wallSec, next);
 		this.view = next;
 		return next;
+	}
+
+	#lastPlaceKey: string | null = null;
+	#lastParams: {
+		place: CameraParams['place'];
+		floorM: number;
+		ceilingM: number;
+		direction: 1 | -1;
+	} | null = null;
+	#cruiseFrom: {
+		place: CameraParams['place'];
+		floorM: number;
+		ceilingM: number;
+		direction: 1 | -1;
+		atSec: number;
+	} | null = null;
+
+	/**
+	 * Glide across destination (or direction) changes instead of cutting.
+	 *
+	 * The old pose is recomputed for the SAME second from the previous
+	 * place — FlightTrack is pure, so there is nothing to have stored but
+	 * the previous params. Floor/ceiling knob drags do NOT blend: they
+	 * change every frame while dragged and would chase forever.
+	 */
+	private applyCruiseBlend(wallSec: number, next: CameraView): CameraView {
+		const key = `${this.config.place.id}|${this.config.direction}`;
+		if (this.#lastPlaceKey !== null && key !== this.#lastPlaceKey && this.#lastParams) {
+			this.#cruiseFrom = { ...this.#lastParams, atSec: cruiseStartSec(wallSec) };
+		}
+		this.#lastPlaceKey = key;
+		this.#lastParams = {
+			place: this.config.place,
+			floorM: this.config.floorM,
+			ceilingM: this.config.ceilingM,
+			direction: this.config.direction ?? 1
+		};
+		const from = this.#cruiseFrom;
+		if (!from) return next;
+		const t = (wallSec - from.atSec) / CRUISE_BLEND_SEC;
+		if (t >= 1 || t <= 0) {
+			this.#cruiseFrom = null;
+			return next;
+		}
+		const old = calculateCameraView(wallSec, {
+			...this.config,
+			place: from.place,
+			floorM: from.floorM,
+			ceilingM: from.ceilingM,
+			direction: from.direction
+		});
+		old.groundM = next.groundM;
+		return blendViews(old, next, t);
 	}
 }
 
