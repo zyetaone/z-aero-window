@@ -5,6 +5,7 @@
 
 import { normalizeHeading, phaseFor, FlightTrack, type OrbitPose } from './flight-path.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
+import { signedDelta } from '#lib/angles.js';
 import { resolveLocalHours } from '../world/sun.js';
 
 export interface CameraParams {
@@ -138,6 +139,15 @@ export interface CameraView {
 	turbulence: Turbulence;
 	/** The wall-clock second this view was derived from — the only input. */
 	wallSec: number;
+	/**
+	 * Drawn ground elevation under the aircraft, metres in the rendered
+	 * (exaggerated) frame. NOT set by `calculateCameraView` — only the Stage
+	 * can query the map — so it is optional and filled post-hoc per frame.
+	 * The Hud shows it beside AGL so the readout names its datum: AGL over
+	 * WHAT. Without it the number reads against an invisible surface and any
+	 * ridge or exaggeration makes it look wrong.
+	 */
+	groundM?: number;
 }
 
 export interface CameraTargetOptions {
@@ -216,8 +226,20 @@ export class FlightCamera {
 		 * A ratio cannot cross zero, so the sightline stays below the horizon
 		 * for every bank angle and every `pitchDeg` an operator can dial in, and
 		 * the clamp goes back to being a guard rather than a mode the camera
-		 * spends a quarter of its life in. The look-at distance now varies by a
-		 * factor of ~2.4 across a turn instead of ~50.
+		 * spends a quarter of its life in.
+		 *
+		 * The look-at distance now varies by a factor of ~4.1 across a turn
+		 * instead of ~50. It said ~2.4 here, which is the figure for a clamp of
+		 * +/-0.4: that gives a depression swing of 6-14 deg. The clamp below is
+		 * +/-0.6, which swings 4-16 deg, and tan(16)/tan(4) is 4.10. Measured
+		 * over a full circuit at Denver against this function: bank reaches
+		 * +/-18.0 deg, depression runs 4.00-16.01 deg, ratio 4.10x. Whoever
+		 * widened the clamp did not re-measure the number this paragraph
+		 * exists to record -- so re-measure it here if the clamp moves again.
+		 *
+		 * Still worth knowing: across a circuit the look-at ground distance
+		 * reaches ~147 km, which is past the per-location imagery boxes. Far
+		 * better than the 516 km above, not yet inside the pack.
 		 */
 		const bankRatio = 1 - Math.max(-0.6, Math.min(0.6, bankOffset / 25));
 		const basePitch = Math.min(-0.5, this.pitchDeg);
@@ -303,4 +325,37 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	return params.place.isFeature
 		? camera.project(plane, utcOffset, wallSec, undefined, undefined, weather)
 		: camera.project(plane, utcOffset, wallSec, params.place.lat, params.place.lon, weather);
+}
+
+/**
+ * Blend two camera views during a cruise transition, `t` in 0..1.
+ *
+ * aero-1's lesson, ported: a destination change used to teleport, because the
+ * pose is a pure function of the second and the new place simply won. aero-1
+ * flies it (cruise_departure → cruise_transit → orbit); here the old pose is
+ * recomputed for the same second from the previous place and eased across.
+ * Bearings blend on the shortest arc and longitude wraps, so a
+ * Pacific-to-Atlantic hop glides forward instead of swinging the long way
+ * round. Everything else (bearing/pitch offsets, turbulence) rides with the
+ * new view — only the world position eases.
+ */
+export function blendViews(a: CameraView, b: CameraView, t: number): CameraView {
+	const s = Math.max(0, Math.min(1, t));
+	const ease = s * s * (3 - 2 * s);
+	const wrapLon = (d: number) => ((d + 540) % 360) - 180;
+	// timeOfDay blends in degree space (15 deg per hour) so a hop across
+	// midnight eases forward instead of rewinding the whole dial.
+	const todD = signedDelta(a.timeOfDay * 15, b.timeOfDay * 15) / 15;
+	return {
+		...b,
+		lat: a.lat + (b.lat - a.lat) * ease,
+		lon: a.lon + wrapLon(b.lon - a.lon) * ease,
+		aglM: a.aglM + (b.aglM - a.aglM) * ease,
+		planeHeadingDeg: a.planeHeadingDeg + signedDelta(a.planeHeadingDeg, b.planeHeadingDeg) * ease,
+		bankDeg: a.bankDeg + (b.bankDeg - a.bankDeg) * ease,
+		targetLat: a.targetLat + (b.targetLat - a.targetLat) * ease,
+		targetLon: a.targetLon + wrapLon(b.targetLon - a.targetLon) * ease,
+		distanceM: a.distanceM + (b.distanceM - a.distanceM) * ease,
+		timeOfDay: a.timeOfDay + todD * ease
+	};
 }

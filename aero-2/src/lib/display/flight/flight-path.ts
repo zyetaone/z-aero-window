@@ -34,15 +34,20 @@ export const ORBIT = {
 	 * being replaced with adjectives. Restored, because the value has
 	 * consequences that are not local to this file:
 	 *
-	 *   - `viewOptions` folds bank into PITCH at BANK_VIEW_GAIN (0.85), so this
-	 *     swings the effective depression by +/-15.3 deg. At the default
-	 *     pitchDeg of -10 that saturates the 0.5 deg depression clamp on one
-	 *     side of every turn, pinning the sightline near-horizontal.
-	 *   - Sky.svelte masks the starfield to the horizon and derives that from
-	 *     the same pitch. Going 14 -> 18 moved the horizon +/-13.8% of screen
-	 *     height, past the 12% fade band that was covering it, and put stars
-	 *     over the ground. Fixed there by tracking the real pitch, but the
-	 *     coupling is real and this is where it originates.
+	 *   - `viewOptions` folds bank into the sightline at BANK_VIEW_GAIN (0.85).
+	 *     This paragraph used to end "saturates the 0.5 deg depression clamp on
+	 *     one side of every turn, pinning the sightline near-horizontal", which
+	 *     described the ADDITIVE camera. `view.ts` now applies the bank as a
+	 *     RATIO of the current depression, which cannot cross zero, so the
+	 *     clamp is a guard again rather than a mode. The coupling is still
+	 *     real: at 18 deg the ratio clamp saturates and the look-at distance
+	 *     swings 4.1x across a turn. Read `viewOptions` before changing this.
+	 *   - The night-wash mask in Sky.svelte derives the horizon from the same
+	 *     pitch (crisp stars have since moved in-map behind the depth buffer
+	 *     and no longer care, but the milky-way wash still does). Going
+	 *     14 -> 18 moved the horizon +/-13.8% of screen height, past the 12%
+	 *     fade band that was covering it. The coupling is real and this is
+	 *     where it originates.
 	 *
 	 * 14 was the previous value. Anything raised here should be checked against
 	 * both of the above, not just against how the turn looks.
@@ -389,4 +394,19 @@ export function mulberry32(seed: number): () => number {
 		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
 		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 	};
+}
+
+/**
+ * Wind-drift angle of the cloud deck for a wall-clock second.
+ *
+ * The deck spins around the viewer as the aircraft flies through the air
+ * mass, so the drift MUST follow the flight direction: clockwise loop,
+ * drift one way; reversed loop, drift the other. It used to be a bare
+ * `wallSec * speed * k` with no direction term, which is why the wind only
+ * ever agreed with a clockwise circuit. Pure and wall-shared, so all panes
+ * stay in the same air.
+ */
+export function windDriftAngle(wallSec: number, driftSpeed: number, direction: 1 | -1): number {
+	const dirSign = direction < 0 ? -1 : 1;
+	return dirSign * wallSec * driftSpeed * 0.0006;
 }
