@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WallSync } from '#lib/settings/wall.svelte.js';
+import { WallSync, applyWallState } from '#lib/settings/wall.svelte.js';
 import { PaneSettings } from '#lib/settings/settings.svelte.js';
 import type { WallSnapshot, WallState } from '#lib/wall.js';
 
@@ -114,5 +114,67 @@ describe('three panes converge', () => {
 			for (let t = 1_000_015; t <= 1_000_025; t++) p.sync.applyDue(t, p.config);
 		}
 		expect(observed(late.config)).toBe(observed(early.config));
+	});
+});
+
+/**
+ * A preset pushed to the wall must arrive WITH its clock.
+ *
+ * `applyPreset` does not trust an authored hour: it solves
+ * `localHourAtSunElevation` against `wallSec`, because "golden hour" is a sun
+ * angle and the hour that produces it moves ~3 h across the year. Only the
+ * pane knows `wallSec` at apply time.
+ *
+ * `applyWallState` then assigned `config.clockOffsetH = state.clockOffsetH`
+ * one line later, throwing the solve away. The operator panel seeds that field
+ * once at load and no effect recomputes it when a preset is picked, so the
+ * "explicit" value that won was never explicit — it was whatever the panel
+ * booted with. Every preset pushed to the wall rendered at the wrong hour.
+ */
+describe('a pushed preset keeps the clock it solved for', () => {
+	const WALL = 1_757_700_000;
+
+	it('ignores the snapshot clock when a preset is named', () => {
+		const config = new PaneSettings();
+		const solo = new PaneSettings();
+		solo.applyPreset('golden-hour', WALL);
+
+		applyWallState(
+			{
+				placeId: '',
+				presetId: 'golden-hour',
+				weather: 'clear',
+				clockOffsetH: 7.25, // stale panel literal, nothing to do with the preset
+				displayMode: 'flight',
+				blindOpen: true,
+				rotate: false,
+				mediaUrls: []
+			},
+			config,
+			WALL
+		);
+
+		expect(config.clockOffsetH, 'the stale literal won').toBe(solo.clockOffsetH);
+		expect(config.clockOffsetH).not.toBe(7.25);
+	});
+
+	it('still honours an explicit clock when no preset is named', () => {
+		const config = new PaneSettings();
+		applyWallState(
+			{
+				placeId: 'denver',
+				presetId: '',
+				weather: 'clear',
+				clockOffsetH: 7.25,
+				displayMode: 'flight',
+				blindOpen: true,
+				rotate: false,
+				mediaUrls: []
+			},
+			config,
+			WALL
+		);
+		expect(config.clockOffsetH).toBe(7.25);
+		expect(config.place.id).toBe('denver');
 	});
 });

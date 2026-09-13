@@ -78,10 +78,29 @@ export class WallSync {
  * every pane agrees on.
  */
 export function applyWallState(state: WallState, config: PaneSettings, wallSec: number): void {
-	// Preset first: it rewrites place and clockOffsetH, so anything explicit in
-	// the snapshot must land after it and win.
-	if (state.presetId) config.applyPreset(state.presetId, wallSec);
+	/**
+	 * Preset first, and for `place`/`clockOffsetH` it also wins.
+	 *
+	 * The rule used to be "anything explicit in the snapshot lands after the
+	 * preset and wins", which is right for every field an operator can actually
+	 * set — and wrong for the two the preset SOLVES. `applyPreset` runs
+	 * `localHourAtSunElevation` against `wallSec`, because "golden hour" is a
+	 * sun angle and the hour that produces it moves ~3 h across the year. Only
+	 * the pane knows `wallSec` at apply time.
+	 *
+	 * The operator draft seeds `clockOffsetH` once at panel load and no effect
+	 * recomputes it when a preset is picked, so the "explicit" value was never
+	 * explicit — it was whatever the panel happened to boot with, and it
+	 * overwrote the solve on every push. A preset pushed to the wall arrived
+	 * without its clock.
+	 *
+	 * So the order is inverted: the snapshot's place lands FIRST, and the preset
+	 * lands on top of it. A preset that names a place overrides it; one that
+	 * does not leaves the snapshot's place standing. No knowledge of the
+	 * preset's shape is needed here to get that right.
+	 */
 	if (state.placeId) config.setPlace(Location.byId(state.placeId));
+	if (state.presetId) config.applyPreset(state.presetId, wallSec);
 
 	/**
 	 * Media before mode. `displayMode` lands below; if the list landed after a
@@ -105,7 +124,8 @@ export function applyWallState(state: WallState, config: PaneSettings, wallSec: 
 	}
 
 	config.weather = state.weather as PaneSettings['weather'];
-	config.clockOffsetH = state.clockOffsetH;
+	// Not when a preset is present: that solve is the whole point of the preset.
+	if (!state.presetId) config.clockOffsetH = state.clockOffsetH;
 	config.displayMode = state.displayMode as PaneSettings['displayMode'];
 	config.blindOpen = state.blindOpen;
 	config.rotate = state.rotate;

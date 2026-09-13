@@ -120,17 +120,40 @@ describe('applyWallState', () => {
 	});
 
 	/**
-	 * applyPreset rewrites place and clockOffsetH, so an explicit value in the
-	 * same snapshot has to land after it and win — otherwise the snapshot means
-	 * something different depending on whether a preset happened to be set.
+	 * REVERSED, deliberately. This used to assert that explicit keys win over
+	 * the preset that also sets them, on the argument that a snapshot should
+	 * not mean different things depending on whether a preset was set.
+	 *
+	 * The argument is right for every field an operator can actually set, and
+	 * wrong for the two the preset SOLVES. `gulf-midnight` names Dubai and
+	 * solves an offset for midnight THERE — `applyPreset`'s own comment says
+	 * "setPlace first: the offset is relative to the DESTINATION's local time".
+	 * Landing `denver` on top of it left Denver wearing Dubai's offset, which is
+	 * the same failure `settings.svelte.ts` already documents for `?preset=`:
+	 * "observed rendering Chicago Midway in daylight: wrong place, and the wrong
+	 * time for it."
+	 *
+	 * A snapshot carrying a preset AND a different place is contradictory input.
+	 * Resolving it as "the preset wins, coherently" beats resolving it as a
+	 * mixture that is neither scene.
 	 */
-	it('lets explicit keys win over the preset that also sets them', () => {
+	it('lets the preset win over snapshot keys it solves for', () => {
 		const config = createSettings();
+		const solo = createSettings();
+		solo.applyPreset('gulf-midnight', 0);
+
 		applyWallState(
 			state({ presetId: 'gulf-midnight', clockOffsetH: 5, placeId: 'denver' }),
 			config,
 			0
 		);
+		expect(config.clockOffsetH).toBe(solo.clockOffsetH);
+		expect(config.place.id).toBe('dubai');
+	});
+
+	it('still lets an explicit clock and place win when no preset is named', () => {
+		const config = createSettings();
+		applyWallState(state({ presetId: '', clockOffsetH: 5, placeId: 'denver' }), config, 0);
 		expect(config.clockOffsetH).toBe(5);
 		expect(config.place.id).toBe('denver');
 	});
