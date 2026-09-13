@@ -31,6 +31,51 @@ export interface SunPosition {
 }
 
 /**
+ * Solar declination for the day `wallSec` falls in, degrees.
+ *
+ * One home for the axial-tilt term both `sunPosition` and
+ * `localHourAtSunElevation` used to inline separately — two copies of
+ * `23.44 * sin(...)` that a leap-year or tilt-model change would have had to
+ * find twice.
+ */
+export function solarDeclination(wallSec: number): number {
+	return 23.44 * Math.sin((360 / 365) * (dayOfYear(wallSec) - 81) * DEG2RAD);
+}
+
+export interface GeoPoint {
+	lat: number;
+	lng: number;
+}
+
+/**
+ * Subsolar point: the lng/lat where the sun is directly overhead right now.
+ *
+ * UTC noon puts it on the prime meridian by construction (15°/hour westward
+ * from there); latitude is the declination. In-map sun/moon discs hang off
+ * this — world-fixed, so terrain occludes them and parallax is correct.
+ */
+export function subSolarPoint(wallSec: number): GeoPoint {
+	const utcHours = ((((wallSec % 86400) + 86400) % 86400) / 3600);
+	return {
+		lat: solarDeclination(wallSec),
+		lng: ((180 - utcHours * 15 + 540) % 360) - 180
+	};
+}
+
+/**
+ * Antipode of a point. The moon disc parks here: a full moon is opposite the
+ * sun, and the new moon (which would sit near the sun) is invisible anyway,
+ * so the phase error only ever affects a disc you can barely see. Deliberate
+ * simplification, stated so nobody "fixes" it into an ephemeris.
+ */
+export function antipodeOf(p: GeoPoint): GeoPoint {
+	return {
+		lat: -p.lat,
+		lng: p.lng >= 0 ? p.lng - 180 : p.lng + 180
+	};
+}
+
+/**
  * Where the sun actually is, for a place and a moment.
  *
  * Standard solar-position geometry: axial tilt gives the declination for the
@@ -45,7 +90,7 @@ export interface SunPosition {
 export function sunPosition(wallSec: number, lat: number, utcOffset: number): SunPosition {
 	const hours = resolveLocalHours(wallSec, utcOffset);
 	// Axial tilt, zeroed at the March equinox (~day 81).
-	const declination = 23.44 * Math.sin((360 / 365) * (dayOfYear(wallSec) - 81) * DEG2RAD);
+	const declination = solarDeclination(wallSec);
 	// 15 degrees per hour; negative before local noon, positive after.
 	const hourAngle = (hours - 12) * 15;
 
@@ -158,7 +203,7 @@ export function localHourAtSunElevation(
 	lat: number,
 	evening = true
 ): number | null {
-	const declination = 23.44 * Math.sin((360 / 365) * (dayOfYear(wallSec) - 81) * DEG2RAD);
+	const declination = solarDeclination(wallSec);
 	const latRad = lat * DEG2RAD;
 	const decRad = declination * DEG2RAD;
 
@@ -205,4 +250,75 @@ export function specularGlint(
 	if (sunElevationDeg <= 0) return 0;
 	const lowSun = 1 - Math.max(0, Math.min(1, sunElevationDeg / 40));
 	return facingSunAmount(cameraBearingDeg, sunAzimuthDeg) * lowSun;
+}
+
+/**
+ * Shared night-lighting ramp: every emitted-light layer (VIIRS raster,
+ * vector roads) fades in on night^NIGHT_LIGHT_RAMP so the two arrive
+ * together, and mounts through the ON/OFF hysteresis below (a single epsilon
+ * blinked the sources at twilight — see NIGHT_MOUNT_ON).
+ *
+ * The exponent lived as a bare `1.5` in two components with a comment each
+ * swearing they matched. Caps stay local (VIIRS 0.8, roads 1.0) — those are
+ * per-layer grades, not the shared curve.
+ */
+export const NIGHT_LIGHT_RAMP = 1.5;
+/**
+ * The raster↔vector handover window: street vectors fade in from
+ * NIGHT_VECTOR_TOP_M down across NIGHT_VECTOR_SPAN_M, and the VIIRS raster
+ * fades out across the same metres. One home because the two sides live in
+ * different files (Roads vs NightLights) and silently different windows
+ * would read as one layer lagging the other on every descent.
+ */
+export const NIGHT_VECTOR_TOP_M = 9000;
+export const NIGHT_VECTOR_SPAN_M = 5000;
+/**
+ * Dusk/dawn mount hysteresis for the night layers.
+ *
+ * Their opacity ramps cross the mount epsilon SLOWLY at twilight, so a single
+ * gate would mount and unmount the source every few frames while it hovers —
+ * each remount re-parses Denver's 4.4 MB of GeoJSON and the layer visibly
+ * blinks. Latch on above ON_AT, release below OFF_AT.
+ */
+export const NIGHT_MOUNT_ON = 0.03;
+export const NIGHT_MOUNT_OFF = 0.005;
+
+/**
+ * Pure hysteresis latch. Returns the new latched state; the caller holds it
+ * in $state and feeds it back. Unit-tested: the twilight dither is exactly
+ * the class of fault you cannot see in a screenshot.
+ */
+export function hysteresisGate(value: number, latched: boolean, onAt: number, offAt: number): boolean {
+	if (!latched && value > onAt) return true;
+	if (latched && value < offAt) return false;
+	return latched;
+}
+
+/**
+ * Lamp shimmer for the vector night lights, a multiplier in [0.8, 1.0].
+ *
+ * A pure function of wall seconds, so every pane on the wall computes the
+ * same value for the same instant without exchanging anything — the flicker
+ * cannot drift pane-to-pane the way per-pane timers would. Frequencies stay
+ * well under the 5 Hz sampler in Roads.svelte (Nyquist 2.5 Hz), so sampling
+ * jitter between panes stays invisible. Unit-tested: bounds and determinism.
+ */
+export function lampFlicker(tSec: number): number {
+	return 0.9 + 0.06 * Math.sin(tSec * 2.1) + 0.04 * Math.sin(tSec * 3.7 + 1.7);
+}
+
+/**
+ * Sparse-lamp glimmer for the glimmer pass, a multiplier in [0.4, 1.0].
+ *
+ * The flicker above breathes every lamp together ±10% — coherent, which is
+ * why the arterials read as one filament dimming in unison. Real street
+ * light shimmers lamp by lamp. A line layer cannot phase-shift per dash, so
+ * the glimmer pass runs a second dash train at an incommensurate period and
+ * THIS deeper, faster envelope: where the two trains cross, lamps flare and
+ * die individually instead of the whole run breathing as one. Same
+ * wall-shared contract as lampFlicker (pure in wall seconds, under the 5 Hz
+ * sampler's Nyquist). Unit-tested: bounds and determinism.
+ */
+export function lampGlimmer(tSec: number): number {
+	return 0.7 + 0.3 * Math.sin(tSec * 4.7 + 1.3) * Math.sin(tSec * 1.9 + 0.4);
 }
