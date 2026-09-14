@@ -77,7 +77,20 @@ export interface FleetDevice {
 	receivedAtMs: number;
 }
 
-/** Two missed 60 s beats plus slack — must match ONLINE_WINDOW_MS server-side. */
+/**
+ * Two missed 60 s beats plus slack. A device is offline when it has stopped
+ * reporting, not when one POST lost a race with a 60 s timer.
+ *
+ * Declared HERE, and imported by `lib/server/heartbeat.ts`, rather than the
+ * other way around: this file is client-reachable and that one reads
+ * `process.env` and holds the fleet's Map. Server may import the shared root;
+ * the root may not import `server/`.
+ *
+ * It used to be a second copy of the number carrying the comment "must match
+ * ONLINE_WINDOW_MS server-side" -- in the one file whose own header explains
+ * that three hand-copied declarations of one response drifted and rendered
+ * /admin blank. A comment is not a constraint.
+ */
 export const FLEET_ONLINE_WINDOW_MS = 150_000;
 
 export async function fetchFleet(signal?: AbortSignal): Promise<FleetDevice[]> {

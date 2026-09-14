@@ -20,10 +20,12 @@
 export const DEVICE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
 
 /**
- * Two missed beats plus slack. A device is offline when it has stopped
- * reporting, not when one POST lost a race with a 60 s timer.
+ * Two missed beats plus slack, defined in the shared root so the browser and
+ * this module cannot disagree about who is online. Re-exported under the name
+ * this module's readers already use.
  */
-export const ONLINE_WINDOW_MS = 150_000;
+export { FLEET_ONLINE_WINDOW_MS as ONLINE_WINDOW_MS } from '#lib/status.js';
+import { FLEET_ONLINE_WINDOW_MS as ONLINE_WINDOW_MS } from '#lib/status.js';
 
 export interface HeartbeatSample {
 	deviceId: string;
