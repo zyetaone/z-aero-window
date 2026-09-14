@@ -23,24 +23,32 @@ import { DEG2RAD, RAD2DEG } from '#lib/angles.js';
 export interface NightBand {
 	/** Outer radius from the antisolar point, degrees. */
 	outer: number;
-	/** Inner radius, degrees; null draws a solid cap. */
-	inner: number | null;
-	/** Fill opacity of this band (absolute, not cumulative — bands tile). */
+	/** How dark the ground is INSIDE this radius, composited. */
 	opacity: number;
 }
 
 /**
- * Feathered night, tiled outward from full dark: angular distance from the
- * subsolar point d gives sun elevation 90−d, so civil darkness (elev < −6°)
- * starts at d = 96°, i.e. 84°... measured from the ANTISOLAR point a = 180−d,
- * the solid cap ends at a = 72° and the feather runs out to a = 96°.
+ * Feathered night, as nested solid caps around the antisolar point.
+ *
+ * Angular distance from the subsolar point d gives sun elevation 90-d, so
+ * civil darkness (elev < -6) starts at d = 96; measured from the ANTISOLAR
+ * point a = 180-d, that is a = 84, and the feather runs out to a = 96.
+ *
+ * `opacity` is the COMPOSITE darkness at that radius -- what a reader wants to
+ * check against the sky. The caps overlap, so `nightOverlay` derives the
+ * incremental alpha each cap must carry for the stack to land on these numbers.
+ *
+ * Nested caps, not tiled annuli. An annulus is two circles joined by a bridge,
+ * and a circle that winds around a pole cannot be cut at the antimeridian at
+ * all -- which is 16-21% of the year for three of these five bands. A cap has
+ * no hole, so every shape reduces to one of two primitives.
  */
 export const NIGHT_BANDS: NightBand[] = [
-	{ outer: 96, inner: 90, opacity: 0.05 },
-	{ outer: 90, inner: 84, opacity: 0.11 },
-	{ outer: 84, inner: 78, opacity: 0.18 },
-	{ outer: 78, inner: 72, opacity: 0.26 },
-	{ outer: 72, inner: null, opacity: 0.34 }
+	{ outer: 96, opacity: 0.05 },
+	{ outer: 90, opacity: 0.11 },
+	{ outer: 84, opacity: 0.18 },
+	{ outer: 78, opacity: 0.26 },
+	{ outer: 72, opacity: 0.34 }
 ];
 
 /**
@@ -165,25 +173,133 @@ export function splitRing(ring: GeoPoint[]): GeoPoint[][] {
 		});
 }
 
+/**
+ * Which pole the boundary circle WINDS AROUND, if any.
+ *
+ * Not the same as "which poles the cap contains", and the difference decides
+ * the shape. A small circle separates its cap from the complement, so it winds
+ * around a pole exactly when ONE pole is inside and the other is not. When
+ * BOTH are inside the ring winds around neither: the cap is then the whole
+ * world minus a small cap at the antipode, and the ring is that small cap's
+ * boundary.
+ *
+ * The antisolar point never leaves +/-23.44 deg, so against band radii of
+ * 72..96 winding is the normal case, not an edge case: measured over a year,
+ * the 90 deg cap winds around a pole 83% of the time.
+ */
+export function windingPole(center: GeoPoint, radiusDeg: number): 1 | -1 | 0 {
+	const inNorth = 90 - center.lat < radiusDeg;
+	const inSouth = 90 + center.lat < radiusDeg;
+	if (inNorth === inSouth) return 0;
+	return inNorth ? 1 : -1;
+}
+
+/** True when the cap swallows both poles -- it is then a complement, not a disk. */
+export function coversBothPoles(center: GeoPoint, radiusDeg: number): boolean {
+	return 90 - center.lat < radiusDeg && 90 + center.lat < radiusDeg;
+}
+
+/**
+ * A pole-winding region as one renderable ring.
+ *
+ * The input is a curve that crosses every meridian exactly once, so it is
+ * single-valued in longitude: sorting the normalised points by longitude
+ * recovers it in order, and closing over the pole fills the region. No
+ * antimeridian cut is involved, which is why `splitRing` -- whose whole job is
+ * that cut -- could never represent this shape.
+ *
+ * The curve is periodic, so the latitude at -180 and at +180 is the SAME
+ * value: the crossing between the last sorted point and the first, one turn on.
+ * Using each end's own latitude instead leaves a jag of up to one step there.
+ */
+function poleCapRing(curve: GeoPoint[], pole: 1 | -1): GeoPoint[] {
+	const pts = curve
+		.map((p) => ({ lat: p.lat, lng: normLng(p.lng) }))
+		.sort((a, b) => a.lng - b.lng);
+	const first = pts[0];
+	const last = pts[pts.length - 1];
+	const span = first.lng + 360 - last.lng;
+	const t = span === 0 ? 0 : (180 - last.lng) / span;
+	const edgeLat = last.lat + (first.lat - last.lat) * t;
+	const poleLat = pole === 1 ? 90 : -90;
+	return [
+		{ lat: edgeLat, lng: -180 },
+		...pts,
+		{ lat: edgeLat, lng: 180 },
+		{ lat: poleLat, lng: 180 },
+		{ lat: poleLat, lng: -180 },
+		{ lat: edgeLat, lng: -180 }
+	];
+}
+
+const meanLat = (pts: GeoPoint[]): number =>
+	pts.reduce((a, p) => a + p.lat, 0) / pts.length;
+
+/**
+ * A cap that contains BOTH poles, as two pole-winding pieces that tile it.
+ *
+ * Such a cap is the whole world minus a small disk at the antipode, and a
+ * polygon-with-a-hole cannot express that here: the disk usually straddles the
+ * antimeridian, so its hole would arrive in two pieces, each touching the
+ * exterior edge. (Widening the exterior past +/-180 does not rescue it either
+ * -- geojson-vt wraps anything outside the world and draws the overflow a
+ * second time, inside the hole.)
+ *
+ * Instead, cut the complement along the two extreme-longitude vertices of the
+ * disk. The disk spans less than 360 deg of longitude, so above its upper arc
+ * and below its lower arc are each single-valued curves once continued across
+ * the unspanned longitudes by a shared link. Both pieces use the SAME link, so
+ * they abut exactly: no overlap to double-darken, no gap to show through.
+ */
+function bothPolesCap(ring: GeoPoint[]): number[][][][] {
+	const pts = ring.slice(0, -1);
+	let wi = 0;
+	let ei = 0;
+	for (let i = 1; i < pts.length; i++) {
+		if (pts[i].lng < pts[wi].lng) wi = i;
+		if (pts[i].lng > pts[ei].lng) ei = i;
+	}
+	const arc = (from: number, to: number): GeoPoint[] => {
+		const out: GeoPoint[] = [];
+		for (let i = from; ; i = (i + 1) % pts.length) {
+			out.push(pts[i]);
+			if (i === to) break;
+		}
+		return out;
+	};
+	const a = arc(wi, ei);
+	const b = arc(ei, wi).reverse();
+	const upper = meanLat(a) > meanLat(b) ? a : b;
+	const lower = upper === a ? b : a;
+
+	// The longitudes the disk does not span, walked at its own edge latitudes.
+	const w = pts[wi];
+	const e = pts[ei];
+	const link: GeoPoint[] = [];
+	const LINK_STEPS = 12;
+	for (let i = 1; i < LINK_STEPS; i++) {
+		const t = i / LINK_STEPS;
+		link.push({ lat: e.lat + (w.lat - e.lat) * t, lng: e.lng + (w.lng + 360 - e.lng) * t });
+	}
+	return [
+		[toPositions(poleCapRing([...upper, ...link], 1))],
+		[toPositions(poleCapRing([...lower, ...link], -1))]
+	];
+}
+
 const toPositions = (part: GeoPoint[]): number[][] => part.map((p) => [p.lng, p.lat]);
 
 /**
- * One band as renderable polygons: a cap, or an annulus built as a single
- * linear ring (outer circle out, inner circle back) so the splitter treats
- * the radial cuts as ordinary edges. Returns [lng,lat] polygon sets.
+ * One solid cap as renderable polygons, in whichever of the three shapes the
+ * sun's declination has put it: a plain disk (cut at the antimeridian if it
+ * reaches), a pole-winding region, or a both-poles complement.
  */
-export function bandPolygons(
-	center: GeoPoint,
-	band: NightBand,
-	steps = 72
-): number[][][][] {
-	const outer = circleRing(center, band.outer, steps);
-	if (band.inner === null) {
-		return splitRing(outer).map((part) => [toPositions(part)]);
-	}
-	const inner = circleRing(center, band.inner, steps).reverse();
-	const path = [...outer.slice(0, -1), ...inner.slice(0, -1), outer[0]];
-	return splitRing(path).map((part) => [toPositions(part)]);
+export function capPolygons(center: GeoPoint, radiusDeg: number, steps = 72): number[][][][] {
+	const ring = circleRing(center, radiusDeg, steps);
+	if (coversBothPoles(center, radiusDeg)) return bothPolesCap(ring);
+	const pole = windingPole(center, radiusDeg);
+	if (pole !== 0) return [[toPositions(poleCapRing(ring.slice(0, -1), pole))]];
+	return splitRing(ring).map((part) => [toPositions(part)]);
 }
 
 export interface NightOverlay {
@@ -195,15 +311,32 @@ export interface NightOverlay {
 	}[];
 }
 
-/** The whole feathered night for a wall-clock instant, centred opposite the sun. */
+/**
+ * The whole feathered night for a wall-clock instant, centred opposite the sun.
+ *
+ * The caps nest, so `opacity` here is not the band's darkness -- it is the
+ * extra alpha this cap must add on top of the one outside it to reach it:
+ * a = 1 - (1 - c_i) / (1 - c_i-1). MapLibre draws a fill layer in the
+ * translucent pass with a tile-clipping stencil only (verified in
+ * `webgl/draw/draw_fill.ts`), so overlapping features composite; every cap is
+ * the same colour, and alpha-over of one colour is order-independent.
+ */
 export function nightOverlay(wallSec: number): NightOverlay {
 	const anti = antipodeOf(subSolarPoint(wallSec));
+	let covered = 0;
 	return {
 		type: 'FeatureCollection',
-		features: NIGHT_BANDS.map((band, i) => ({
-			type: 'Feature',
-			properties: { band: i, opacity: band.opacity },
-			geometry: { type: 'MultiPolygon', coordinates: bandPolygons(anti, band) }
-		}))
+		features: NIGHT_BANDS.map((band, i) => {
+			const alpha = 1 - (1 - band.opacity) / (1 - covered);
+			covered = band.opacity;
+			return {
+				type: 'Feature' as const,
+				properties: { band: i, opacity: alpha },
+				geometry: {
+					type: 'MultiPolygon' as const,
+					coordinates: capPolygons(anti, band.outer)
+				}
+			};
+		})
 	};
 }

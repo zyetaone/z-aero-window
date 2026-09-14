@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-	bandPolygons,
+	capPolygons,
 	circleRing,
 	destPoint,
 	NIGHT_BANDS,
@@ -68,13 +68,21 @@ describe('splitRing', () => {
 });
 
 describe('nightOverlay', () => {
-	it('builds one tiled feather per band with absolute opacities', () => {
+	/**
+	 * The caps nest, so the feature opacities are INCREMENTAL: each is the
+	 * extra alpha needed on top of everything outside it. The table's numbers
+	 * are what a reader should be able to check, so check them -- composite the
+	 * stack back up and require the band table, exactly.
+	 */
+	it('stacks incremental alphas that composite to the band table', () => {
 		const noon = Date.UTC(2026, 5, 21, 12, 0, 0) / 1000;
 		const fc = nightOverlay(noon);
 		expect(fc.features.length).toBe(NIGHT_BANDS.length);
+		let covered = 0;
 		fc.features.forEach((f, i) => {
 			expect(f.properties.band).toBe(i);
-			expect(f.properties.opacity).toBe(NIGHT_BANDS[i].opacity);
+			covered = 1 - (1 - covered) * (1 - f.properties.opacity);
+			expect(covered, `band ${i}`).toBeCloseTo(NIGHT_BANDS[i].opacity, 9);
 			expect(f.geometry.coordinates.length).toBeGreaterThan(0);
 			for (const poly of f.geometry.coordinates) {
 				for (const ring of poly) {
@@ -82,6 +90,7 @@ describe('nightOverlay', () => {
 						expect(Number.isFinite(lng) && Number.isFinite(lat)).toBe(true);
 						expect(lng).toBeGreaterThanOrEqual(-180);
 						expect(lng).toBeLessThanOrEqual(180);
+						expect(Math.abs(lat)).toBeLessThanOrEqual(90);
 					}
 				}
 			}
@@ -95,13 +104,16 @@ describe('nightOverlay', () => {
 		const cap = fc.features[fc.features.length - 1];
 		// Vertex-centroid latitude is NOT the invariant for a 72° cap (a
 		// sphere circle's vertices bunch poleward) — angular distance from
-		// the antisolar point is: every vertex sits on the 72° small circle.
+		// the antisolar point is: every vertex sits on the 72° small circle,
+		// EXCEPT the ones closing the ring over a pole or along the map edge,
+		// which belong to the rendering, not to the geometry.
 		const D2R = Math.PI / 180;
 		const alat = anti.lat * D2R;
 		const alng = anti.lng * D2R;
 		let n = 0;
 		for (const poly of cap.geometry.coordinates) {
 			for (const [lng, lat] of poly[0]) {
+				if (Math.abs(lat) === 90 || Math.abs(lng) === 180) continue;
 				const phi = lat * D2R;
 				const lam = lng * D2R;
 				const cosd =
@@ -113,31 +125,51 @@ describe('nightOverlay', () => {
 		}
 		expect(n).toBeGreaterThan(0);
 	});
+
+	/**
+	 * The shape a cap takes depends only on the sun's declination, and all
+	 * three occur in an ordinary year: a plain disk, a disk that winds around
+	 * a pole (83% of the year at 90 deg), and a cap holding BOTH poles (the
+	 * 96 deg cap, 17% of the year, around the equinoxes). None may produce a
+	 * degenerate polygon.
+	 */
+	it('builds every band all year, in all three shapes', () => {
+		for (let day = 0; day < 365; day += 1) {
+			const t = Date.UTC(2026, 0, 1) / 1000 + day * 86_400 + 41_000;
+			for (const f of nightOverlay(t).features) {
+				expect(f.geometry.coordinates.length).toBeGreaterThan(0);
+				for (const poly of f.geometry.coordinates) {
+					expect(poly[0].length).toBeGreaterThanOrEqual(4);
+					for (const [lng, lat] of poly[0]) {
+						expect(Number.isFinite(lng) && Number.isFinite(lat)).toBe(true);
+					}
+				}
+			}
+		}
+	});
 });
 
 /**
  * Coverage, checked against the band table rather than against the shapes.
  *
- * Every test above asserts on the PIECES -- ring counts, split counts, winding,
- * closure. All of them passed while the bands were wrong for most of every day,
- * because they were exercised at antisolar longitude 0, where a cap never
- * reaches the antimeridian and splits into exactly one part. Same trap as
- * `composed-clock.test.ts` asserting the two suns agree at the Himalayas: a
- * thorough suite anchored at the one input where the geometry is easy.
+ * Every structural test above asserts on the PIECES -- ring counts, split
+ * counts, winding, closure. All of them passed while the bands were wrong for
+ * most of every day, because they were exercised at antisolar longitude 0,
+ * where a cap never reaches the antimeridian and splits into exactly one part.
+ * Same trap as `composed-clock.test.ts` asserting the two suns agree at the
+ * Himalayas: a thorough suite anchored at the one input where it is easy.
  *
  * This asks the only question a well-formed but wrong polygon cannot satisfy:
- * at a given point, is the drawn opacity the one the band table says? Angular
+ * at a given point, is the drawn darkness the one the band table says? Angular
  * distance is computed independently, so a change to the geometry cannot drag
  * the expectation along with it.
  *
- * KNOWN GAP, deliberately not asserted: a band whose outer radius exceeds
- * 90 - |antisolar latitude| ENCLOSES A POLE, and a pole-enclosing ring cannot
- * be represented by cutting at the antimeridian -- the pole has to be stitched
- * into the boundary. Those bands are still malformed and still leak opacity
- * onto distant ground (measured residual: a flat 0.11, one band's worth).
- * Fixing it means either stitching the pole or rebuilding the bands as stacked
- * solid caps instead of annuli. Until then this suite skips exactly those
- * bands, and says so rather than lowering a tolerance until it passes.
+ * WHAT THIS DOES NOT PROVE. The caps nest and are composited by the renderer,
+ * so the check below composites them itself, with the same
+ * `1 - (1 - a)(1 - b)` a fill layer applies. That MapLibre actually composites
+ * overlapping features in one layer is read out of `webgl/draw/draw_fill.ts`
+ * -- the translucent pass uses a tile-clipping stencil and read-only depth,
+ * with no per-feature dedup -- and is NOT verified here. The geometry half is.
  */
 describe('the bands cover what the band table says', () => {
 	/** Even-odd containment in lng/lat, matching how the fill is triangulated. */
@@ -153,14 +185,17 @@ describe('the bands cover what the band table says', () => {
 		return inside;
 	};
 
-	/** Opacity drawn by ONE band index at a point. */
-	const drawnByBand = (pt: [number, number], wallSec: number, band: number): number => {
-		const f = nightOverlay(wallSec).features[band];
-		let hit = false;
-		for (const poly of f.geometry.coordinates) {
-			for (const ring of poly) if (inRing(pt, ring)) hit = !hit;
+	/** What the whole stack paints at a point, composited as the layer would. */
+	const drawn = (pt: [number, number], wallSec: number): number => {
+		let covered = 0;
+		for (const f of nightOverlay(wallSec).features) {
+			let hit = false;
+			for (const poly of f.geometry.coordinates) {
+				for (const ring of poly) if (inRing(pt, ring)) hit = !hit;
+			}
+			if (hit) covered = 1 - (1 - covered) * (1 - f.properties.opacity);
 		}
-		return hit ? f.properties.opacity : 0;
+		return covered;
 	};
 
 	const angularDeg = (a: { lat: number; lng: number }, pt: [number, number]): number => {
@@ -171,8 +206,12 @@ describe('the bands cover what the band table says', () => {
 		return Math.acos(Math.min(1, Math.max(-1, c))) / d;
 	};
 
-	/** Does this band's outer circle run over a pole? Then it is the known gap. */
-	const enclosesPole = (antiLat: number, outer: number) => outer > 90 - Math.abs(antiLat);
+	/** The table's own answer: the innermost cap that reaches this far out. */
+	const expectedAt = (deg: number): number => {
+		let out = 0;
+		for (const b of NIGHT_BANDS) if (deg < b.outer) out = b.opacity;
+		return out;
+	};
 
 	/**
 	 * The assertion that needs no tolerance: a disc contains its own centre.
@@ -180,18 +219,36 @@ describe('the bands cover what the band table says', () => {
 	 * cap straddled the antimeridian.
 	 */
 	it('the solid cap contains the antisolar point, at every longitude', () => {
-		const solid = NIGHT_BANDS.length - 1;
+		const solid = NIGHT_BANDS[NIGHT_BANDS.length - 1].opacity;
 		for (let h = 0; h < 24; h++) {
 			const t = 1_789_300_000 + h * 3600;
 			const anti = antipodeOf(subSolarPoint(t));
 			expect(
-				drawnByBand([anti.lng, anti.lat], t, solid),
+				drawn([anti.lng, anti.lat], t),
 				`hour ${h}, antisolar lng ${anti.lng.toFixed(1)}`
-			).toBeCloseTo(NIGHT_BANDS[solid].opacity, 5);
+			).toBeCloseTo(solid, 9);
 		}
 	});
 
-	it('draws the right band over every catalogue place, all day', () => {
+	/**
+	 * The pole is the case the old annulus geometry could not represent at all,
+	 * and the one that leaked a flat 0.11 onto ground nowhere near it. Both
+	 * poles, every hour: whatever the table says for that distance, and nothing
+	 * else.
+	 */
+	it('paints the poles themselves correctly, all day', () => {
+		for (let h = 0; h < 24; h++) {
+			const t = 1_789_300_000 + h * 3600;
+			const anti = antipodeOf(subSolarPoint(t));
+			for (const lat of [89.99, -89.99]) {
+				const deg = angularDeg(anti, [0, lat]);
+				if (NIGHT_BANDS.some((b) => Math.abs(deg - b.outer) < 1.5)) continue;
+				expect(drawn([0, lat], t), `hour ${h}, lat ${lat}`).toBeCloseTo(expectedAt(deg), 9);
+			}
+		}
+	});
+
+	it('draws the right darkness over every catalogue place, all day', () => {
 		const PLACES: [string, number, number][] = [
 			['hyderabad', 17.44, 78.38],
 			['dallas', 32.78, -96.8],
@@ -205,18 +262,35 @@ describe('the bands cover what the band table says', () => {
 				const t = 1_789_300_000 + m * 60;
 				const anti = antipodeOf(subSolarPoint(t));
 				const deg = angularDeg(anti, [lng, lat]);
-				NIGHT_BANDS.forEach((b, i) => {
-					if (enclosesPole(anti.lat, b.outer)) return; // known gap, see above
-					// A 5 deg chord legitimately disagrees with an exact angular
-					// test within a degree or so of a band edge.
-					const edges = [b.outer, b.inner ?? 0];
-					if (edges.some((e) => Math.abs(deg - e) < 1.5)) return;
-					const inside = deg < b.outer && (b.inner === null || deg >= b.inner);
+				// A 5 deg chord legitimately disagrees with an exact angular
+				// test within a degree or so of a band edge.
+				if (NIGHT_BANDS.some((b) => Math.abs(deg - b.outer) < 1.5)) continue;
+				expect(
+					drawn([lng, lat], t),
+					`${name} +${m}min, ${deg.toFixed(1)}deg from antisolar`
+				).toBeCloseTo(expectedAt(deg), 9);
+			}
+		}
+	});
+
+	/**
+	 * A year of equinox-to-solstice sweeps at a grid of points. The shape a cap
+	 * takes changes with declination, so a suite pinned to one week proves only
+	 * that week -- the bug this file exists for survived exactly that way.
+	 */
+	it('holds over a whole year, on a global grid', () => {
+		for (let day = 0; day < 365; day += 11) {
+			const t = Date.UTC(2026, 0, 1) / 1000 + day * 86_400 + 37_000;
+			const anti = antipodeOf(subSolarPoint(t));
+			for (let lat = -80; lat <= 80; lat += 20) {
+				for (let lng = -170; lng <= 170; lng += 20) {
+					const deg = angularDeg(anti, [lng, lat]);
+					if (NIGHT_BANDS.some((b) => Math.abs(deg - b.outer) < 1.5)) continue;
 					expect(
-						drawnByBand([lng, lat], t, i),
-						`${name} +${m}min, band ${i} (${deg.toFixed(1)}deg out)`
-					).toBeCloseTo(inside ? b.opacity : 0, 5);
-				});
+						drawn([lng, lat], t),
+						`day ${day}, ${lat},${lng} (${deg.toFixed(1)}deg out)`
+					).toBeCloseTo(expectedAt(deg), 9);
+				}
 			}
 		}
 	});
