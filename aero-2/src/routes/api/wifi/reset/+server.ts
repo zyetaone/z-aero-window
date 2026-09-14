@@ -67,7 +67,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			{
 				ok: false,
 				message:
-					'Privileged hatch unavailable (sudo -n preflight failed) — reinstall deploy/pi/install.sh to provision /etc/sudoers.d/aero.'
+					'Privileged hatch unavailable: /etc/sudoers.d/aero is not installed — re-run deploy/pi/install.sh. (If it warned "sudoers fragment failed visudo validation", that is the cause.)'
 			},
 			{ status: 503, headers: cors }
 		);

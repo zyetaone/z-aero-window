@@ -34,14 +34,15 @@ export const POST: RequestHandler = async ({ request }) => {
 	const cors = lanCorsHeaders(request.headers.get('origin'));
 	if (refusal) return withCors(refusal, cors);
 
-	// triggerOtaUpdate preflights `sudo -n`. If the hatch is unavailable, say so
-	// with a 503 rather than a 202 that promises an update which will not happen.
+	// triggerOtaUpdate checks the sudoers fragment is installed. If the hatch is
+	// unavailable, say so with a 503 rather than a 202 that promises an update
+	// which will not happen.
 	if (!triggerOtaUpdate()) {
 		return json(
 			{
 				ok: false,
 				message:
-					'Privileged hatch unavailable (sudo -n preflight failed) — reinstall deploy/pi/install.sh to provision /etc/sudoers.d/aero.'
+					'Privileged hatch unavailable: /etc/sudoers.d/aero is not installed — re-run deploy/pi/install.sh. (If it warned "sudoers fragment failed visudo validation", that is the cause.)'
 			},
 			{ status: 503, headers: cors }
 		);
