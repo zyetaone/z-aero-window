@@ -83,8 +83,8 @@ component and 7 in `peer-sync`.
 
 | | aero-1 | aero-2 |
 |---|---|---|
-| `check` | svelte-check | svelte-check **+ check-cycles** |
-| `test` | vitest | **check-cycles +** vitest |
+| `check` | svelte-check | svelte-check **+ check-repo** |
+| `test` | vitest | **check-repo +** vitest |
 | documented invariants | informal, in prose | **10, all enforced by a failing check** |
 | structural tests | 7 files | 6 files |
 | browser smoke in CI | yes (added recently) | yes (added recently) |
@@ -184,8 +184,9 @@ done
 # dead exports — the scanner prints one line per symbol, so count them
 cd aero-1 && node tools/dead-export-scan.mjs | grep -cE '^\s+\S+\.(ts|svelte)\s'
 
-# import cycles (aero-2 only runs this in CI; aero-1 has one, type-only)
-cd aero-2 && node tools/check-cycles.mjs
+# repo static checks: cycles + tracked->untracked + rune naming
+# (aero-2 only runs this in CI; aero-1 has one cycle, type-only)
+cd aero-2 && node tools/check-repo.mjs
 
 # frame cost on a pinned scene — needs a build + a headless Chrome
 cd aero-2 && bun run build && bun run serve &

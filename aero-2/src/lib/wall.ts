@@ -13,6 +13,8 @@
  * feature slice (architecture §1) and both sides need this.
  */
 
+import * as z from 'zod';
+
 export const WALL_KEYS = [
 	'placeId',
 	'presetId',
@@ -65,8 +67,8 @@ export interface WallSnapshot {
 }
 
 /** Closed sets the server is allowed to know. See `parseWallState`. */
-const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'];
-const DISPLAY_MODES = ['flight', 'video', 'screensaver', 'standby'];
+const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
+const DISPLAY_MODES = ['flight', 'video', 'screensaver', 'standby'] as const;
 const CLOCK_OFFSET_RANGE: readonly [number, number] = [-12, 12];
 
 /**
@@ -77,49 +79,7 @@ const CLOCK_OFFSET_RANGE: readonly [number, number] = [-12, 12];
  * `settings/`, which `server/` must not import, and the client already resolves
  * an unknown id through `Location.byId`'s documented fallback. The server's job
  * here is to reject junk and cap size, not to own the catalog.
- */
-export function parseWallState(input: unknown): WallState | null {
-	if (typeof input !== 'object' || input === null) return null;
-	const b = input as Record<string, unknown>;
-
-	// A push is a whole snapshot. Per-field patches are the thing ADR-007 says
-	// not to build — a partial write needs a merge rule, and a merge rule is the
-	// CRDT growing back.
-	for (const k of WALL_KEYS) if (!(k in b)) return null;
-
-	const placeId = id(b.placeId);
-	const presetId = id(b.presetId);
-	if (placeId === null || presetId === null) return null;
-
-	if (!WEATHERS.includes(b.weather as string)) return null;
-	if (!DISPLAY_MODES.includes(b.displayMode as string)) return null;
-	if (typeof b.blindOpen !== 'boolean' || typeof b.rotate !== 'boolean') return null;
-
-	const clockOffsetH = b.clockOffsetH;
-	if (
-		typeof clockOffsetH !== 'number' ||
-		!Number.isFinite(clockOffsetH) ||
-		clockOffsetH < CLOCK_OFFSET_RANGE[0] ||
-		clockOffsetH > CLOCK_OFFSET_RANGE[1]
-	) {
-		return null;
-	}
-
-	const mediaUrls = parseMediaUrls(b.mediaUrls);
-	if (mediaUrls === null) return null;
-
-	return {
-		placeId,
-		presetId,
-		weather: b.weather as string,
-		clockOffsetH,
-		displayMode: b.displayMode as string,
-		blindOpen: b.blindOpen,
-		rotate: b.rotate,
-		mediaUrls
-	};
-}
-
+ *
 /**
  * A bounded list of same-origin-or-http(s) media paths.
  *
@@ -132,20 +92,45 @@ export function parseWallState(input: unknown): WallState | null {
  * push with one bad URL should fail loudly at the admin's screen, not land
  * quietly minus a track nobody noticed was dropped.
  */
-function parseMediaUrls(v: unknown): string[] | null {
-	if (v === undefined) return null;
-	if (!Array.isArray(v) || v.length > 12) return null;
-	const out: string[] = [];
-	for (const u of v) {
-		if (typeof u !== 'string' || u.length === 0 || u.length > 300) return null;
-		if (!/^(\/[^\/]|https?:\/\/)/.test(u)) return null;
-		out.push(u);
-	}
-	return out;
-}
+const mediaUrlSchema = z
+	.string()
+	.min(1)
+	.max(300)
+	.refine((u) => /^(\/[^/]|https?:\/\/)/.test(u));
 
 /** Empty string is legal — it means "no preset pinned". */
-function id(v: unknown): string | null {
-	if (typeof v !== 'string' || v.length > 64) return null;
-	return v === '' || /^[a-z0-9][a-z0-9-]*$/.test(v) ? v : null;
+const idSchema = z
+	.string()
+	.max(64)
+	.refine((s) => s === '' || /^[a-z0-9][a-z0-9-]*$/.test(s));
+
+/**
+ * Validate an untrusted body into a `WallState`, or null.
+ *
+ * `placeId` and `presetId` are checked as bounded identifier-shaped strings
+ * rather than against the catalogs, deliberately: the catalogs live in
+ * `settings/`, which `server/` must not import, and the client already resolves
+ * an unknown id through `Location.byId`'s documented fallback. The server's job
+ * here is to reject junk and cap size, not to own the catalog.
+ *
+ * A push is a whole snapshot — the object schema below requires every
+ * WALL_KEY, so a partial write fails closed. Per-field patches are the thing
+ * ADR-007 says not to build: a partial write needs a merge rule, and a merge
+ * rule is the CRDT growing back. Unknown keys are stripped, never stored.
+ */
+const wallStateSchema = z.object({
+	placeId: idSchema,
+	presetId: idSchema,
+	weather: z.enum(WEATHERS),
+	displayMode: z.enum(DISPLAY_MODES),
+	blindOpen: z.boolean(),
+	rotate: z.boolean(),
+	clockOffsetH: z.number().finite().min(CLOCK_OFFSET_RANGE[0]).max(CLOCK_OFFSET_RANGE[1]),
+	mediaUrls: z.array(mediaUrlSchema).max(12)
+});
+
+export function parseWallState(input: unknown): WallState | null {
+	const parsed = wallStateSchema.safeParse(input);
+	if (!parsed.success) return null;
+	return parsed.data;
 }

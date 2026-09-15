@@ -10,9 +10,9 @@
 		"serve": "bun run server.ts",
 		"start": "bun run build && bun run server.ts",
 		"prepare": "svelte-kit sync",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && node tools/check-cycles.mjs",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && node tools/check-repo.mjs",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "node tools/check-cycles.mjs && vitest run",
+		"test": "node tools/check-repo.mjs && vitest run",
 		"test:watch": "vitest",
 		"lint": "prettier --check .",
 		"format": "prettier --write .",
@@ -22,7 +22,8 @@
 		"@svelte-maplibre-gl/pmtiles": "^2.0.1",
 		"maplibre-gl": "^6.6.0",
 		"svelte-maplibre-gl": "^2.2.1",
-		"three": "^0.185.1"
+		"three": "^0.185.1",
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-node": "next",
