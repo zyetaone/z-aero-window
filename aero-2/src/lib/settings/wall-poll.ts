@@ -38,8 +38,26 @@ export function createWallPoller(
 			});
 			// 304 is the expected answer almost always — nothing changed.
 			if (res.status === 304 || !res.ok) return;
+			/**
+			 * Read the body BEFORE claiming its validator.
+			 *
+			 * The ETag means "this pane has consumed this version", and assigning
+			 * it from the headers made it mean "this pane has seen this version's
+			 * headers" — which are not the same thing when the body dies in
+			 * between. A torn read then left the pane holding a validator for a
+			 * snapshot it never got: every later poll sent that ETag, the server
+			 * answered 304 (correctly — the version really had not changed), and
+			 * the pane sat out the whole push. Silently, until a LATER push moved
+			 * the ETag again.
+			 *
+			 * The trigger is the failure `poll.ts` exists for: a peer Pi losing
+			 * power mid-response, whose socket the 8 s `AbortSignal.timeout` then
+			 * aborts — rejecting `res.json()` after the headers, and only the
+			 * headers, have arrived.
+			 */
+			const snapshot = (await res.json()) as WallSnapshot;
 			etag = res.headers.get('etag');
-			sync.receive((await res.json()) as WallSnapshot);
+			sync.receive(snapshot);
 		},
 		{
 			intervalMs: POLL_INTERVAL_MS,

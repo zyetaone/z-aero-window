@@ -111,6 +111,50 @@ describe('createWallPoller', () => {
 		expect(sync.pending).toBeNull();
 	});
 
+	/**
+	 * The test above feeds unparseable JSON and asserts the poller SURVIVED it.
+	 * It never asks the question that matters afterwards: does the pane still
+	 * know it has not seen that version?
+	 *
+	 * It did not. The ETag was assigned before the body was read, so a response
+	 * whose body failed mid-read left the pane holding a validator for a
+	 * snapshot it never consumed. Every later poll then sent that ETag, the
+	 * server answered 304 -- correctly, the version really had not changed --
+	 * and the pane sat out the entire push. Silently, permanently, until some
+	 * LATER push moved the ETag again.
+	 *
+	 * And the trigger is the exact failure `poll.ts` was written for: a peer Pi
+	 * losing power mid-response on a venue LAN, whose socket the 8 s
+	 * `AbortSignal.timeout` then aborts -- rejecting `res.json()` after the
+	 * headers, and only the headers, arrived.
+	 */
+	it('does not claim an ETag for a body it failed to read', async () => {
+		const sync = new WallSync();
+		const snapshot = ok(9, 'W/"9"');
+		const sent: (string | null)[] = [];
+		let attempt = 0;
+
+		const poller = createWallPoller(sync, '', async (_url, init) => {
+			sent.push(new Headers(init?.headers).get('if-none-match'));
+			attempt++;
+			// A real server: same version, so a matching validator means 304.
+			if (sent[sent.length - 1] === 'W/"9"') return new Response(null, { status: 304 });
+			// First attempt dies mid-body, as an aborted read does.
+			return attempt === 1
+				? new Response('{"version":9,"applyAt', { status: 200, headers: { etag: 'W/"9"' } })
+				: snapshot.clone();
+		});
+
+		await poller.poll();
+		expect(sync.pending, 'a torn body must not apply').toBeNull();
+
+		await poller.poll();
+		poller.stop();
+
+		expect(sent[1], 'the second poll must not claim the version it never read').toBeNull();
+		expect(sync.pending?.version, 'the retry must actually deliver it').toBe(9);
+	});
+
 	it('polls the configured origin, not just its own', async () => {
 		const urls: string[] = [];
 		const poller = createWallPoller(new WallSync(), 'http://aero-1.local:3000', async (url) => {
