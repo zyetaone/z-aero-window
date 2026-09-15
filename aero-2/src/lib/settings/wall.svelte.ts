@@ -64,7 +64,28 @@ export class WallSync {
 
 		this.pending = null;
 		this.appliedVersion = due.version;
-		applyWallState(due.state, config, wallSec);
+		/**
+		 * `due.applyAtWallSec`, NOT `wallSec`.
+		 *
+		 * A preset SOLVES a clock against the second it is composed for, so the
+		 * second passed here is an input to the result -- and `wallSec` is when
+		 * this pane got round to applying, which is not a wall-agreed quantity.
+		 * A pane that applies late (it was rebooting, its poll stalled, or it
+		 * simply booted after the push and read the snapshot on its first GET)
+		 * then solves a DIFFERENT clock from its neighbours, permanently, until
+		 * the next push.
+		 *
+		 * And it does not degrade gently. The solve lands on quarter hours, so
+		 * 30 s late and 300 s late are identical -- and 3600 s late is a FULL
+		 * HOUR of clock offset between panes of one wall. Measured: on-time
+		 * 8.75 h, an hour late 7.75 h. A rebooted Pi rejoining the wall is the
+		 * normal case, not an edge case.
+		 *
+		 * `applyAtWallSec` is the one second every pane agrees on. It is the
+		 * entire reason the field exists; the apply had been ignoring it for
+		 * everything except deciding WHEN.
+		 */
+		applyWallState(due.state, config, due.applyAtWallSec);
 	}
 }
 

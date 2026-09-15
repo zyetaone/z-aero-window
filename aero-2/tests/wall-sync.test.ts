@@ -64,6 +64,38 @@ describe('WallSync', () => {
 		expect(a.place.id).toBe(b.place.id);
 	});
 
+	/**
+	 * The hole the test above leaves, and the reason it stayed open: both panes
+	 * there apply at EXACTLY the scheduled second, which is the one input where
+	 * "when did this pane apply" and "when was this scheduled" are the same
+	 * number. Off that anchor they are not, and a preset SOLVES its clock
+	 * against the second it is given.
+	 *
+	 * A pane applies late whenever it was rebooting, its poll stalled, or it
+	 * simply booted after the push and read the snapshot on its first GET --
+	 * which is the ordinary "one Pi came back" case on a three-pane wall.
+	 *
+	 * It does not degrade gently either. The solve lands on quarter hours, so
+	 * 30 s and 300 s late are indistinguishable, and an hour late is a FULL
+	 * HOUR of clock offset between panes showing one panorama.
+	 */
+	it('lands the same clock however late a pane gets to it', () => {
+		const at = 1_789_300_000;
+		const onTime = createSettings();
+		const early = new WallSync();
+		early.receive(snap(1, at, { presetId: 'gulf-midnight', placeId: '' }));
+		early.applyDue(at, onTime);
+
+		for (const lateBy of [30, 300, 3600, 86_400]) {
+			const sync = new WallSync();
+			const config = createSettings();
+			sync.receive(snap(1, at, { presetId: 'gulf-midnight', placeId: '' }));
+			sync.applyDue(at + lateBy, config);
+			expect(config.clockOffsetH, `applied ${lateBy}s late`).toBe(onTime.clockOffsetH);
+			expect(config.place.id, `applied ${lateBy}s late`).toBe(onTime.place.id);
+		}
+	});
+
 	it('applies once, then has nothing left to apply', () => {
 		const sync = new WallSync();
 		const config = createSettings();
