@@ -100,6 +100,21 @@ export const ALTITUDE_FLOOR_M = 400;
 export const ALTITUDE_CEILING_M = 13_000;
 export const CLIMB_PERIOD_SEC = 900;
 
+/**
+ * How long the window holds one destination.
+ *
+ * Content pacing, not mechanism: v1's director ran ~2:10 per location, tuned
+ * for passers-by rather than the desk-workers this installation actually sits
+ * in front of. Four minutes is a starting point for a calmer room, and it is
+ * one number to change.
+ *
+ * Lives here, not in the director, because the downtown pass (`downtown.ts`)
+ * keys off the same slot grid and the view layer cannot import the director
+ * without closing an import cycle (view → director → settings → view).
+ * Re-exported from the director so its importers do not churn.
+ */
+export const DWELL_SEC = 240;
+
 const TWO_PI = Math.PI * 2;
 const M_PER_DEG_LAT = 111_320;
 

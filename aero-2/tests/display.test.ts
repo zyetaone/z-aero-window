@@ -1178,6 +1178,52 @@ describe('the sightline stays below the horizon through a turn', () => {
 		expect(Math.max(...km), 'looking past the packed tile radius').toBeLessThan(200);
 	});
 
+	/**
+	 * Depression and range are related by a tangent, so at a FIXED depression
+	 * the look-at point runs away with altitude: the 4 deg shallow end sits
+	 * 64 km out at 4,500 m but 186 km out at the 13,000 m ceiling — past the
+	 * packed near box the manifests promise (~72 km half-width), aiming the
+	 * camera at ground with no sharp tiles. The depression floor scales with
+	 * altitude (LOOKAT_MAX_GROUND_DIST_M) so the target stays inside the
+	 * pack however high the climb goes, while low-altitude aiming is
+	 * untouched: at 4,500 m the floor is 3.7 deg, below anything flown.
+	 */
+	const sweepAlt = (pitchDeg: number, aglM: number) => {
+		const out: { dep: number; km: number }[] = [];
+		for (let i = 0; i < 360; i++) {
+			const bankDeg = 18 * Math.sin((2 * Math.PI * i) / 360);
+			const cam = new FlightCamera(0, pitchDeg).viewOptions(
+				{ lat: 40, lon: -105, headingDeg: 90, aglM, bankDeg },
+				40,
+				-105
+			);
+			const dep = 90 - cam.cameraPitchDeg;
+			out.push({ dep, km: aglM / Math.tan((dep * Math.PI) / 180) / 1000 });
+		}
+		return out;
+	};
+
+	it('holds the look-at point inside packed imagery at altitude', () => {
+		for (const aglM of [9_000, 12_000, 13_000]) {
+			const rows = sweepAlt(-10, aglM);
+			const max = Math.max(...rows.map((r) => r.km));
+			// 70 km by construction, plus float dust on the tan/atan round-trip.
+			expect(max, `agl ${aglM}m looks ${max.toFixed(1)}km out`).toBeLessThan(70.01);
+			for (const r of rows) expect(r.dep).toBeGreaterThan(0);
+		}
+	});
+
+	it('leaves low-altitude aiming alone', () => {
+		const rows = sweepAlt(-10, 4_500);
+		const minDep = Math.min(...rows.map((r) => r.dep));
+		// The bank swing still bottoms out at its own 4 deg, not on the
+		// altitude floor (3.7 deg here) — the cap must not reshape the view
+		// it was not built to fix.
+		expect(minDep, `shallow end now ${minDep.toFixed(2)}deg`).toBeGreaterThan(3.99);
+		expect(minDep, `shallow end now ${minDep.toFixed(2)}deg`).toBeLessThan(4.01);
+		expect(Math.max(...rows.map((r) => r.km))).toBeLessThan(70);
+	});
+
 	it('always looks DOWN, never at or above the horizon', () => {
 		for (const pitch of [-1, -10, -30]) {
 			for (const s of sweep(pitch)) expect(s.dep).toBeGreaterThan(0);

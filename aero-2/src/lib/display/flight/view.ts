@@ -4,6 +4,7 @@
  */
 
 import { normalizeHeading, phaseFor, FlightTrack, type OrbitPose } from './flight-path.js';
+import { downtownBlendAt, downtownPose } from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
 import { signedDelta } from '#lib/angles.js';
 import { resolveLocalHours } from '../world/sun.js';
@@ -50,6 +51,29 @@ export const WORLD_ROLL_GAIN = 0.55;
 
 export const DEFAULT_WINDOW_AZIMUTH_DEG = 0;
 export const DEFAULT_PITCH_DEG = -10;
+
+/**
+ * Furthest the look-at ground point may roam from the aircraft, in metres.
+ *
+ * Depression and range are related by a tangent, so at a FIXED depression the
+ * ground distance grows linearly with altitude: at the 4 deg shallow end of
+ * the bank swing the target sits 64 km out at 4,500 m AGL but 186 km out at
+ * the 13,000 m ceiling — aimed at ground no pack covers, past the horizon
+ * haze the sky expects, and (via `calculateCameraOptionsFromTo`) pitching the
+ * MapLibre camera ever closer to horizontal.
+ *
+ * The packed sharp imagery is the authority for the number, not taste. The
+ * Sentinel-2 manifests (`aero-2/data/tiles/sentinel2/source-*.json`) pack the
+ * near box at +/-0.65 deg latitude around each pin — ~72 km — carrying z12-13,
+ * the zooms the window actually resolves; the DEM is packed to roughly +/-1
+ * deg. Capping the ground distance at 70 km keeps the centre of frame on
+ * packed tiles at every altitude while leaving low-altitude behaviour exactly
+ * alone: the cap only lifts depressions shallower than atan(agl/70km), which
+ * at 4,500 m is 3.7 deg — below the 4 deg the bank swing ever reaches. It
+ * first bites around ~4,900 m AGL and holds the target at 70 km all the way
+ * to the ceiling.
+ */
+export const LOOKAT_MAX_GROUND_DIST_M = 70_000;
 
 import { DEG2RAD } from '#lib/angles.js';
 const M_PER_DEG_LAT = 111_320;
@@ -231,20 +255,31 @@ export class FlightCamera {
 		 * The look-at distance now varies by a factor of ~4.1 across a turn
 		 * instead of ~50. It said ~2.4 here, which is the figure for a clamp of
 		 * +/-0.4: that gives a depression swing of 6-14 deg. The clamp below is
-		 * +/-0.6, which swings 4-16 deg, and tan(16)/tan(4) is 4.10. Measured
-		 * over a full circuit at Denver against this function: bank reaches
-		 * +/-18.0 deg, depression runs 4.00-16.01 deg, ratio 4.10x. Whoever
-		 * widened the clamp did not re-measure the number this paragraph
-		 * exists to record -- so re-measure it here if the clamp moves again.
+		 * +/-0.6, which swings 4-16 deg, and tan(16)/tan(4) is 4.10.
 		 *
-		 * Still worth knowing: across a circuit the look-at ground distance
-		 * reaches ~147 km, which is past the per-location imagery boxes. Far
-		 * better than the 516 km above, not yet inside the pack.
+		 * Altitude then moved the problem without moving the fix: at a fixed
+		 * 4 deg shallow end the ground distance is agl/tan(4deg) — 64 km at
+		 * 4,500 m AGL but 186 km at the 13,000 m ceiling, aimed at ground no
+		 * pack covers. So the depression carries a second, altitude-scaled
+		 * floor (LOOKAT_MAX_GROUND_DIST_M): never shallower than keeps the
+		 * target within 70 km, the half-width of the packed z12-13 near box.
+		 * Measured over a full circuit at Denver against this function: bank
+		 * reaches +/-18.0 deg, depression runs 10.43-16.01 deg, ground range
+		 * 12.3-64.5 km, ratio 5.25x — inside the pack at every altitude, with
+		 * low-altitude behaviour unchanged (the floor sits below 4 deg under
+		 * ~4,900 m AGL). Whoever moves the cap or the clamp re-measures here.
 		 */
 		const bankRatio = 1 - Math.max(-0.6, Math.min(0.6, bankOffset / 25));
 		const basePitch = Math.min(-0.5, this.pitchDeg);
 		const effectivePitch = basePitch * bankRatio;
-		const depressionDeg = Math.max(0.5, Math.min(89.5, -effectivePitch));
+		/**
+		 * Altitude-scaled floor: no shallower than would put the look-at
+		 * point past LOOKAT_MAX_GROUND_DIST_M. A max() of three guards, in
+		 * ascending order: the historic 0.5 deg horizon guard, the coverage
+		 * floor, then the bank-driven depression capped at 89.5.
+		 */
+		const coverFloorDeg = (Math.atan(plane.aglM / LOOKAT_MAX_GROUND_DIST_M) * 180) / Math.PI;
+		const depressionDeg = Math.max(0.5, coverFloorDeg, Math.min(89.5, -effectivePitch));
 		const depressionRad = depressionDeg * DEG2RAD;
 
 		const groundDistM = plane.aglM / Math.tan(depressionRad);
@@ -322,9 +357,37 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	const utcOffset = params.place.utcOffset + (params.clockOffsetH ?? 0);
 	const weather = params.weather ?? 'clear';
 
-	return params.place.isFeature
-		? camera.project(plane, utcOffset, wallSec, undefined, undefined, weather)
-		: camera.project(plane, utcOffset, wallSec, params.place.lat, params.place.lon, weather);
+	if (params.place.isFeature)
+		return camera.project(plane, utcOffset, wallSec, undefined, undefined, weather);
+	const big = camera.project(
+		plane,
+		utcOffset,
+		wallSec,
+		params.place.lat,
+		params.place.lon,
+		weather
+	);
+
+	/**
+	 * Mid-visit downtown thread. The pass is a wall-slot event like the
+	 * rotation itself, so it keys off wallSec — NOT effectiveSec, which the
+	 * speed knob scales. Blending two full views (not poses) keeps aim,
+	 * turbulence and time-of-day continuous: at 0 the thread view is
+	 * unreachable and at 1 the big loop is, with the handoff eased both
+	 * sides in `downtownBlendAt`.
+	 */
+	const thread = downtownBlendAt(wallSec, plane.aglM);
+	if (thread <= 0) return big;
+	const small = downtownPose(plane, params.place.lat, params.place.lon, params.floorM);
+	const threadView = camera.project(
+		small,
+		utcOffset,
+		wallSec,
+		params.place.lat,
+		params.place.lon,
+		weather
+	);
+	return blendViews(big, threadView, thread);
 }
 
 /**

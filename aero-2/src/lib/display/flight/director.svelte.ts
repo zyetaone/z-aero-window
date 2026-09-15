@@ -23,16 +23,10 @@
 
 import { LOCATIONS, Location } from '../../settings/locations.js';
 import type { PaneSettings } from '../../settings/settings.svelte.js';
+import { DWELL_SEC as _DWELL_SEC } from './flight-path.js';
 
-/**
- * How long the window holds one destination.
- *
- * Content pacing, not mechanism: v1's director ran ~2:10 per location, tuned
- * for passers-by rather than the desk-workers this installation actually sits
- * in front of. Four minutes is a starting point for a calmer room, and it is
- * one number to change.
- */
-export const DWELL_SEC = 240;
+/** Re-exported from `flight-path` — kept so this module's many importers do not churn. */
+export const DWELL_SEC = _DWELL_SEC;
 
 /**
  * Which destination the whole wall is over at `wallSec`.
