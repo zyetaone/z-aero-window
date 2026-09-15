@@ -14,7 +14,9 @@
 #           throttledRaw, thermalAction, ... }
 #
 # Thermal load-shed: writes /run/aero/thermal.json for the local kiosk
-# (GET /api/internal/thermal). Policy mirrors src/lib/fleet/throttle.ts.
+# (GET /api/internal/thermal). Policy mirrors aero-2/src/lib/throttle.ts
+# (thermalAction + THERMAL_SHED_TEMP_C/THERMAL_CLEAR_TEMP_C). The old citation,
+# src/lib/fleet/throttle.ts, is an aero-1 path that aero-2 never had.
 # =============================================================================
 
 set -u
