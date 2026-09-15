@@ -19,8 +19,10 @@
  *
  * The small loop is the big loop scaled about the centre, not a second path:
  * a uniform positive scale preserves velocity DIRECTION exactly, so the
- * heading and bank the big orbit reports stay true while flying small. A
- * separate loop would need its own heading derivation kept in sync.
+ * heading the big orbit reports stays true while flying small — and bank
+ * too, since yaw-rate ω = v·κ is scale-invariant (v scales up, κ scales
+ * down by the same factor). A separate loop would need its own heading
+ * derivation kept in sync.
  *
  * Features never thread — there is no downtown to visit, and the Himalaya
  * pin at 6,000 m AGL is not a pass-through anyone wants.
@@ -37,8 +39,11 @@ export const DOWNTOWN_PASS_END_SEC = 165;
 /** Ease each side of the pass. A cut would teleport ~25 km; 8 s reads as the
  * descent toward the city / climb back out to the loop. */
 export const DOWNTOWN_HANDOFF_SEC = 8;
-/** Big-loop offsets shrink to this fraction: ~2 km N-S, ~3.4 km E-W — inside
- * every downtown building pack (spans ~5 km) while still a loop, not a hover. */
+/** Big-loop offsets shrink to this fraction: ~2 km N-S, ~3.4 km E-W at the
+ * equator (less up-latitude) — city-centre scale, still a loop, not a hover.
+ * Sized against the downtown building packs (~5 km span); Hyderabad's pack
+ * sits ~11 km off its pin, so the thread circles empty ground there until
+ * that pack is repacked — the loop is right, the content is misplaced. */
 export const DOWNTOWN_LOOP_SCALE = 0.08;
 /** Thread altitude floor. Clears the tallest stamped tower (Dubai, 225 m) by
  * 5x, stays in the buildings' full-render band (under ~5,500 m), and never
@@ -58,7 +63,12 @@ export const DOWNTOWN_THREAD_MAX_AGL_M = 6000;
 export const DOWNTOWN_GATE_FADE_M = 500;
 
 /** Thread altitude for a visit: the floor, unless the floor is lower than is
- * useful — Hyderabad's 400 m floor would thread rooftops at chimney height. */
+ * useful — Hyderabad's 400 m floor would thread rooftops at chimney height.
+ *
+ * Cross-pane determinism additionally assumes uniform speed: the gate reads
+ * climb altitude, which runs on wallSec × speed, so a hand-tuned per-pane
+ * speed moves thread engagement as well as phase (pose already diverges
+ * there, so this adds amplitude, not a new cliff). */
 export function downtownAltM(floorM: number): number {
 	return Math.max(floorM, DOWNTOWN_MIN_AGL_M);
 }
@@ -70,6 +80,9 @@ export function downtownAltM(floorM: number): number {
  * neither the handoff nor a mid-pass climb-out starts or stops with a jerk.
  */
 export function downtownBlendAt(wallSec: number, aglM: number): number {
+	// A NaN climb would otherwise poison the whole view through blendViews;
+	// standing down is the only honest answer to an unknown altitude.
+	if (!Number.isFinite(wallSec) || !Number.isFinite(aglM)) return 0;
 	const smooth = (s: number) => {
 		const c = Math.max(0, Math.min(1, s));
 		return c * c * (3 - 2 * c);

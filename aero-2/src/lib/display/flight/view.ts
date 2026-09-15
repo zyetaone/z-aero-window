@@ -265,9 +265,13 @@ export class FlightCamera {
 		 * target within 70 km, the half-width of the packed z12-13 near box.
 		 * Measured over a full circuit at Denver against this function: bank
 		 * reaches +/-18.0 deg, depression runs 10.43-16.01 deg, ground range
-		 * 12.3-64.5 km, ratio 5.25x — inside the pack at every altitude, with
+		 * 12.3-64.5 km — inside the pack at every altitude, with
 		 * low-altitude behaviour unchanged (the floor sits below 4 deg under
-		 * ~4,900 m AGL). Whoever moves the cap or the clamp re-measures here.
+		 * ~4,900 m AGL). The circuit max/min ratio is 5.25x, but that is
+		 * altitude-inclusive (the climb varies through the circuit); the
+		 * fixed-altitude depression swing is still the 4.10x above. Do not
+		 * compare the two numbers across that line. Whoever moves the cap
+		 * or the clamp re-measures here.
 		 */
 		const bankRatio = 1 - Math.max(-0.6, Math.min(0.6, bankOffset / 25));
 		const basePitch = Math.min(-0.5, this.pitchDeg);

@@ -108,10 +108,14 @@ export const CLIMB_PERIOD_SEC = 900;
  * in front of. Four minutes is a starting point for a calmer room, and it is
  * one number to change.
  *
- * Lives here, not in the director, because the downtown pass (`downtown.ts`)
- * keys off the same slot grid and the view layer cannot import the director
- * without closing an import cycle (view → director → settings → view).
- * Re-exported from the director so its importers do not churn.
+ * Lives here, not in the director, for two compounding reasons. The view
+ * layer cannot import the director without closing an import cycle
+ * (view → downtown → director → settings → presets → view — the last hop
+ * is type-only, but the cycle gate counts it, as a red run proved). And
+ * `director.svelte.ts` is a `$state` rune module while this file is
+ * rune-free pure math; the camera derivation must not depend on the
+ * reactive layer. Re-exported from the director so its importers do not
+ * churn.
  */
 export const DWELL_SEC = 240;
 
