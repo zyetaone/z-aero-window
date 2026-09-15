@@ -162,16 +162,46 @@ export class PaneSettings {
 
 	/** Atmospheric Cloud deck layer knobs */
 	clouds = $state<boolean>(true);
-	cloudDensity = $state<number>(0.75);
-	cloudSpeed = $state<number>(1.0);
+	cloudDensity = $state<number>(0.85);
+	cloudSpeed = $state<number>(1.25);
 	cloudAltitudeM = $state<number>(3500);
-	cloudOpacity = $state<number>(0.85);
+	/** Deck alpha datum 0.8: the procedural fBm textures carry denser cores
+		than the old stock, so 0.95 sealed the sky. Slider still reaches 1.0. */
+	cloudOpacity = $state<number>(0.8);
 
 	/** Cabin Window Blind & Touch controls */
 	blindOpen = $state<boolean>(true);
 
+	/** Flight inset map (track ring, marker, elevation strip). Local chrome. */
+	miniMapVisible = $state<boolean>(true);
+
 	/** Weather conditions (clear, cloudy, rain, overcast, storm) */
 	weather = $state<Weather>('clear');
+	/**
+	 * Live sky follows the real atmosphere (see LiveWeather.svelte).
+	 *
+	 * ON unless pinned: an explicit `?weather=` means the operator staged a
+	 * scenario and the sky must not wander off it mid-measurement. Offline
+	 * never flips this — a failed fetch simply changes nothing.
+	 */
+	liveWeather = $state<boolean>(true);
+
+	/**
+	 * The one writer LiveWeather may call (ADR-007).
+	 *
+	 * `weather` is a wall key: only this file and wall.svelte.ts may assign
+	 * it, and a per-field wall PATCH is the merge rule ADR-007 refuses to
+	 * build — so the poller never writes config itself and never POSTs. It
+	 * advises; this method writes, idempotently: same value, no assignment,
+	 * no deck re-roll, no fleet broadcast churn.
+	 *
+	 * Precedence is latest-writer-wins, same tolerance as the operator
+	 * drawer's own entry: a pushed drill holds until the next live poll
+	 * (≤15 min) reasserts the real sky.
+	 */
+	applyLiveWeather(w: Weather): void {
+		if (this.weather !== w) this.weather = w;
+	}
 	qualityMode = $state<'ultra' | 'balanced' | 'performance'>('balanced');
 
 	/** Display Modes (flight, video, screensaver, standby) */
@@ -237,6 +267,16 @@ export class PaneSettings {
 		this.place = place;
 		this.floorM = place.climbFloorM;
 		this.ceilingM = place.climbCeilingM;
+		/**
+		 * Preset exaggeration does not survive the place change. `applyPreset`
+		 * spreads its `exaggeration` (2.4 for alpine-ridge) onto these same
+		 * fields, and nothing cleared it — so leaving the Himalayas for
+		 * Mumbai kept 2.4x terrain and the coast looked like a mountain
+		 * range. The datum is per-WALL identical on every pane, so this
+		 * reset converges rather than diverges; the slider still nudges
+		 * after, until the next place change.
+		 */
+		this.exaggeration = TERRAIN_EXAGGERATION;
 	}
 
 	applyUrl(url: SearchParamsSource): void {
@@ -294,7 +334,7 @@ export class PaneSettings {
 		this.cloudDensity = parseNum(url.searchParams, 'cloudDensity', 0.75, 'cloudDensity');
 		this.cloudSpeed = parseNum(url.searchParams, 'cloudSpeed', 1.0, 'cloudSpeed');
 		this.cloudAltitudeM = parseNum(url.searchParams, 'cloudAlt', 3500, 'cloudAltitudeM');
-		this.cloudOpacity = parseNum(url.searchParams, 'cloudOpacity', 0.85, 'cloudOpacity');
+		this.cloudOpacity = parseNum(url.searchParams, 'cloudOpacity', 0.8, 'cloudOpacity');
 
 		const blindParam = url.searchParams.get('blind');
 		if (blindParam !== null)
@@ -303,6 +343,7 @@ export class PaneSettings {
 		const weatherParam = url.searchParams.get('weather');
 		if (weatherParam && (WEATHERS as readonly string[]).includes(weatherParam)) {
 			this.weather = weatherParam as Weather;
+			this.liveWeather = false;
 		}
 
 		const qualityParam = url.searchParams.get('quality');
@@ -415,11 +456,13 @@ export class PaneSettings {
 		this.wingYawDeg = 0;
 		this.wingRollFactor = 1.0;
 		this.clouds = true;
-		this.cloudDensity = 0.75;
-		this.cloudSpeed = 1.0;
+		this.cloudDensity = 0.85;
+		this.cloudSpeed = 1.25;
 		this.cloudAltitudeM = 3500;
-		this.cloudOpacity = 0.85;
+		this.cloudOpacity = 0.8;
+		this.liveWeather = true;
 		this.blindOpen = true;
+		this.miniMapVisible = true;
 		this.weather = 'clear';
 		this.displayMode = 'flight';
 	}

@@ -178,9 +178,10 @@ export class Location {
 		 *
 		 * 3,500 AGL over a 5,000 m mean put the camera at 8,500 m -- 349 m BELOW
 		 * the 8,849 m summit -- so at the bottom of the climb the window filled
-		 * with rock. Nothing caught it while the DEM stopped at 79.9E and there
-		 * was no Himalayan terrain to hit. 4,600 puts it at 9,600 m, which is
-		 * both above the summit and where aircraft actually cross the range.
+		 * with rock. 4,600 (9,600 MSL) cleared the rock but left only 750 m
+		 * over the summit, and none at all against an exaggerated draw. 6,000
+		 * puts the band at 11,000 MSL: airliner crossing levels, comfortable
+		 * margin over the real summit, headroom for the alpine-ridge relief.
 		 */
 		new Location(
 			'himalayas',
@@ -189,7 +190,7 @@ export class Location {
 			86.925,
 			'Asia/Kathmandu',
 			5_000,
-			4_600,
+			6_000,
 			13_000,
 			'feature'
 		),
@@ -216,6 +217,17 @@ export class Location {
 			'feature'
 		)
 	];
+
+	/**
+	 * Per-place atmosphere character: how dusty the air reads by day, and how
+	 * hard the city lights hit at night. Render-path multipliers, NEVER config
+	 * writes — the operator's knobs keep meaning what they say, and every pane
+	 * on a wall derives the same mood from the same place id, so the panorama
+	 * cannot split. A place missing here gets the default, openly.
+	 */
+	static moodFor(id: string): PlaceMood {
+		return PLACE_MOODS[id] ?? DEFAULT_MOOD;
+	}
 
 	/** The fielded kiosk home, and the fallback for anything unrecognised. */
 	static hyderabad(): Location {
@@ -248,5 +260,28 @@ export class Location {
 		return Location.CATALOG.filter((l) => l.kind === 'feature');
 	}
 }
+
+export interface PlaceMood {
+	/** Daytime dust in the air: 0 crisp alpine, ~0.4 Saharan dust. */
+	dust: number;
+	/** Night-light gain: showcase cities above 1, sleeping desert below. */
+	nightGlow: number;
+}
+
+const DEFAULT_MOOD: PlaceMood = { dust: 0.1, nightGlow: 1.0 };
+
+const PLACE_MOODS: Record<string, PlaceMood> = {
+	hyderabad: { dust: 0.18, nightGlow: 1.0 },
+	mumbai: { dust: 0.28, nightGlow: 1.0 },
+	dubai: { dust: 0.22, nightGlow: 1.25 },
+	dallas: { dust: 0.15, nightGlow: 1.0 },
+	phoenix: { dust: 0.3, nightGlow: 0.9 },
+	las_vegas: { dust: 0.2, nightGlow: 1.25 },
+	denver: { dust: 0.05, nightGlow: 1.0 },
+	chicago_midway: { dust: 0.08, nightGlow: 1.0 },
+	himalayas: { dust: 0.0, nightGlow: 0.7 },
+	ocean: { dust: 0.12, nightGlow: 0.5 },
+	desert: { dust: 0.38, nightGlow: 0.55 }
+};
 
 export const LOCATIONS = Location.all();
