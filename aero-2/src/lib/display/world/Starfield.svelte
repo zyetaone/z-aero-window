@@ -257,7 +257,33 @@ void main() {
 				gl.uniform4f(prog.loc.u_projection_clipping_plane, ...pd.clippingPlane);
 				gl.uniform1f(prog.loc.u_projection_transition, pd.projectionTransition);
 				gl.uniform1f(prog.loc.u_starElevation, starShellElevation(args.farZ));
-				gl.uniform1f(prog.loc.u_time, performance.now() / 1000);
+				/**
+				 * Wall seconds, not `performance.now()`.
+				 *
+				 * `starfield.ts` works hard for determinism -- a per-index hash for
+				 * the twinkle phase rather than an RNG stream, "so it cannot depend
+				 * on catalogue order or build sequence", and a docstring promising
+				 * "same bytes on every pane -> identical buffers -> the wall agrees
+				 * star for star". Then this uniform undid it: `performance.now()` is
+				 * time since THIS pane's page load. Three Pis boot at different
+				 * moments, and `reload-budget.ts` exists precisely because a pane may
+				 * reload itself mid-show -- after which its clock restarts at zero
+				 * while its neighbours are hours in. At the seams of a 72 deg
+				 * panorama the same star then sits at a different point of its cycle
+				 * on each pane.
+				 *
+				 * WRAPPED TO THE HOUR, and that is not cosmetic. A GLSL `float` is
+				 * 32-bit; at 1.79e9 its resolution is about 128 SECONDS, so feeding
+				 * raw `wallSec` would stop the twinkle dead rather than desynchronise
+				 * it. Modulo 3600 gives ~0.2 ms resolution and one phase
+				 * discontinuity per hour that every pane takes simultaneously --
+				 * which is the property that matters.
+				 *
+				 * `wallSec`, not `solarSec`: a twinkle is not a sun-dependent
+				 * quantity, so it rightly ignores a preset -- the same distinction
+				 * `Roads.svelte` draws for its lamp flicker.
+				 */
+				gl.uniform1f(prog.loc.u_time, (display.view.wallSec ?? 0) % 3600);
 				const canvas = mapRef?.getCanvas() ?? null;
 				const px =
 					canvas && canvas.clientHeight > 0 ? gl.drawingBufferHeight / canvas.clientHeight : 1;
