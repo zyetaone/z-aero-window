@@ -19,8 +19,6 @@
 	import AdminQr from './cabin/AdminQr.svelte';
 	import RainGlass from './cabin/RainGlass.svelte';
 	import Hud from './cabin/Hud.svelte';
-	import GlassClock from './cabin/GlassClock.svelte';
-	import { tap } from './cabin/tap.js';
 	import MiniMap from './flight/MiniMap.svelte';
 	import MediaStage from './media/MediaStage.svelte';
 	import AudioHost from './media/AudioHost.svelte';
@@ -50,19 +48,6 @@
 	let { hud = true, children }: Props = $props();
 
 	const display = useDisplay();
-
-	/**
-	 * Tap-to-clock, aero-1 parity. A genuine tap on the open glass toggles
-	 * the glass cabin clock; blind drags never reach here (the tap action's
-	 * move tolerance), drawer/HUD chrome is excluded via `ignoreClosest`,
-	 * and media modes keep their own tap surface so video/slideshow taps
-	 * never pop a clock.
-	 */
-	let showClock = $state(false);
-	function toggleClock() {
-		if (display.config.displayMode !== 'flight') return;
-		showClock = !showClock;
-	}
 
 	function onStageError(error: unknown) {
 		console.error('[AeroDisplay] 3D World Stage error caught by boundary:', error);
@@ -338,13 +323,7 @@
 	});
 </script>
 
-<div
-	class="aero-display"
-	use:tap={{
-		onTap: toggleClock,
-		ignoreClosest: 'aside,button,input,a,select,textarea,[role="slider"]'
-	}}
->
+<div class="aero-display">
 	<!-- 3D World protected by Svelte 5 Error Boundary -->
 	<svelte:boundary onerror={onStageError}>
 		<Stage />
@@ -386,16 +365,11 @@
 	<RainGlass />
 	<Frame />
 	<Blind />
-	{#if display.config.miniMapVisible}
-		<MiniMap />
-	{/if}
+	<MiniMap />
 	<!-- `visible`, not `{#if}`: Hud owns the `--hud-height` CSS variable the
 	     rest of the cabin lays out against, and unmounting it left that variable
 	     stale at the ribbon height with no ribbon under it. -->
 	<Hud visible={hud} />
-	{#if showClock}
-		<GlassClock />
-	{/if}
 	<!-- MediaStage mounts only off-flight: its own template already renders
 	     nothing in `flight`, but the instance keeps a wallSec-tracking slide
 	     index and playlist deriveds alive. AudioHost deliberately stays
