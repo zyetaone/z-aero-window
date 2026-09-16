@@ -93,6 +93,74 @@ export interface FleetDevice {
  */
 export const FLEET_ONLINE_WINDOW_MS = 150_000;
 
+/** What a fleet rollup needs from a device row, and nothing more. */
+export interface FleetRollupInput {
+	receivedAtMs: number;
+	fps?: number;
+	tempC?: number;
+	thermalAction?: 'ok' | 'shed';
+	clockSynced?: boolean;
+}
+
+export interface FleetRollup {
+	total: number;
+	online: number;
+	offline: number;
+	/** Null when no ONLINE device reported an fps — not 0, which reads as stalled. */
+	avgFps: number | null;
+	/** How many contributed to `avgFps`, so a dashboard can say so. */
+	fpsSampled: number;
+	maxTempC: number | null;
+	/** Devices actively shedding GPU work. */
+	shedding: number;
+	/**
+	 * Devices reporting an UNSYNCED clock. Not the same as "did not report": a
+	 * device that cannot tell is excluded, because an unknown must not render
+	 * as a fault.
+	 */
+	clockUnsynced: number;
+}
+
+/**
+ * Roll a fleet up, ONCE.
+ *
+ * Counts (`total`/`online`/`offline`) span every device ever seen. Every HEALTH
+ * metric spans only the devices still reporting, and that distinction is the
+ * bug this function exists to end: the rollup used to apply the freshness
+ * window to `online` and to nothing else, so a Pi that was unplugged while hot
+ * kept contributing its last temperature to `maxTempC` and its last decision to
+ * `shedding` — forever. `AdminFleetHealth.svelte` warns at `maxTempC >= 78` and
+ * at `shedding > 0`, so a dead pane lit a permanent red light about a machine
+ * that was switched off. Same mistake as `readThermalState` believing a frozen
+ * file: a reading nobody is taking is not a reading.
+ *
+ * Declared here because it was written twice — `summarize()` server-side and a
+ * `$derived.by` in /admin — and this file exists for exactly that: three
+ * hand-copied declarations of one response drifted and rendered /admin blank.
+ * The duplication was deliberate and well-argued (one fetch, so the table and
+ * the headline cannot disagree); it is the ALGORITHM that must not be copied,
+ * not the call site.
+ */
+export function rollUpFleet(
+	devices: readonly FleetRollupInput[],
+	nowMs: number = Date.now()
+): FleetRollup {
+	const live = devices.filter((d) => nowMs - d.receivedAtMs < FLEET_ONLINE_WINDOW_MS);
+	const fps = live.map((d) => d.fps).filter((v): v is number => v !== undefined);
+	const temps = live.map((d) => d.tempC).filter((v): v is number => v !== undefined);
+
+	return {
+		total: devices.length,
+		online: live.length,
+		offline: devices.length - live.length,
+		avgFps: fps.length ? fps.reduce((a, b) => a + b, 0) / fps.length : null,
+		fpsSampled: fps.length,
+		maxTempC: temps.length ? Math.max(...temps) : null,
+		shedding: live.filter((d) => d.thermalAction === 'shed').length,
+		clockUnsynced: live.filter((d) => d.clockSynced === false).length
+	};
+}
+
 export async function fetchFleet(signal?: AbortSignal): Promise<FleetDevice[]> {
 	const res = await fetch('/api/fleet/heartbeat', { signal });
 	if (!res.ok) throw new Error(`/api/fleet/heartbeat returned ${res.status}`);

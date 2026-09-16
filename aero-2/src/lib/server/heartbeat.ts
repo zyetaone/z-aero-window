@@ -25,7 +25,7 @@ export const DEVICE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
  * this module's readers already use.
  */
 export { FLEET_ONLINE_WINDOW_MS as ONLINE_WINDOW_MS } from '#lib/status.js';
-import { FLEET_ONLINE_WINDOW_MS as ONLINE_WINDOW_MS } from '#lib/status.js';
+import { FLEET_ONLINE_WINDOW_MS as ONLINE_WINDOW_MS, rollUpFleet, type FleetRollup } from '#lib/status.js';
 
 export interface HeartbeatSample {
 	deviceId: string;
@@ -64,24 +64,11 @@ export interface HeartbeatSample {
 	receivedAtMs: number;
 }
 
-export interface FleetSummary {
-	total: number;
-	online: number;
-	offline: number;
-	/** Null when no device reported an fps at all — not 0, which reads as stalled. */
-	avgFps: number | null;
-	/** How many of `total` contributed to avgFps, so a dashboard can say so. */
-	fpsSampled: number;
-	maxTempC: number | null;
-	/** Devices actively shedding GPU work. */
-	shedding: number;
-	/**
-	 * Devices that reported an UNSYNCED clock. Not the same as "did not report":
-	 * a device that cannot tell is excluded, because an unknown must not be
-	 * rendered as a fault.
-	 */
-	clockUnsynced: number;
-}
+/**
+ * The rollup shape, defined with the rollup in `lib/status.ts` so the server
+ * and the /admin page cannot describe one summary two ways.
+ */
+export type FleetSummary = FleetRollup;
 
 const latest = new Map<string, HeartbeatSample>();
 
@@ -135,22 +122,7 @@ export function latestAll(): Omit<HeartbeatSample, 'lastError'>[] {
 }
 
 export function summarize(nowMs: number = Date.now()): FleetSummary {
-	const all = [...latest.values()];
-	const online = all.filter((s) => nowMs - s.receivedAtMs < ONLINE_WINDOW_MS).length;
-
-	const fps = all.map((s) => s.fps).filter((v): v is number => v !== undefined);
-	const temps = all.map((s) => s.tempC).filter((v): v is number => v !== undefined);
-
-	return {
-		total: all.length,
-		online,
-		offline: all.length - online,
-		avgFps: fps.length ? fps.reduce((a, b) => a + b, 0) / fps.length : null,
-		fpsSampled: fps.length,
-		maxTempC: temps.length ? Math.max(...temps) : null,
-		shedding: all.filter((s) => s.thermalAction === 'shed').length,
-		clockUnsynced: all.filter((s) => s.clockSynced === false).length
-	};
+	return rollUpFleet([...latest.values()], nowMs);
 }
 
 /** Test seam. The store is module state, so a suite needs a way back to empty. */

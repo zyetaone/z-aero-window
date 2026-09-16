@@ -103,6 +103,38 @@ describe('summarize', () => {
 		expect(summarize(1)).toMatchObject({ avgFps: null, fpsSampled: 0, maxTempC: null });
 	});
 
+	/**
+	 * `online` was the ONLY field the freshness window reached. `maxTempC`,
+	 * `shedding`, `clockUnsynced` and `avgFps` were all rolled up over every
+	 * device ever seen — so a Pi unplugged while hot kept contributing its last
+	 * temperature and its last shed decision for as long as the process lived.
+	 * `AdminFleetHealth.svelte` warns at `maxTempC >= 78` and at `shedding > 0`,
+	 * so a dead pane lit a permanent red light about a machine that was off.
+	 *
+	 * Every existing test here rolls up at a `nowMs` where nothing is offline,
+	 * which is why all nineteen of them passed before and after the fix.
+	 */
+	it('drops a dead pane out of the health metrics, not just the count', () => {
+		recordHeartbeat({ deviceId: 'left', fps: 30, temp: 82, thermalAction: 'shed', clockSynced: false }, 0);
+		recordHeartbeat({ deviceId: 'right', fps: 60, temp: 44, thermalAction: 'ok', clockSynced: true }, 0);
+
+		const fresh = summarize(1);
+		expect(fresh).toMatchObject({ online: 2, maxTempC: 82, shedding: 1, clockUnsynced: 1, avgFps: 45 });
+
+		// `left` goes quiet; `right` keeps beating.
+		recordHeartbeat({ deviceId: 'right', fps: 60, temp: 44, thermalAction: 'ok', clockSynced: true }, ONLINE_WINDOW_MS);
+		const after = summarize(ONLINE_WINDOW_MS + 1);
+
+		expect(after.total, 'the device is still known').toBe(2);
+		expect(after.online).toBe(1);
+		expect(after.offline).toBe(1);
+		expect(after.maxTempC, 'a switched-off Pi is not 82 degrees').toBe(44);
+		expect(after.shedding, 'it cannot still be shedding — it is not running').toBe(0);
+		expect(after.clockUnsynced, 'an absent clock is not a drifting clock').toBe(0);
+		expect(after.avgFps, 'its last fps must not drag the live average').toBe(60);
+		expect(after.fpsSampled).toBe(1);
+	});
+
 	it('counts a device offline once it stops reporting', () => {
 		recordHeartbeat(wire(), 0);
 		expect(summarize(ONLINE_WINDOW_MS - 1)).toMatchObject({ online: 1, offline: 0 });
