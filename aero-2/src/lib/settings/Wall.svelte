@@ -77,7 +77,11 @@
 		pushing = true;
 		status = '';
 		try {
-			const res = await fetch('/api/wall', {
+			// `wall.origin`, not a relative path. Every pane carries this drawer, so
+			// on a follower a relative POST wrote a snapshot into THAT pane's own
+			// wall.json — a file nothing polls. The push reported "pushed v3" and
+			// reached nobody, including the pane it was typed on.
+			const res = await fetch(`${wall.origin}/api/wall`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(draft)

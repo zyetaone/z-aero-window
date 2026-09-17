@@ -38,6 +38,26 @@ const IS_TEST = process.env.VITEST !== undefined;
  */
 const MEDIA_ORIGINS = (process.env.AERO_MEDIA_ORIGINS ?? '').split(/\s+/).filter(Boolean);
 
+/**
+ * The wall writer's origin, folded into the SAME directives.
+ *
+ * A follower pane does two cross-origin things and CSP was blocking both. It
+ * polls `${PUBLIC_WALL_ORIGIN}/api/wall` — blocked by `connect-src 'self'`,
+ * which is not the silent failure the media ones are but IS a failure with no
+ * visible cause on a kiosk with no console. And it plays media the writer
+ * holds, which needed the origin in `media-src` too.
+ *
+ * Derived rather than asked for a second time: the wall origin is by
+ * construction the origin holding the wall's media, so requiring an operator
+ * to also name it in AERO_MEDIA_ORIGINS was one more way to half-configure a
+ * wall. AERO_MEDIA_ORIGINS stays for what it is actually for — a real CDN.
+ *
+ * Same build-time trap as above: both are baked into the shell, so a value
+ * that changes needs a rebuild, not a restart.
+ */
+const WALL_ORIGIN = (process.env.PUBLIC_WALL_ORIGIN ?? '').replace(/\/$/, '');
+const PEER_ORIGINS = [...new Set([...MEDIA_ORIGINS, ...(WALL_ORIGIN ? [WALL_ORIGIN] : [])])];
+
 export default defineConfig({
 	...(IS_TEST ? { resolve: { conditions: ['browser', ...defaultServerConditions] } } : {}),
 	plugins: [
@@ -75,12 +95,14 @@ export default defineConfig({
 					'script-src': ['self', 'unsafe-eval'],
 					'style-src': ['self', 'unsafe-inline'],
 					// `blob:` covers the slideshow; MEDIA_ORIGINS covers a remote one.
-					'img-src': ['self', 'data:', 'blob:', ...MEDIA_ORIGINS],
+					'img-src': ['self', 'data:', 'blob:', ...PEER_ORIGINS],
 					// Declared even when empty. Without the directive `media-src` falls
 					// back to `default-src`, and the failure is a silent block with no
 					// error event on the element — which is how this shipped broken.
-					'media-src': ['self', 'blob:', 'data:', ...MEDIA_ORIGINS],
-					'connect-src': ['self', 'ws:', 'wss:'],
+					'media-src': ['self', 'blob:', 'data:', ...PEER_ORIGINS],
+					// The wall poll is cross-origin on a follower pane. Only the wall
+					// origin — a CDN has no business being fetched by this app.
+					'connect-src': ['self', 'ws:', 'wss:', ...(WALL_ORIGIN ? [WALL_ORIGIN] : [])],
 					'worker-src': ['self', 'blob:'],
 					'child-src': ['blob:'],
 					'font-src': ['self']
