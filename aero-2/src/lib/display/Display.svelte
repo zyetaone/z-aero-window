@@ -14,6 +14,7 @@
 	import Stage from './world/Stage.svelte';
 	import Clouds from './world/Clouds.svelte';
 	import Wing from './cabin/Wing.svelte';
+	import Grade from './cabin/Grade.svelte';
 	import Frame from './cabin/Frame.svelte';
 	import Blind from './cabin/Blind.svelte';
 	import AdminQr from './cabin/AdminQr.svelte';
@@ -361,6 +362,8 @@
 		{/snippet}
 	</svelte:boundary>
 
+	<!-- Grade first: the world gets finished, the cabin chrome does not. -->
+	<Grade />
 	<Wing />
 	<RainGlass />
 	<Frame />
