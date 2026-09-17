@@ -45,6 +45,28 @@ export const DOWNTOWN_HANDOFF_SEC = 8;
  * sits ~11 km off its pin, so the thread circles empty ground there until
  * that pack is repacked — the loop is right, the content is misplaced. */
 export const DOWNTOWN_LOOP_SCALE = 0.08;
+/**
+ * How much faster the thread traverses its small loop than the big loop
+ * would. Without it the pass is a hover, not a rotation: the small loop
+ * inherits the big loop's angular rate, so a 120 s pass flies ~15° of arc
+ * — the window hangs over one suburb for two minutes. At 3x it walks ~45°
+ * of the downtown circle, a real circling feel, while ground speed stays
+ * low (0.08 × 3 = 0.24× the big loop) because the loop itself is small.
+ *
+ * Anchored at the pass start so the thread clock reads 45 s when the
+ * handoff begins — continuous by construction, and still a pure function
+ * of the second, so all panes warp identically. Heading and bank come
+ * from the warped time too (view.ts poses the thread from it), which is
+ * what banks the aircraft INTO the small circle instead of holding the
+ * big loop's attitude while sliding sideways across it.
+ */
+export const DOWNTOWN_TIME_WARP = 3;
+
+/** Thread-clock second for a flight-clock second: identity at the anchor. */
+export function downtownWarpSec(effectiveSec: number): number {
+	if (!Number.isFinite(effectiveSec)) return DOWNTOWN_PASS_START_SEC;
+	return DOWNTOWN_PASS_START_SEC + (effectiveSec - DOWNTOWN_PASS_START_SEC) * DOWNTOWN_TIME_WARP;
+}
 /** Thread altitude floor. Clears the tallest stamped tower (Dubai, 225 m) by
  * 5x, stays in the buildings' full-render band (under ~5,500 m), and never
  * undercuts a place's own climb floor — Denver threads at its 3,000 m. */

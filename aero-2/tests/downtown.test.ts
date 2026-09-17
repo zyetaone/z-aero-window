@@ -7,9 +7,11 @@ import {
 	DOWNTOWN_HANDOFF_SEC,
 	DOWNTOWN_THREAD_MAX_AGL_M,
 	DOWNTOWN_GATE_FADE_M,
+	DOWNTOWN_TIME_WARP,
 	downtownAltM,
 	downtownBlendAt,
-	downtownPose
+	downtownPose,
+	downtownWarpSec
 } from '#lib/display/flight/downtown.js';
 import { Location, readSettings } from '#lib/settings/settings.svelte.js';
 
@@ -74,6 +76,53 @@ describe('downtownBlendAt', () => {
 	it('sits inside the dwell with margin for arrival and departure', () => {
 		expect(DOWNTOWN_PASS_START_SEC - DOWNTOWN_HANDOFF_SEC).toBeGreaterThan(10);
 		expect(DOWNTOWN_PASS_END_SEC + DOWNTOWN_HANDOFF_SEC).toBeLessThan(DWELL_SEC);
+	});
+});
+
+describe('downtownWarpSec', () => {
+	it('is the identity at the pass anchor and runs faster past it', () => {
+		expect(downtownWarpSec(DOWNTOWN_PASS_START_SEC)).toBe(DOWNTOWN_PASS_START_SEC);
+		expect(downtownWarpSec(DOWNTOWN_PASS_START_SEC + 10)).toBe(
+			DOWNTOWN_PASS_START_SEC + 10 * DOWNTOWN_TIME_WARP
+		);
+	});
+
+	it('is strictly increasing — the thread never stops or runs backwards', () => {
+		let prev = downtownWarpSec(0);
+		for (let s = 1; s <= 300; s++) {
+			const v = downtownWarpSec(s);
+			expect(v).toBeGreaterThan(prev);
+			prev = v;
+		}
+	});
+
+	it('stands down to the anchor on non-finite input', () => {
+		expect(downtownWarpSec(NaN)).toBe(DOWNTOWN_PASS_START_SEC);
+		expect(downtownWarpSec(Infinity)).toBe(DOWNTOWN_PASS_START_SEC);
+	});
+
+	it('circles the city mid-pass instead of hovering one suburb', () => {
+		// speed=1 maps the wall second 1:1 onto climb and slot alike.
+		const params = paramsFor('?place=hyderabad&speed=1');
+		const place = Location.byId('hyderabad');
+		const a = calculateCameraView(53, params);
+		const b = calculateCameraView(157, params);
+		// Both ends of the window are fully threaded (blend 1), 104 s
+		// apart on the wall clock. Without the warp the small loop
+		// inherits the big loop's angular rate and the two sit ~0.4 km
+		// apart; warped 3x they measure 1.33 km — visibly different sides
+		// of the downtown circle. Bounds are loose on purpose: `daySeed`
+		// moves the arc around the ellipse every day, so this pins the
+		// order of magnitude, not today's digits.
+		const arc = kmBetween(a.lat, a.lon, b.lat, b.lon);
+		expect(kmBetween(a.lat, a.lon, place.lat, place.lon)).toBeLessThan(6);
+		expect(kmBetween(b.lat, b.lon, place.lat, place.lon)).toBeLessThan(6);
+		expect(arc).toBeGreaterThan(0.8);
+		expect(arc).toBeLessThan(2.5);
+		for (const v of [a, b]) {
+			expect(Number.isFinite(v.planeHeadingDeg)).toBe(true);
+			expect(Number.isFinite(v.bankDeg)).toBe(true);
+		}
 	});
 });
 

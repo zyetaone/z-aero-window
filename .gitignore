@@ -70,6 +70,11 @@ data/*
 # Enterprise-only for commercial use. Still rides `git pull` to the fleet.
 !data/buildings/
 !data/roads/
+# data/towns is tracked for the same two reasons: ~2.3 MB of lamp points
+# thresholded offline from the NASA VIIRS Black Marble (open data), and the
+# ONLY source for the distant-town night tier (world/towns-lamps) — an
+# ignored path rides no `git pull` to the fleet.
+!data/towns/
 
 # ⚠ `data/*` above is ROOT-ANCHORED — a pattern with an internal slash is —
 # while the bare `data/` it replaced matched at ANY depth. This path silently

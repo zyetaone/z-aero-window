@@ -3,8 +3,14 @@
  * Pure deterministic mathematics — rune-free and renderer-free.
  */
 
-import { normalizeHeading, phaseFor, FlightTrack, type OrbitPose } from './flight-path.js';
-import { downtownBlendAt, downtownPose } from './downtown.js';
+import {
+	normalizeHeading,
+	phaseFor,
+	azimuthSweepAt,
+	FlightTrack,
+	type OrbitPose
+} from './flight-path.js';
+import { downtownBlendAt, downtownPose, downtownWarpSec } from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
 import { signedDelta } from '#lib/angles.js';
 import { resolveLocalHours } from '../world/sun.js';
@@ -353,7 +359,17 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	const effectiveSec = wallSec * (params.speed ?? 1.0);
 	const plane = track.poseAt(effectiveSec);
 	const roleOffset = roleYawOffsetDeg(params.fleetRole ?? 'solo');
-	const camera = new FlightCamera(params.azimuthDeg + roleOffset, params.pitchDeg);
+	// The operator's aim, the fleet parallax, and the slow look-around —
+	// three independent offsets, one bearing. The sweep keys off wallSec,
+	// NOT effectiveSec: it is a window behaviour, not a flight behaviour,
+	// so warp speeds pan the world, not the head. Cities only: a feature
+	// is a transit with a fixed off-nose aim (pinned by display.test.ts),
+	// and there is no framed subject for the pan to walk across.
+	const sweep = params.place.isFeature ? 0 : azimuthSweepAt(wallSec);
+	const camera = new FlightCamera(
+		params.azimuthDeg + roleOffset + sweep,
+		params.pitchDeg
+	);
 
 	/**
 	 * Cities get an inward aim; features do not.
@@ -382,7 +398,13 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	 */
 	const thread = downtownBlendAt(wallSec, plane.aglM);
 	if (thread <= 0) return big;
-	const small = downtownPose(plane, params.place.lat, params.place.lon, params.floorM);
+	// The thread flies its own clock: position AND heading/bank come from
+	// the warped pose, so the aircraft circles downtown instead of
+	// side-slipping across it holding the big loop's attitude. The gate
+	// above deliberately still reads the unwarped climb — it is the
+	// visit's altitude that decides whether the pass engages.
+	const warpPose = track.poseAt(downtownWarpSec(effectiveSec));
+	const small = downtownPose(warpPose, params.place.lat, params.place.lon, params.floorM);
 	const threadView = camera.project(
 		small,
 		utcOffset,

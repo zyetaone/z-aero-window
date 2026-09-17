@@ -55,7 +55,7 @@ export interface GeoPoint {
  * this — world-fixed, so terrain occludes them and parallax is correct.
  */
 export function subSolarPoint(wallSec: number): GeoPoint {
-	const utcHours = ((((wallSec % 86400) + 86400) % 86400) / 3600);
+	const utcHours = (((wallSec % 86400) + 86400) % 86400) / 3600;
 	return {
 		lat: solarDeclination(wallSec),
 		lng: ((180 - utcHours * 15 + 540) % 360) - 180
@@ -273,6 +273,28 @@ export const NIGHT_LIGHT_RAMP = 1.5;
 export const NIGHT_VECTOR_TOP_M = 9000;
 export const NIGHT_VECTOR_SPAN_M = 5000;
 /**
+ * The far-field window: the arterial dot layer fades in from
+ * NIGHT_FAR_TOP_M down across NIGHT_FAR_SPAN_M, handing over to the
+ * near-field vectors exactly where they arrive (NIGHT_VECTOR_TOP_M).
+ * One home for the same reason as the pair above: two files share one
+ * seam, and a silent 500 m mismatch would double-draw or gap the city
+ * on every descent. The bottom of this window IS the top of that one.
+ */
+export const NIGHT_FAR_TOP_M = 13000;
+export const NIGHT_FAR_SPAN_M = 4000;
+
+/**
+ * Share of the far-field arterial dots at an altitude: 0 where the
+ * near-field vectors have taken over, 1 at cruise. Pure — unit-tested.
+ */
+export function farFieldShare(aglM: number): number {
+	if (!Number.isFinite(aglM)) return 0;
+	return Math.max(
+		0,
+		Math.min(1, (aglM - NIGHT_VECTOR_TOP_M) / NIGHT_FAR_SPAN_M)
+	);
+}
+/**
  * Dusk/dawn mount hysteresis for the night layers.
  *
  * Their opacity ramps cross the mount epsilon SLOWLY at twilight, so a single
@@ -288,7 +310,12 @@ export const NIGHT_MOUNT_OFF = 0.005;
  * in $state and feeds it back. Unit-tested: the twilight dither is exactly
  * the class of fault you cannot see in a screenshot.
  */
-export function hysteresisGate(value: number, latched: boolean, onAt: number, offAt: number): boolean {
+export function hysteresisGate(
+	value: number,
+	latched: boolean,
+	onAt: number,
+	offAt: number
+): boolean {
 	if (!latched && value > onAt) return true;
 	if (latched && value < offAt) return false;
 	return latched;

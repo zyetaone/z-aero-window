@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GET as getBuildings } from '../src/routes/api/buildings/[city]/+server.js';
 import { GET as getRoads } from '../src/routes/api/roads/[city]/+server.js';
+import { GET as getTowns } from '../src/routes/api/towns/[city]/+server.js';
 
 describe('GeoJSON server endpoints', () => {
 	it('returns 404 for unknown city', async () => {
@@ -44,5 +45,25 @@ describe('GeoJSON server endpoints', () => {
 		expect(res.headers.get('x-aero-dataset'), 'resolver found nothing').toBeNull();
 		const data = await res.json();
 		expect(data.features.length).toBeGreaterThan(0);
+	});
+
+	it('serves real town-lamp points, not the empty fallback', async () => {
+		const req = new Request('http://localhost:5173/api/towns/denver');
+		const res = await getTowns({ params: { city: 'denver' }, request: req } as any);
+		expect(res.status).toBe(200);
+		expect(res.headers.get('x-aero-dataset'), 'resolver found nothing').toBeNull();
+		const data = await res.json();
+		expect(data.features.length).toBeGreaterThan(0);
+		for (const f of data.features.slice(0, 50)) {
+			expect(f.geometry.type).toBe('Point');
+			expect(f.properties.i).toBeGreaterThan(0);
+			expect(f.properties.i).toBeLessThanOrEqual(1);
+		}
+	});
+
+	it('404s town lamps for unknown cities like every other kind', async () => {
+		const req = new Request('http://localhost:5173/api/towns/atlantis');
+		const res = await getTowns({ params: { city: 'atlantis' }, request: req } as any);
+		expect(res.status).toBe(404);
 	});
 });

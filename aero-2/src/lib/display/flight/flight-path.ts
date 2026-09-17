@@ -122,6 +122,34 @@ export const DWELL_SEC = 240;
 const TWO_PI = Math.PI * 2;
 const M_PER_DEG_LAT = 111_320;
 
+/**
+ * How far the window pans either side of its aim, degrees.
+ *
+ * The camera used to stare inward 100% of every visit: the city never left
+ * frame centre, so banks played across an identical view and every turn
+ * read the same. A real side window watches the world slide sideways, so
+ * the aim pans — ±18° keeps the city framed (the inward aim dominates)
+ * while the glass walks across it. Banks then reveal ground and sky
+ * asymmetrically as the sightline swings, instead of modulating one
+ * frozen composition.
+ */
+export const AZIMUTH_SWEEP_DEG = 18;
+
+/**
+ * Pan offset for a wall-clock second, degrees in ±AZIMUTH_SWEEP_DEG.
+ *
+ * One cosine per dwell: slow enough to read as looking around, fast enough
+ * that a four-minute visit sees both sides. Pure in wallSec — three panes,
+ * one pan — and C1 continuous, so the sightline never steps. No per-place
+ * phase: the dwell slot already staggers visits, and a second free knob
+ * would just be something else to mistune.
+ */
+export function azimuthSweepAt(wallSec: number): number {
+	if (!Number.isFinite(wallSec)) return 0;
+	const phase = (((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC) / DWELL_SEC;
+	return AZIMUTH_SWEEP_DEG * Math.cos(phase * TWO_PI);
+}
+
 /** Re-exported from `#lib/angles` — kept so this module's many importers do not churn. */
 export const normalizeHeading = _normalizeHeading;
 
