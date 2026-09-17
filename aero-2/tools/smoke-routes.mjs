@@ -580,7 +580,15 @@ try {
 	 *
 	 * Only a real request can see that, which is what this file is for.
 	 */
-	const oversized = JSON.stringify({ pad: 'x'.repeat(8000) });
+	/**
+	 * Sized FROM the guard, not from a number that happened to exceed it when
+	 * this was written. `8000` was hard-coded against a 4 KiB cap; raising the
+	 * cap to 16 KiB turned this into a merely-invalid body, so the route
+	 * answered 400 from the schema and the size guard was no longer under test
+	 * at all — a check that had quietly stopped measuring what it guards.
+	 */
+	const { MAX_WALL_BYTES } = await import('../src/lib/wall.ts');
+	const oversized = JSON.stringify({ pad: 'x'.repeat(MAX_WALL_BYTES * 2) });
 	const res = await fetch(`${BASE}/api/wall`, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
