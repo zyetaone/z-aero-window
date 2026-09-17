@@ -45,6 +45,8 @@ data/tiles/
 # reported "no media element mounted — MediaStage fell through to an empty
 # state". The component was fine; the state underneath it was not.
 data/wall.json
+# Uploaded songs and clips. Content, not source — and a Pi's copy is its own.
+data/media/
 
 # Python bytecode — a survey script imported tools/*.py and this got swept in.
 __pycache__/
