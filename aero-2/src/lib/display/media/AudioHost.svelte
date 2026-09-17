@@ -36,6 +36,30 @@
 	 */
 	function ensureInit() {
 		synthAudio.init();
+		/**
+		 * Also retry the ELEMENT, not just the synth engine.
+		 *
+		 * The effect below calls `audioElement.play()` and swallows the
+		 * rejection, which is right -- a NotAllowedError before the first
+		 * gesture is normal, not a fault. But nothing ever tried again: this
+		 * handler only ever woke the AudioContext, and the effect re-runs on a
+		 * reactive dependency change, not on a click. So a wall push that turned
+		 * audio on before anyone had touched the page left the pane permanently
+		 * silent until some unrelated config field happened to change.
+		 *
+		 * Invisible on the fielded Pis -- aero-kiosk.service passes
+		 * --autoplay-policy=no-user-gesture-required -- which is exactly why it
+		 * survived: it only ever bit on the admin laptop and in dev, where it
+		 * reads as "the push did not work".
+		 */
+		if (
+			audioElement &&
+			audioElement.paused &&
+			display.config.audioEnabled &&
+			display.config.audioMode === 'playlist'
+		) {
+			audioElement.play().catch(() => {});
+		}
 	}
 
 	const currentTrackUrl = $derived(

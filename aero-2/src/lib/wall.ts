@@ -86,15 +86,6 @@ export const DISPLAY_MODES = ['flight', 'video', 'screensaver', 'standby'] as co
 const CLOCK_OFFSET_RANGE: readonly [number, number] = [-12, 12];
 
 /**
- * Validate an untrusted body into a `WallState`, or null.
- *
- * `placeId` and `presetId` are checked as bounded identifier-shaped strings
- * rather than against the catalogs, deliberately: the catalogs live in
- * `settings/`, which `server/` must not import, and the client already resolves
- * an unknown id through `Location.byId`'s documented fallback. The server's job
- * here is to reject junk and cap size, not to own the catalog.
- *
-/**
  * A bounded list of same-origin-or-http(s) media paths.
  *
  * Bounded twice — 12 entries, 300 chars each — because this crosses the wire

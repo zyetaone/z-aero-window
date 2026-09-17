@@ -13,7 +13,8 @@
 	 * Which is why the operator sees their own change arrive a beat late. That is
 	 * the wall being a wall.
 	 */
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import MediaPicker from './MediaPicker.svelte';
 	import Segmented from './Segmented.svelte';
 	import Toggle from './Toggle.svelte';
 	import { LOCATIONS, type Location } from './locations.js';
@@ -21,6 +22,7 @@
 	import { KNOB_RANGE, WEATHERS, type PaneSettings } from './settings.svelte.js';
 	import type { WallSync } from './wall.svelte.js';
 	import type { WallState } from '#lib/wall.js';
+	import { mediaLibrary } from './media-library.svelte.js';
 
 	interface Props {
 		config: PaneSettings;
@@ -57,6 +59,10 @@
 
 	let status = $state<string>('');
 	let pushing = $state(false);
+
+	// One listing for both pickers, fetched when the tab first appears rather
+	// than on every keystroke that reveals one.
+	onMount(() => void mediaLibrary.refresh());
 
 	const countdown = $derived.by(() => {
 		const due = wall.pending?.applyAtWallSec;
@@ -124,25 +130,50 @@
 		onselect={(m: string) => (draft.displayMode = m)}
 	/>
 
+	<!--
+		The admin token, once, for both pickers. Uploading and importing write to
+		this device's disk, so both are bearer-gated; picking and pushing are not.
+		Typed per use and held in memory only — see media-library.svelte.ts.
+	-->
+	<label class="token-field">
+		<span>Admin token <em>(needed only to add files)</em></span>
+		<input
+			type="password"
+			autocomplete="off"
+			placeholder="AERO_ADMIN_TOKEN"
+			value={mediaLibrary.token}
+			oninput={(e) => (mediaLibrary.token = e.currentTarget.value)}
+		/>
+	</label>
+	{#if mediaLibrary.status}
+		<p class="library-status">{mediaLibrary.status}</p>
+	{/if}
+
 	{#if draft.displayMode === 'video' || draft.displayMode === 'screensaver'}
 		<!-- The mode and its content travel in one snapshot. Before this field
 		     existed the wall could push `video` but the only writers of the
 		     playlist were `?media=` URL params parsed at boot — so the switch
 		     put "No media specified" on every pane. -->
-		<label class="media-field">
-			<span>Media URLs (comma-separated)</span>
-			<input
-				type="text"
-				placeholder="/cabin.mp4, /alps.webp"
-				value={draft.mediaUrls.join(', ')}
-				oninput={(e) =>
-					(draft.mediaUrls = e.currentTarget.value
-						.split(',')
-						.map((u) => u.trim())
-						.filter(Boolean))}
-			/>
-		</label>
+		<MediaPicker
+			label="Clips"
+			kind="video"
+			selected={draft.mediaUrls}
+			onchange={(urls) => (draft.mediaUrls = urls)}
+		/>
 	{/if}
+
+	<!--
+		Always shown, not gated on the display mode: the cabin's soundtrack plays
+		in flight too. `audioUrls` had no control at all until now — the field
+		travelled in every snapshot and nothing could set it.
+	-->
+	<MediaPicker
+		label="Soundtrack"
+		kind="audio"
+		selected={draft.audioUrls}
+		onchange={(urls) => (draft.audioUrls = urls)}
+		placeholder="Nothing chosen — the panes keep whatever they are playing."
+	/>
 
 	<!--
 		A native range rather than the Knob control: Knob takes `config` and writes
@@ -183,15 +214,25 @@
 </div>
 
 <style>
-	.media-field {
+	.token-field {
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		margin: 10px 0;
+		margin: 10px 0 0;
 		font-size: 0.8rem;
 		color: var(--text-muted);
 	}
-	.media-field input {
+	.token-field em {
+		opacity: 0.6;
+		font-style: normal;
+		font-size: 0.72rem;
+	}
+	.library-status {
+		margin: 0;
+		font-size: 11px;
+		opacity: 0.7;
+	}
+	.token-field input {
 		padding: 6px 8px;
 		background: rgba(0, 0, 0, 0.35);
 		border: 1px solid rgba(255, 255, 255, 0.18);
