@@ -18,20 +18,9 @@ import { readLimitedJson } from '#lib/server/body.js';
 import { corsPreflight, lanCorsHeaders, withCors } from '#lib/server/cors.js';
 import { isLoopback } from '#lib/server/loopback.js';
 import { pushWall, readWall } from '#lib/server/wall-store.js';
-import { parseWallState } from '#lib/wall.js';
+import { MAX_WALL_BYTES, parseWallState } from '#lib/wall.js';
 import type { RequestHandler } from './$types';
 
-/**
- * Transport bound on a pushed snapshot.
- *
- * Exported so `tests/wall-parse-hostile.test.ts` can build the largest snapshot
- * the SCHEMA admits and assert it fits. The previous 4 KB was tuned against one
- * 12x300 URL list and left 254 bytes of headroom; adding `audioUrls` made a
- * schema-legal push 7,488 bytes -- accepted by `parseWallState` and rejected by
- * the transport with a 413, which is the bug a cap nobody measures always has.
- * The test, not the number, is the guard: a thirteenth list fails it.
- */
-export const MAX_WALL_BYTES = 16 * 1024;
 
 const wallPath = () => process.env.AERO_WALL_PATH ?? undefined;
 

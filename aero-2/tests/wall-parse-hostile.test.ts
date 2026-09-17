@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { WEATHERS } from '#lib/display/flight/view.js';
 import {
 	MAX_ID_CHARS,
+	MAX_WALL_BYTES,
 	MAX_MEDIA_URL_CHARS,
 	MAX_PLAYLIST_ENTRIES,
 	DISPLAY_MODES,
 	parseWallState,
 	WALL_KEYS
 } from '#lib/wall.js';
-import { MAX_WALL_BYTES } from '../src/routes/api/wall/+server.js';
 
 /**
  * The wall push is the ONE input that changes every pane at once.

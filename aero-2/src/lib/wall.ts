@@ -97,6 +97,25 @@ const CLOCK_OFFSET_RANGE: readonly [number, number] = [-12, 12];
  * push with one bad URL should fail loudly at the admin's screen, not land
  * quietly minus a track nobody noticed was dropped.
  */
+/**
+ * Transport bound on a pushed snapshot, in bytes.
+ *
+ * Lives HERE, beside the schema bounds, and not in the route that enforces it.
+ * Two reasons, and the second cost a production 500:
+ *
+ * 1. It only means anything against the bounds above -- a cap nobody measures
+ *    against the schema is the bug it had: tuned by hand to one 12x300 list
+ *    with 254 bytes spare, then `audioUrls` made a schema-legal push 7,488
+ *    bytes, accepted by the parser and refused by the transport with a 413.
+ *
+ * 2. SvelteKit refuses any non-handler export from a `+server.ts`. Exporting
+ *    it from the route so a test could read it turned every POST /api/wall
+ *    into a 500 -- on the ONE endpoint that changes all three panes at once.
+ *    `svelte-check` was green and the unit test passed, because the test
+ *    imported the module directly and never asked SvelteKit to accept it.
+ */
+export const MAX_WALL_BYTES = 16 * 1024;
+
 export const MAX_MEDIA_URL_CHARS = 300;
 
 /** Per list. Two lists, so a worst-case snapshot carries 24 URLs. */
