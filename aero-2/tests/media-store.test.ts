@@ -9,6 +9,7 @@ import {
 	maxUploadBytes,
 	mimeFor,
 	openMedia,
+	statMedia,
 	saveMedia,
 	STORED_NAME
 } from '#lib/server/media-store.js';
@@ -115,6 +116,29 @@ describe('media-store', () => {
 		expect(found!.size).toBe(6);
 		const read = new Uint8Array(await new Response(found!.stream).arrayBuffer());
 		expect(new TextDecoder().decode(read)).toBe('abcdef');
+	});
+
+	/**
+	 * `<video>` is the seekable surface the no-Range docstring said to wait for.
+	 * A slice has to be the slice asked for -- an off-by-one here becomes a
+	 * `Content-Range` that disagrees with the body, which players handle by
+	 * stalling silently rather than erroring.
+	 */
+	it('streams a byte slice when asked for one', async () => {
+		const item = await saveMedia('x.wav', bytes('abcdef'), dir);
+		const found = await openMedia(item.filename, dir, { start: 1, end: 3 });
+		expect(found).not.toBeNull();
+		expect(found!.size, 'Content-Length must describe the slice, not the file').toBe(3);
+		const read = await new Response(found!.stream).text();
+		expect(read).toBe('bcd');
+	});
+
+	it('reports a size for a stored file and nothing for a probe', async () => {
+		const item = await saveMedia('x.wav', bytes('abcdef'), dir);
+		expect(await statMedia(item.filename, dir)).toBe(6);
+		// Same allowlist as openMedia: a name that is not a hash is not a file.
+		expect(await statMedia('../../etc/passwd', dir)).toBeNull();
+		expect(await statMedia('song.mp3', dir)).toBeNull();
 	});
 
 	it('takes its size cap from the environment, with a sane default', () => {

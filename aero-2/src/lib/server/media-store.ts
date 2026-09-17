@@ -138,16 +138,21 @@ export async function saveMedia(
  * render loop, and materialising a whole clip per request is allocation landing
  * exactly where dropped frames are visible on the wall.
  *
- * NO Range/206, deliberately, and inherited from aero-1 with its reasoning
- * intact: streaming removes the buffer, Range buys SEEKING, and nothing here
- * seeks -- the cabin plays a track start to finish from an immutable URL.
- * Advertising `Accept-Ranges` without honouring it is worse than silence,
- * because a client that believes it will request a range it does not get. If a
- * seekable surface ever appears, add the header and the 206 together.
+ * Range/206 was deliberately absent, inherited from aero-1: streaming removes
+ * the buffer, Range buys SEEKING, and nothing seeked -- the cabin played a
+ * track start to finish from an immutable URL. That reasoning was sound while
+ * the only consumer was `<audio>`.
+ *
+ * `MediaStage` then started rendering `<video>`, which IS a seekable surface,
+ * and an MP4 whose `moov` atom sits at the END of the file cannot begin
+ * playback until the whole clip has arrived -- on a Pi, over venue WiFi, with
+ * `loop` refetching. So this now does what that docstring said to do when the
+ * day came: the header and the 206 together, never one without the other.
  */
 export async function openMedia(
 	filename: string,
-	dir = mediaDir()
+	dir = mediaDir(),
+	range?: { start: number; end: number }
 ): Promise<{ stream: ReadableStream<Uint8Array>; size: number } | null> {
 	if (!STORED_NAME.test(filename)) return null;
 	const path = join(dir, filename);
@@ -157,7 +162,27 @@ export async function openMedia(
 	return {
 		// node:stream/web vs DOM ReadableStream: structurally identical, two
 		// declarations, and only one is what `Response` accepts.
-		stream: Readable.toWeb(createReadStream(path)) as unknown as ReadableStream<Uint8Array>,
-		size: info.size
+		stream: Readable.toWeb(
+			createReadStream(path, range)
+		) as unknown as ReadableStream<Uint8Array>,
+		/** Bytes this stream will yield -- the slice, not the file. */
+		size: range ? range.end - range.start + 1 : info.size
 	};
+}
+
+/**
+ * Size of a stored file, or null when there is nothing to serve.
+ *
+ * Separate from `openMedia` because a Range header cannot be parsed without
+ * knowing the total size, and the range has to be decided before the stream is
+ * opened. Two stats per request, on a device serving a handful of files to
+ * three clients on its own LAN -- the alternative is `openMedia` growing an
+ * HTTP-header parameter, which puts request parsing inside the storage layer.
+ */
+export async function statMedia(filename: string, dir = mediaDir()): Promise<number | null> {
+	if (!STORED_NAME.test(filename)) return null;
+	const path = join(dir, filename);
+	if (!existsSync(path)) return null;
+	const info = await stat(path);
+	return info.isFile() ? info.size : null;
 }
