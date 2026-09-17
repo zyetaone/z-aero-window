@@ -51,6 +51,20 @@ function walk(dir) {
 }
 
 /** Resolve an import specifier to a real file path, or null if external. */
+/**
+ * A specifier this repo OWNS. It must resolve on disk; nothing else can supply
+ * it. Bare specifiers (`svelte`, `$app/*`, `$env/*`) are somebody else's job.
+ */
+const isLocalSpec = (spec) =>
+	// `./$types` is SvelteKit's generated route types. It is relative-looking
+	// but lives in `.svelte-kit/types/`, so it never resolves next to the file
+	// that imports it -- every +server.ts and +page.svelte would flag.
+	!/(^|\/)\$types$/.test(spec) &&
+	(spec.startsWith('#lib/') ||
+	spec.startsWith('#routes/') ||
+		spec.startsWith('./') ||
+		spec.startsWith('../'));
+
 function resolveImport(spec, fromFile) {
 	let base;
 	if (spec.startsWith('#lib/')) base = join(LIB, spec.slice('#lib/'.length));
@@ -75,6 +89,7 @@ function rel(p) {
 }
 
 const problems = [];
+const unresolved = [];
 
 // --- Rule 1: cycles (iterative DFS, first cycle per entry) ---
 const graph = new Map();
@@ -84,6 +99,22 @@ for (const [file, src] of sources) {
 	for (const m of src.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
 		const target = resolveImport(m[1], file);
 		if (target && target !== file) deps.add(target);
+		/**
+		 * Rule 0 — a specifier we own that resolves to NOTHING.
+		 *
+		 * Rule 2 below catches an import whose target is on disk but untracked.
+		 * It cannot catch one whose target is not there at all: `resolveImport`
+		 * returns null for that, the dep is dropped, and the file is treated as
+		 * having no such import. A typo'd path and a deleted-but-still-imported
+		 * module therefore passed silently -- the two states where a clean clone
+		 * MOST certainly cannot build.
+		 *
+		 * Verified by negative control, three ways: target absent (was silent,
+		 * now caught), target on disk and untracked (Rule 2, caught), target
+		 * staged (still passes -- see the note on Rule 2).
+		 */
+		else if (!target && isLocalSpec(m[1]))
+			unresolved.push(`${rel(file)}\n      → ${m[1]} (resolves to nothing)`);
 	}
 	graph.set(file, [...deps]);
 }
@@ -127,7 +158,25 @@ for (const start of files) {
 	}
 }
 
-// --- Rule 2: tracked -> untracked ---
+/**
+ * --- Rule 2: tracked -> untracked ---
+ *
+ * KNOWN LIMIT, deliberately not closed. `git ls-files` reads the INDEX, so a
+ * file another session has STAGED but not committed counts as tracked here and
+ * this rule passes. That is the right ergonomic locally -- `git add` is the
+ * documented remedy, and demanding a commit instead would flag ordinary work.
+ *
+ * It is also how `main` went nine days unbuildable: `git commit -- <path>`
+ * commits what a file says ON DISK, so committing a file you edited also
+ * commits an edit someone else made to it -- and an importer can go to `main`
+ * while its staged-only import stays behind. Twenty-three files ended up
+ * referenced by `main` and absent from it.
+ *
+ * No static check run against a dirty shared tree can answer "would HEAD still
+ * build". Check HEAD itself after committing a subset of a shared tree:
+ *
+ *     git worktree add -q --detach /tmp/wt HEAD && (cd /tmp/wt/aero-2 && bun run check)
+ */
 let tracked;
 try {
 	// `git ls-files` prints paths relative to the CURRENT directory, not the
@@ -169,6 +218,11 @@ for (const [file, src] of sources) {
 }
 
 // --- One report ---
+if (unresolved.length > 0) {
+	console.error('Imports that resolve to nothing:\n');
+	for (const u of unresolved) console.error(`  ${u}\n`);
+	problems.push(`${unresolved.length} unresolved import(s) — fix the path, or restore the file.`);
+}
 if (dangling.length > 0) {
 	console.error('Tracked files importing untracked files:\n');
 	for (const d of dangling) console.error(`  ${d}\n`);
@@ -193,5 +247,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-	`Repo checks pass — ${files.length} files, no cycles, no dangling imports, rune naming holds.`
+	`Repo checks pass — ${files.length} files, every local import resolves, no cycles, no dangling imports, rune naming holds.`
 );
