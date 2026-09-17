@@ -198,11 +198,17 @@ sudo -u "${PI_USER}" bash -c "cd '${INSTALL_DIR}' && '${BUN_BIN}' install"
 # build, i.e. the next OTA run. Setting it alone changes nothing until then,
 # and a cross-origin track with no matching directive is blocked SILENTLY --
 # no console error, no sound, indistinguishable from a push that never landed.
+# PUBLIC_WALL_ORIGIN is declared `static: true` in src/env.ts, so it is INLINED
+# at build time exactly like the two above -- writing it to config.env alone
+# changes nothing. Empty is the correct default (a pane polls itself); set it
+# on the two follower panes and leave the writer's empty.
 EXISTING_MEDIA_ORIGINS=""
+EXISTING_WALL_ORIGIN=""
 if [[ -f /etc/aero/config.env ]]; then
 	EXISTING_MEDIA_ORIGINS="$(command grep -oP '^AERO_MEDIA_ORIGINS=\K.*' /etc/aero/config.env 2>/dev/null || true)"
+	EXISTING_WALL_ORIGIN="$(command grep -oP '^PUBLIC_WALL_ORIGIN=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 fi
-sudo -u "${PI_USER}" bash -c "cd '${INSTALL_DIR}' && VITE_TILE_SERVER_URL='${VITE_TILE_SERVER_URL:-/api/tiles}' AERO_MEDIA_ORIGINS='${AERO_MEDIA_ORIGINS:-${EXISTING_MEDIA_ORIGINS}}' '${BUN_BIN}' run build"
+sudo -u "${PI_USER}" bash -c "cd '${INSTALL_DIR}' && VITE_TILE_SERVER_URL='${VITE_TILE_SERVER_URL:-/api/tiles}' AERO_MEDIA_ORIGINS='${AERO_MEDIA_ORIGINS:-${EXISTING_MEDIA_ORIGINS}}' PUBLIC_WALL_ORIGIN='${PUBLIC_WALL_ORIGIN:-${EXISTING_WALL_ORIGIN}}' '${BUN_BIN}' run build"
 
 # ─── Step 5: Write environment config ─────────────────────────────────────────
 
@@ -388,6 +394,7 @@ AERO_MEDIA_DIR=${INSTALL_DIR}/data/media
 AERO_MEDIA_MAX_MB=50
 AERO_USB_DIR=/media/aero
 AERO_MEDIA_ORIGINS=
+PUBLIC_WALL_ORIGIN=
 EOF
 
 # ─── Step 6: Systemd units + cron jobs ────────────────────────────────────────

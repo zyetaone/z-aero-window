@@ -21,7 +21,7 @@
 	import { SCENE_PRESETS } from './presets.js';
 	import { KNOB_RANGE, WEATHERS, type PaneSettings } from './settings.svelte.js';
 	import type { WallSync } from './wall.svelte.js';
-	import type { WallState } from '#lib/wall.js';
+	import { seedMediaDraft, type WallState } from '#lib/wall.js';
 	import { mediaLibrary } from './media-library.svelte.js';
 
 	interface Props {
@@ -50,10 +50,13 @@
 			displayMode: config.displayMode,
 			blindOpen: config.blindOpen,
 			rotate: config.rotate,
-			mediaUrls: config.videoPlaylist.slice(),
+			// Both halves, origin-stripped: a pane following a peer holds ABSOLUTE
+			// URLs here, and the draft, the picker and wall.json all speak
+			// relative ones. See `seedMediaDraft`.
+			mediaUrls: seedMediaDraft([config.videoPlaylist, config.screensaverUrls], wall.origin),
 			// Seeded like the video list: what this pane is playing is the least
 			// surprising thing for the first push to carry.
-			audioUrls: config.audioPlaylist.slice()
+			audioUrls: seedMediaDraft([config.audioPlaylist], wall.origin)
 		}))
 	);
 

@@ -185,6 +185,41 @@ export function resolveMediaUrl(url: string, origin: string): string {
 	return `${origin.replace(/\/$/, '')}${url}`;
 }
 
+/**
+ * The inverse, for reading a resolved URL back out of a pane's config.
+ *
+ * `resolveMediaUrl` is one-way per snapshot, but the drawer seeds its push
+ * draft from the config the LAST snapshot wrote -- so without this, a pane
+ * following a peer seeds absolute URLs, the picker (which matches against the
+ * listing's relative `url`) shows every playing track as "not on this device",
+ * and the next push writes absolute URLs into `wall.json`. That is exactly the
+ * origin-free invariant `resolveMediaUrl` exists to preserve, broken by its own
+ * output one round-trip later.
+ *
+ * Only this wall's own origin is stripped. A genuine CDN URL is not ours to
+ * rewrite and passes through.
+ */
+export function unresolveMediaUrl(url: string, origin: string): string {
+	const base = origin.replace(/\/$/, '');
+	if (!base || !url.startsWith(`${base}/`)) return url;
+	return url.slice(base.length);
+}
+
+/**
+ * The push draft's media seed, as a function so a test can hold the real one.
+ *
+ * `Wall.svelte` seeds from the config the last snapshot wrote, and both halves
+ * matter: `applyWallState` splits one `mediaUrls` list into clips and stills,
+ * so seeding from `videoPlaylist` alone silently drops every still, and an
+ * extensionless URL lands in both lists and would otherwise seed twice.
+ *
+ * Lives here rather than inline in the component because the defect it guards
+ * is entirely about URLs, and a component test would need a DOM to reach it.
+ */
+export function seedMediaDraft(lists: readonly (readonly string[])[], origin: string): string[] {
+	return [...new Set(lists.flat().map((u) => unresolveMediaUrl(u, origin)))];
+}
+
 /** Extensions a `<video>` can play. Anything else in a media list is a still. */
 const VIDEO_EXTS = ['.mp4', '.webm', '.mov', '.m4v', '.ogv'];
 

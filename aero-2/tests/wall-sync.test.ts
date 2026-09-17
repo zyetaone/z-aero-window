@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { WallSync, applyWallState } from '#lib/settings/wall.svelte.js';
 import { createSettings } from '#lib/settings/settings.svelte.js';
-import type { WallSnapshot, WallState } from '#lib/wall.js';
+import { seedMediaDraft, unresolveMediaUrl, type WallSnapshot, type WallState } from '#lib/wall.js';
 
 const state = (over: Partial<WallState> = {}): WallState => ({
 	placeId: 'denver',
@@ -314,6 +314,52 @@ describe('mediaUrls on the receive side', () => {
 		expect(config.audioPlaylist).toEqual([
 			'http://10.0.0.5:3000/api/media/0123456789abcdef.mp3'
 		]);
+	});
+
+	/**
+	 * The leg the one-way test above cannot see. `Wall.svelte` seeds its push
+	 * draft from the config the LAST snapshot wrote, so whatever
+	 * `resolveMediaUrl` put there comes straight back out. If it comes back
+	 * absolute, the picker cannot match it against the relative listing (every
+	 * playing track reads "not on this device") and the next push writes
+	 * absolute URLs into `wall.json` — the origin-free invariant, destroyed by
+	 * the very function that exists to preserve it.
+	 *
+	 * Calls `seedMediaDraft`, which IS the component's seed expression -- not a
+	 * re-implementation of it. A test that spelled the flatten/strip out inline
+	 * here would pass while `Wall.svelte` did something else entirely.
+	 */
+	it('media survives the resolve/seed round trip origin-free', () => {
+		const config = createSettings();
+		const pushed = ['/api/media/abc123def4567890.mp4', '/api/media/0123456789abcdef.webp'];
+		const origin = 'http://10.0.0.5:3000';
+		applyWallState(state({ mediaUrls: pushed, audioUrls: ['/api/media/fedcba9876543210.mp3'] }), config, 100, origin);
+
+		expect(seedMediaDraft([config.videoPlaylist, config.screensaverUrls], origin)).toEqual(pushed);
+		expect(seedMediaDraft([config.audioPlaylist], origin)).toEqual([
+			'/api/media/fedcba9876543210.mp3'
+		]);
+	});
+
+	it('an extensionless URL, which lands in both lists, seeds back exactly once', () => {
+		const config = createSettings();
+		applyWallState(state({ mediaUrls: ['https://cdn.example.com/stream'] }), config, 100, 'http://10.0.0.5:3000');
+		expect(config.videoPlaylist).toEqual(['https://cdn.example.com/stream']);
+		expect(config.screensaverUrls).toEqual(['https://cdn.example.com/stream']);
+		expect(seedMediaDraft([config.videoPlaylist, config.screensaverUrls], 'http://10.0.0.5:3000')).toEqual([
+			'https://cdn.example.com/stream'
+		]);
+	});
+
+	it('does not strip an origin that is not this wall', () => {
+		expect(unresolveMediaUrl('https://cdn.example.com/x.mp4', 'http://10.0.0.5:3000')).toBe(
+			'https://cdn.example.com/x.mp4'
+		);
+		// A prefix match alone is not enough: a different host that merely starts
+		// with the same characters must survive intact.
+		expect(unresolveMediaUrl('http://10.0.0.50:3000/api/media/a.mp3', 'http://10.0.0.5:3000')).toBe(
+			'http://10.0.0.50:3000/api/media/a.mp3'
+		);
 	});
 
 	it('leaves everything alone when the pane polls itself', () => {
