@@ -14,7 +14,8 @@ const snapshot = (version: number) => ({
 		displayMode: 'flight',
 		blindOpen: true,
 		rotate: true,
-		mediaUrls: []
+		mediaUrls: [],
+		audioUrls: []
 	}
 });
 

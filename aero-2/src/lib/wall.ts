@@ -23,7 +23,8 @@ export const WALL_KEYS = [
 	'displayMode',
 	'blindOpen',
 	'rotate',
-	'mediaUrls'
+	'mediaUrls',
+	'audioUrls'
 ] as const;
 
 export type WallKey = (typeof WALL_KEYS)[number];
@@ -51,6 +52,19 @@ export interface WallState {
 	 * playlist.
 	 */
 	mediaUrls: string[];
+	/**
+	 * The cabin's soundtrack, travelling with the scene rather than beside it.
+	 *
+	 * `audioPlaylist` was reachable only through `?audio=` on one pane's URL,
+	 * so a song was pane-local and died on reload -- on a wall whose whole
+	 * premise is that the three panes are one window. Video already travelled
+	 * here as `mediaUrls`; audio had no route at all.
+	 *
+	 * Same shape and same cap as `mediaUrls`, and validated by the same schema:
+	 * path-absolute or http(s), so an uploaded `/api/media/<hash>.mp3` passes
+	 * and a `javascript:` or `data:` URL does not.
+	 */
+	audioUrls: string[];
 }
 
 /** One push. `version` and `applyAtWallSec` are the server's to set, never a client's. */
@@ -126,7 +140,8 @@ const wallStateSchema = z.object({
 	blindOpen: z.boolean(),
 	rotate: z.boolean(),
 	clockOffsetH: z.number().finite().min(CLOCK_OFFSET_RANGE[0]).max(CLOCK_OFFSET_RANGE[1]),
-	mediaUrls: z.array(mediaUrlSchema).max(12)
+	mediaUrls: z.array(mediaUrlSchema).max(12),
+	audioUrls: z.array(mediaUrlSchema).max(12)
 });
 
 export function parseWallState(input: unknown): WallState | null {

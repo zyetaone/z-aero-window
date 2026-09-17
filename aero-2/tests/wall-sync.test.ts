@@ -12,6 +12,7 @@ const state = (over: Partial<WallState> = {}): WallState => ({
 	blindOpen: false,
 	rotate: false,
 	mediaUrls: [],
+	audioUrls: [],
 	...over
 });
 
@@ -195,6 +196,61 @@ describe('applyWallState', () => {
 		const before = config.place.id;
 		applyWallState(state({ placeId: '', presetId: '' }), config, 0);
 		expect(config.place.id).toBe(before);
+	});
+});
+
+/**
+ * Audio is the half that had no wall route at all. `audioPlaylist` was
+ * reachable only through `?audio=` on one pane's URL, so a song was pane-local
+ * and died on reload — on a wall whose premise is that three panes are one
+ * window. These are the assertions that it now travels with the scene.
+ */
+describe('audioUrls on the receive side', () => {
+	it('a push with songs fills the playlist and turns the cabin on', () => {
+		const config = createSettings();
+		applyWallState(state({ audioUrls: ['/api/media/abc123def4567890.mp3'] }), config, 100);
+		expect(config.audioPlaylist).toEqual(['/api/media/abc123def4567890.mp3']);
+		expect(config.audioTrackIndex, 'a new playlist starts at its first track').toBe(0);
+		expect(config.audioMode, 'tracks with the mode still at synth is two switches for one intent').toBe('playlist');
+		expect(config.audioEnabled).toBe(true);
+	});
+
+	it('reaches every pane identically, which is the entire point', () => {
+		const left = createSettings();
+		const right = createSettings();
+		const push = state({ audioUrls: ['/api/media/aaaaaaaaaaaaaaaa.mp3', '/api/media/bbbbbbbbbbbbbbbb.mp3'] });
+		applyWallState(push, left, 100);
+		applyWallState(push, right, 100);
+		expect(left.audioPlaylist).toEqual(right.audioPlaylist);
+		expect(left.audioTrackIndex).toBe(right.audioTrackIndex);
+	});
+
+	/**
+	 * Empty means "keep what the pane booted with". A weather push must not
+	 * silence a wall someone provisioned with `?audio=`.
+	 */
+	it('an empty list leaves a boot-provisioned soundtrack alone', () => {
+		const config = createSettings();
+		config.audioPlaylist = ['/boot.mp3'];
+		config.audioMode = 'playlist';
+		applyWallState(state({ audioUrls: [] }), config, 100);
+		expect(config.audioPlaylist).toEqual(['/boot.mp3']);
+		expect(config.audioMode).toBe('playlist');
+	});
+
+	/**
+	 * The same rollout tolerance `mediaUrls` already has. A snapshot buffered
+	 * across the deploy that ADDS this field must apply, not throw — the pane
+	 * side sees pre-upgrade snapshots even though the server rejects such a
+	 * push.
+	 */
+	it('a snapshot from before audio travelled still applies', () => {
+		const config = createSettings();
+		const legacy = state();
+		delete (legacy as Partial<WallState>).audioUrls;
+		expect(() => applyWallState(legacy, config, 100)).not.toThrow();
+		expect(config.weather).toBe('rain');
+		expect(config.audioMode, 'and must not switch a silent pane to playlist').toBe('synth');
 	});
 });
 

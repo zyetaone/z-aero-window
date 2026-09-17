@@ -144,6 +144,24 @@ export function applyWallState(state: WallState, config: PaneSettings, wallSec: 
 		config.videoIndex = 0;
 	}
 
+	/**
+	 * Audio, on the same terms as the video list above and with the same `?? []`
+	 * for the same reason: a snapshot buffered across the deploy that adds this
+	 * field has to apply rather than throw.
+	 *
+	 * Empty means "keep what the pane booted with", so a weather push does not
+	 * silence a wall someone provisioned with `?audio=`. A non-empty list
+	 * implies `playlist` mode and sound ON, because a URL naming tracks with the
+	 * mode still at `synth` is two switches for one intent -- the argument
+	 * `settings.svelte.ts` already makes for the `?audio=` parameter.
+	 */
+	if ((state.audioUrls ?? []).length > 0) {
+		config.audioPlaylist = state.audioUrls.slice();
+		config.audioTrackIndex = 0;
+		config.audioMode = 'playlist';
+		config.audioEnabled = true;
+	}
+
 	config.weather = state.weather as PaneSettings['weather'];
 	// Not when a preset is present: that solve is the whole point of the preset.
 	if (!state.presetId) config.clockOffsetH = state.clockOffsetH;

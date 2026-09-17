@@ -28,6 +28,7 @@ const snap = (version: number, applyAtWallSec: number, over: Partial<WallState> 
 			blindOpen: true,
 			rotate: false,
 			mediaUrls: [],
+			audioUrls: [],
 			...over
 		}
 	}) satisfies WallSnapshot;
@@ -148,7 +149,8 @@ describe('a pushed preset keeps the clock it solved for', () => {
 				displayMode: 'flight',
 				blindOpen: true,
 				rotate: false,
-				mediaUrls: []
+				mediaUrls: [],
+				audioUrls: []
 			},
 			config,
 			WALL
@@ -169,7 +171,8 @@ describe('a pushed preset keeps the clock it solved for', () => {
 				displayMode: 'flight',
 				blindOpen: true,
 				rotate: false,
-				mediaUrls: []
+				mediaUrls: [],
+				audioUrls: []
 			},
 			config,
 			WALL

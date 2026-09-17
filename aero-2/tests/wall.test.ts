@@ -15,7 +15,8 @@ const good: WallState = {
 	displayMode: 'flight',
 	blindOpen: false,
 	rotate: false,
-	mediaUrls: []
+	mediaUrls: [],
+	audioUrls: []
 };
 
 const dirs: string[] = [];

@@ -17,7 +17,8 @@ const good = () => ({
 	displayMode: 'flight',
 	blindOpen: true,
 	rotate: true,
-	mediaUrls: [] as unknown[]
+	mediaUrls: [] as unknown[],
+	audioUrls: [] as unknown[]
 });
 
 describe('parseWallState refuses what it should', () => {

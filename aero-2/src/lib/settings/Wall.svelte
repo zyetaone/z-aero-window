@@ -48,7 +48,10 @@
 			displayMode: config.displayMode,
 			blindOpen: config.blindOpen,
 			rotate: config.rotate,
-			mediaUrls: config.videoPlaylist.slice()
+			mediaUrls: config.videoPlaylist.slice(),
+			// Seeded like the video list: what this pane is playing is the least
+			// surprising thing for the first push to carry.
+			audioUrls: config.audioPlaylist.slice()
 		}))
 	);
 

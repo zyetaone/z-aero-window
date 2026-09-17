@@ -34,7 +34,8 @@ const EMPTY: WallState = {
 	displayMode: 'flight',
 	blindOpen: true,
 	rotate: true,
-	mediaUrls: []
+	mediaUrls: [],
+	audioUrls: []
 };
 
 /**
