@@ -42,6 +42,7 @@ latest branch, rebuild, and regenerate systemd units. It never deletes data.
 | `display-dim-schedule.sh` | 02:00 dim to 5%, 06:00 restore to 100%. ddcutil or sysfs backlight. |
 | `nightly-reboot.cron` | 04:00 reboot (between dim and bright windows). |
 | `weekly-cache-clear.cron` | Sunday 03:00 shader/GPU cache clear. Preserves tile cache. |
+| `99-aero-usb.rules` | Mounts a USB stick read-only at `/media/aero`. Pi OS Lite automounts nothing, and a Desktop image would mount into a session `aero-app` cannot see. Nothing plays off the stick directly — `POST /api/media/import-usb` copies tracks into the content-addressed store, so pulling the drive does not silence the wall. |
 
 ## Kiosk URL
 

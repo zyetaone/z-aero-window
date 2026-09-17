@@ -192,7 +192,17 @@ sudo -u "${PI_USER}" bash -c "cd '${INSTALL_DIR}' && '${BUN_BIN}' install"
 # inside the bash -c string because sudo scrubs the caller's environment.
 # Same default as TILE_SERVER_URL_VALUE in step 5; the two are re-derived
 # rather than shared because that block has not run yet at this point.
-sudo -u "${PI_USER}" bash -c "cd '${INSTALL_DIR}' && VITE_TILE_SERVER_URL='${VITE_TILE_SERVER_URL:-/api/tiles}' '${BUN_BIN}' run build"
+# AERO_MEDIA_ORIGINS is read here for the same reason and with the same trap:
+# it becomes the CSP media-src directive, which is baked into the built server.
+# An operator sets it in /etc/aero/config.env; it takes effect at the NEXT
+# build, i.e. the next OTA run. Setting it alone changes nothing until then,
+# and a cross-origin track with no matching directive is blocked SILENTLY --
+# no console error, no sound, indistinguishable from a push that never landed.
+EXISTING_MEDIA_ORIGINS=""
+if [[ -f /etc/aero/config.env ]]; then
+	EXISTING_MEDIA_ORIGINS="$(command grep -oP '^AERO_MEDIA_ORIGINS=\K.*' /etc/aero/config.env 2>/dev/null || true)"
+fi
+sudo -u "${PI_USER}" bash -c "cd '${INSTALL_DIR}' && VITE_TILE_SERVER_URL='${VITE_TILE_SERVER_URL:-/api/tiles}' AERO_MEDIA_ORIGINS='${AERO_MEDIA_ORIGINS:-${EXISTING_MEDIA_ORIGINS}}' '${BUN_BIN}' run build"
 
 # ─── Step 5: Write environment config ─────────────────────────────────────────
 
@@ -355,6 +365,31 @@ if [[ -f /etc/aero/config.env ]] && ! command grep -q '^AERO_FLEET_TOKEN=.' /etc
 	echo "  added missing AERO_FLEET_TOKEN to /etc/aero/config.env (generated)"
 fi
 
+# Media keys, same append-only treatment and for the same reason: media-store
+# and usb-import read these from the environment, and a Pi imaged before they
+# existed reaches this installer only through --units-only, which skips the
+# config.env write above entirely.
+#
+# AERO_MEDIA_ORIGINS is seeded EMPTY here so the key exists in the file for an
+# operator to fill. It is consumed at BUILD time (step 4 reads it back out of
+# this file), not at runtime, so a value written here takes effect at the next
+# OTA rebuild -- not on the next restart. When a wall points its panes at a
+# peer via PUBLIC_WALL_ORIGIN, that peer must appear here too, or every
+# cross-origin track is blocked with no error and no sound.
+while IFS='=' read -r key value; do
+	# Presence, not a non-empty value: an operator who blanked one of these
+	# meant it, and AERO_MEDIA_ORIGINS is legitimately empty by default.
+	if [[ -f /etc/aero/config.env ]] && ! command grep -q "^${key}=" /etc/aero/config.env; then
+		echo "${key}=${value}" >> /etc/aero/config.env
+		echo "  added missing ${key} to /etc/aero/config.env"
+	fi
+done <<EOF
+AERO_MEDIA_DIR=${INSTALL_DIR}/data/media
+AERO_MEDIA_MAX_MB=50
+AERO_USB_DIR=/media/aero
+AERO_MEDIA_ORIGINS=
+EOF
+
 # ─── Step 6: Systemd units + cron jobs ────────────────────────────────────────
 
 echo "[6/7] Installing systemd units + cron..."
@@ -428,6 +463,18 @@ install -m 755 "${SCRIPT_DIR}/display-dim-schedule.sh" /usr/local/lib/aero/displ
 # Cron entries — written to /etc/cron.d so they're package-level, not user-level.
 install -m 644 "${SCRIPT_DIR}/nightly-reboot.cron"       /etc/cron.d/aero-nightly-reboot
 install -m 644 "${SCRIPT_DIR}/weekly-cache-clear.cron"   /etc/cron.d/aero-weekly-cache-clear
+
+# Pen-drive automount. Pi OS Lite has no desktop, so nothing mounts a stick
+# unless we do; /media/aero is what AERO_USB_DIR defaults to in the app.
+# The reload+trigger matters: without it the rule sits on disk doing nothing
+# until the next reboot, so an OTA that "installed pen-drive support" would
+# leave every fielded Pi still ignoring a stick until someone power-cycled it.
+install -m 644 "${SCRIPT_DIR}/99-aero-usb.rules" /etc/udev/rules.d/99-aero-usb.rules
+install -d -m 755 /media/aero
+if command -v udevadm >/dev/null 2>&1; then
+	udevadm control --reload-rules >/dev/null 2>&1 || true
+	udevadm trigger --subsystem-match=block >/dev/null 2>&1 || true
+fi
 
 # Log rotation for the updater's append-only log (SD-card lifespan).
 install -m 644 "${SCRIPT_DIR}/aero-updater.logrotate"    /etc/logrotate.d/aero-updater

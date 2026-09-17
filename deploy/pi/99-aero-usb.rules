@@ -1,0 +1,23 @@
+# A pen drive, mounted read-only at a fixed path the app knows.
+#
+# Pi OS Lite runs no desktop session, so nothing automounts a stick: udisks2
+# and gvfs both live in a desktop the kiosk deliberately does not have
+# (aero-xserver.service is bare X on tty1). Even on a Desktop image the mount
+# would land in the DESKTOP user's session, which aero-app.service cannot see.
+# So the mount is ours to make.
+#
+# systemd-mount generates the unit and reaps it on removal, which is the whole
+# reason not to ship a .mount file: a stick pulled without unmounting leaves no
+# stale unit behind. --no-block because a udev RUN+= that waits for a mount
+# deadlocks against the very transaction it is running inside.
+#
+# ro is not a detail. The app only ever READS a stick -- import copies into the
+# content-addressed store -- so mounting it writable would offer nothing and
+# risk corrupting an operator's drive on an unclean shutdown, which on a kiosk
+# that reboots nightly is the normal shutdown.
+#
+# ENV{ID_FS_TYPE}!="" skips the whole-disk device that carries only a partition
+# table; without it every insertion also tries to mount /dev/sda and logs a
+# failure the operator has to learn to ignore.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition", ENV{ID_FS_TYPE}!="", RUN+="/usr/bin/systemd-mount --no-block --collect --options ro,noatime,nofail /dev/%k /media/aero"
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition", RUN+="/usr/bin/systemd-umount /media/aero"
