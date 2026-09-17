@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { parseWallState, WALL_KEYS } from '#lib/wall.js';
+import { WEATHERS } from '#lib/display/flight/view.js';
+import {
+	MAX_ID_CHARS,
+	MAX_MEDIA_URL_CHARS,
+	MAX_PLAYLIST_ENTRIES,
+	DISPLAY_MODES,
+	parseWallState,
+	WALL_KEYS
+} from '#lib/wall.js';
+import { MAX_WALL_BYTES } from '../src/routes/api/wall/+server.js';
 
 /**
  * The wall push is the ONE input that changes every pane at once.
@@ -84,5 +93,51 @@ describe('parseWallState refuses what it should', () => {
 		const out = parseWallState({ ...good(), evil: 'payload', __proto__: {} });
 		expect(out).not.toBeNull();
 		expect(Object.keys(out!).sort()).toEqual([...WALL_KEYS].sort());
+	});
+});
+
+/**
+ * The schema and the transport have to agree, and nothing used to make them.
+ *
+ * `MAX_WALL_BYTES` was tuned by hand against the fields that existed the day it
+ * was written, with 254 bytes to spare. Adding `audioUrls` doubled the URL
+ * budget and made a snapshot the schema ACCEPTS one the transport rejects with
+ * a 413 -- a push an operator can compose in the admin UI and never see land.
+ *
+ * So this builds the largest snapshot the schema admits, from the schema's own
+ * exported bounds rather than from copied numbers, and asserts it fits. A
+ * thirteenth list, a longer URL cap or a raised entry count now fails HERE,
+ * which is a test failure, instead of in the field, which is a silent one.
+ */
+describe('the schema fits through the transport', () => {
+	const longest = (xs: readonly string[]) => xs.reduce((a, b) => (b.length > a.length ? b : a));
+	const longestUrl = '/' + 'a'.repeat(MAX_MEDIA_URL_CHARS - 1);
+	const longestId = 'a'.repeat(MAX_ID_CHARS);
+
+	const worstCase = () => ({
+		placeId: longestId,
+		presetId: longestId,
+		// Longest legal value of each enum, taken from the enum, not guessed.
+		weather: longest(WEATHERS),
+		clockOffsetH: -11.999999999999998,
+		displayMode: longest(DISPLAY_MODES),
+		blindOpen: true,
+		rotate: true,
+		mediaUrls: Array.from({ length: MAX_PLAYLIST_ENTRIES }, () => longestUrl),
+		audioUrls: Array.from({ length: MAX_PLAYLIST_ENTRIES }, () => longestUrl)
+	});
+
+	it('the biggest schema-legal snapshot is under the byte cap', () => {
+		const bytes = new TextEncoder().encode(JSON.stringify(worstCase())).length;
+		expect(
+			bytes,
+			`worst-case snapshot is ${bytes} bytes against a ${MAX_WALL_BYTES}-byte cap`
+		).toBeLessThan(MAX_WALL_BYTES);
+	});
+
+	it('and that worst case is in fact schema-legal', () => {
+		// Guards the test itself: if this stops parsing, the bytes above are
+		// measuring something the server would have refused anyway.
+		expect(parseWallState(worstCase())).not.toBeNull();
 	});
 });

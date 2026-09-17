@@ -33,6 +33,7 @@ import { resolveAtmosphere, type AtmosphereState } from './world/atmosphere.js';
 import { nightAmount, sunPosition, type SunPosition } from './world/sun.js';
 import { createSettings, type PaneSettings } from '#lib/settings/settings.svelte.js';
 import { WallSync } from '#lib/settings/wall.svelte.js';
+import { PUBLIC_WALL_ORIGIN } from '$app/env/public';
 
 /**
  * When the glide that is starting now actually began, in wall-absolute seconds.
@@ -73,7 +74,13 @@ const [getDisplayContext, setDisplayContext] = createContext<AeroDisplay>();
 export class AeroDisplay {
 	readonly config: PaneSettings;
 	/** Buffered wall pushes. Emptied only by `advanceTo`, never by the fetch. */
-	readonly wall = new WallSync();
+	/**
+	 * The origin is the same one the poller fetches from, and for the same
+	 * reason: the host that serves the snapshot is the host holding the media
+	 * files the snapshot names. Passing it here is what makes an uploaded track
+	 * play on all three panes instead of only the writer.
+	 */
+	readonly wall = new WallSync(PUBLIC_WALL_ORIGIN);
 	readonly director: FlightDirector;
 	/**
 	 * Overwritten in the constructor before anything can read it.

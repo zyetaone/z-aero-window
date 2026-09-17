@@ -82,7 +82,7 @@ export interface WallSnapshot {
 
 /** Closed sets the server is allowed to know. See `parseWallState`. */
 const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
-const DISPLAY_MODES = ['flight', 'video', 'screensaver', 'standby'] as const;
+export const DISPLAY_MODES = ['flight', 'video', 'screensaver', 'standby'] as const;
 const CLOCK_OFFSET_RANGE: readonly [number, number] = [-12, 12];
 
 /**
@@ -106,16 +106,24 @@ const CLOCK_OFFSET_RANGE: readonly [number, number] = [-12, 12];
  * push with one bad URL should fail loudly at the admin's screen, not land
  * quietly minus a track nobody noticed was dropped.
  */
+export const MAX_MEDIA_URL_CHARS = 300;
+
+/** Per list. Two lists, so a worst-case snapshot carries 24 URLs. */
+export const MAX_PLAYLIST_ENTRIES = 12;
+
+/** `placeId` and `presetId`. */
+export const MAX_ID_CHARS = 64;
+
 const mediaUrlSchema = z
 	.string()
 	.min(1)
-	.max(300)
+	.max(MAX_MEDIA_URL_CHARS)
 	.refine((u) => /^(\/[^/]|https?:\/\/)/.test(u));
 
 /** Empty string is legal — it means "no preset pinned". */
 const idSchema = z
 	.string()
-	.max(64)
+	.max(MAX_ID_CHARS)
 	.refine((s) => s === '' || /^[a-z0-9][a-z0-9-]*$/.test(s));
 
 /**
@@ -140,9 +148,69 @@ const wallStateSchema = z.object({
 	blindOpen: z.boolean(),
 	rotate: z.boolean(),
 	clockOffsetH: z.number().finite().min(CLOCK_OFFSET_RANGE[0]).max(CLOCK_OFFSET_RANGE[1]),
-	mediaUrls: z.array(mediaUrlSchema).max(12),
-	audioUrls: z.array(mediaUrlSchema).max(12)
+	mediaUrls: z.array(mediaUrlSchema).max(MAX_PLAYLIST_ENTRIES),
+	audioUrls: z.array(mediaUrlSchema).max(MAX_PLAYLIST_ENTRIES)
 });
+
+/**
+ * A media URL from a snapshot, made fetchable by the pane that received it.
+ *
+ * WHY: a stored URL is root-relative (`/api/media/<hash>.mp3`), and a browser
+ * resolves that against the PANE's own origin. But the file was uploaded to the
+ * wall writer -- the single origin `PUBLIC_WALL_ORIGIN` names and all three
+ * panes poll. So a track uploaded on the writer 404s on the other two, which is
+ * the state the upload path shipped in.
+ *
+ * The host that served the snapshot is, by construction, the host holding the
+ * file, so the poll origin is the right base and no second env var is needed.
+ * Absolute URLs pass through untouched: a CDN playlist is already addressed.
+ *
+ * Note for whoever points a wall at a peer: CSP `media-src` is baked at BUILD
+ * time from `AERO_MEDIA_ORIGINS` (`vite.config.ts`). A cross-origin media URL
+ * with no matching directive fails SILENTLY -- no error, no sound. The origin
+ * has to be in both places.
+ */
+export function resolveMediaUrl(url: string, origin: string): string {
+	if (!origin || !url.startsWith('/')) return url;
+	return `${origin.replace(/\/$/, '')}${url}`;
+}
+
+/** Extensions a `<video>` can play. Anything else in a media list is a still. */
+const VIDEO_EXTS = ['.mp4', '.webm', '.mov', '.m4v', '.ogv'];
+
+/**
+ * Split one media list into the two things it feeds.
+ *
+ * `video` mode renders a `<video>`; `screensaver` renders an `<img>`. Both used
+ * to be handed the SAME list, so an `.mp4` pushed to a pane sitting in
+ * screensaver mode landed in an `<img src>` and rendered the failure pane. One
+ * list, two element types, no test that could tell them apart.
+ *
+ * An unknown extension goes to BOTH, preserving the old behaviour for URLs we
+ * cannot classify -- a remote URL with no extension is not evidence of a still.
+ */
+export function splitMediaByKind(urls: readonly string[]): {
+	videos: string[];
+	stills: string[];
+} {
+	const videos: string[] = [];
+	const stills: string[] = [];
+	for (const u of urls) {
+		const path = u.split(/[?#]/)[0].toLowerCase();
+		const dot = path.lastIndexOf('.');
+		const ext = dot === -1 ? '' : path.slice(dot);
+		const known = ext !== '' && /^\.[a-z0-9]{2,5}$/.test(ext);
+		if (!known) {
+			videos.push(u);
+			stills.push(u);
+		} else if (VIDEO_EXTS.includes(ext)) {
+			videos.push(u);
+		} else {
+			stills.push(u);
+		}
+	}
+	return { videos, stills };
+}
 
 export function parseWallState(input: unknown): WallState | null {
 	const parsed = wallStateSchema.safeParse(input);

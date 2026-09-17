@@ -20,9 +20,20 @@
 
 import { Location } from './locations.js';
 import type { PaneSettings } from './settings.svelte.js';
-import type { WallSnapshot, WallState } from '#lib/wall.js';
+import { resolveMediaUrl, splitMediaByKind, type WallSnapshot, type WallState } from '#lib/wall.js';
 
 export class WallSync {
+	/**
+	 * Origin the snapshots come from, used as the base for root-relative media
+	 * URLs. Empty (the default) means this pane polls itself, so a relative URL
+	 * already points at the right host and is left alone.
+	 *
+	 * It lives here rather than in `applyWallState` because it is a property of
+	 * the CHANNEL, not of a snapshot: the origin that served the state is the
+	 * origin holding the files the state names. See `resolveMediaUrl`.
+	 */
+	constructor(readonly origin: string = '') {}
+
 	/** Highest version applied. Also what the poller conditions its GET on. */
 	appliedVersion = $state(0);
 	/** Buffered and not yet due. Read by the drawer's "applies in Ns" countdown. */
@@ -85,7 +96,7 @@ export class WallSync {
 		 * entire reason the field exists; the apply had been ignoring it for
 		 * everything except deciding WHEN.
 		 */
-		applyWallState(due.state, config, due.applyAtWallSec);
+		applyWallState(due.state, config, due.applyAtWallSec, this.origin);
 	}
 }
 
@@ -98,7 +109,12 @@ export class WallSync {
  * IS a derived quantity, so the second it is derived from has to be the one
  * every pane agrees on.
  */
-export function applyWallState(state: WallState, config: PaneSettings, wallSec: number): void {
+export function applyWallState(
+	state: WallState,
+	config: PaneSettings,
+	wallSec: number,
+	origin = ''
+): void {
 	/**
 	 * Preset first, and for `place`/`clockOffsetH` it also wins.
 	 *
@@ -138,9 +154,16 @@ export function applyWallState(state: WallState, config: PaneSettings, wallSec: 
 	 * schema addition has to tolerate its own rollout.
 	 */
 	if ((state.mediaUrls ?? []).length > 0) {
-		config.videoPlaylist = state.mediaUrls.slice();
-		config.screensaverUrls = state.mediaUrls.slice();
-		config.videoUrl = state.mediaUrls[0] ?? '';
+		/**
+		 * Split, because `video` mode renders a `<video>` and `screensaver` a
+		 * `<img>`: handing both the same list put `.mp4`s inside an `<img src>`
+		 * and rendered the failure pane. See `splitMediaByKind`.
+		 */
+		const urls = state.mediaUrls.map((u) => resolveMediaUrl(u, origin));
+		const { videos, stills } = splitMediaByKind(urls);
+		config.videoPlaylist = videos;
+		config.screensaverUrls = stills;
+		config.videoUrl = videos[0] ?? '';
 		config.videoIndex = 0;
 	}
 
@@ -156,7 +179,7 @@ export function applyWallState(state: WallState, config: PaneSettings, wallSec: 
 	 * `settings.svelte.ts` already makes for the `?audio=` parameter.
 	 */
 	if ((state.audioUrls ?? []).length > 0) {
-		config.audioPlaylist = state.audioUrls.slice();
+		config.audioPlaylist = state.audioUrls.map((u) => resolveMediaUrl(u, origin));
 		config.audioTrackIndex = 0;
 		config.audioMode = 'playlist';
 		config.audioEnabled = true;

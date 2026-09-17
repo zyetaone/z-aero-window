@@ -255,14 +255,71 @@ describe('audioUrls on the receive side', () => {
 });
 
 describe('mediaUrls on the receive side', () => {
-	it('a push with media fills all three playlist fields', () => {
+	it('a push with media fills the playlist fields', () => {
 		const config = createSettings();
 		applyWallState(state({ mediaUrls: ['/a.mp4', '/b.mp4'], displayMode: 'video' }), config, 100);
 		expect(config.videoPlaylist).toEqual(['/a.mp4', '/b.mp4']);
-		expect(config.screensaverUrls).toEqual(['/a.mp4', '/b.mp4']);
 		expect(config.videoUrl).toBe('/a.mp4');
 		expect(config.videoIndex, 'a new playlist must start at its first track').toBe(0);
 		expect(config.displayMode).toBe('video');
+	});
+
+	/**
+	 * This assertion used to read `toEqual(['/a.mp4', '/b.mp4'])` -- it PINNED
+	 * the bug. One list fed both `videoPlaylist` (a `<video>`) and
+	 * `screensaverUrls` (an `<img>`), so a clip pushed to a pane sitting in
+	 * screensaver mode landed in an `<img src>` and rendered "Media failed to
+	 * load". The old test asserted the two fields were equal, which is exactly
+	 * the property that makes the bug possible, so it could never fail.
+	 */
+	it('sorts a mixed list by what can actually render it', () => {
+		const config = createSettings();
+		applyWallState(
+			state({ mediaUrls: ['/a.mp4', '/b.webp', '/c.webm', '/d.jpg'] }),
+			config,
+			100
+		);
+		expect(config.videoPlaylist).toEqual(['/a.mp4', '/c.webm']);
+		expect(config.screensaverUrls).toEqual(['/b.webp', '/d.jpg']);
+		expect(config.videoUrl).toBe('/a.mp4');
+	});
+
+	it('an extensionless URL goes to both, because nothing says which it is', () => {
+		const config = createSettings();
+		applyWallState(state({ mediaUrls: ['https://cdn.example.com/stream'] }), config, 100);
+		expect(config.videoPlaylist).toEqual(['https://cdn.example.com/stream']);
+		expect(config.screensaverUrls).toEqual(['https://cdn.example.com/stream']);
+	});
+
+	/**
+	 * The three-pane case, which single-pane testing cannot see: a root-relative
+	 * URL resolves against the PANE's origin, but the file lives on the wall
+	 * writer. Without the origin, two of three panes 404.
+	 */
+	it('resolves relative media against the wall origin, and leaves absolute alone', () => {
+		const config = createSettings();
+		applyWallState(
+			state({
+				mediaUrls: ['/api/media/abc123def4567890.mp4', 'https://cdn.example.com/x.mp4'],
+				audioUrls: ['/api/media/0123456789abcdef.mp3']
+			}),
+			config,
+			100,
+			'http://10.0.0.5:3000'
+		);
+		expect(config.videoPlaylist).toEqual([
+			'http://10.0.0.5:3000/api/media/abc123def4567890.mp4',
+			'https://cdn.example.com/x.mp4'
+		]);
+		expect(config.audioPlaylist).toEqual([
+			'http://10.0.0.5:3000/api/media/0123456789abcdef.mp3'
+		]);
+	});
+
+	it('leaves everything alone when the pane polls itself', () => {
+		const config = createSettings();
+		applyWallState(state({ mediaUrls: ['/api/media/abc123def4567890.mp4'] }), config, 100, '');
+		expect(config.videoPlaylist).toEqual(['/api/media/abc123def4567890.mp4']);
 	});
 
 	/**
