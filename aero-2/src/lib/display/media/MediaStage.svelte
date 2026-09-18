@@ -1,9 +1,23 @@
 <script lang="ts">
 	/**
-	 * MediaStage — Fullscreen video player or photo slideshow for non-flight kiosk modes.
-	 * Supports single video loops, video playlists, and image slideshows.
+	 * MediaStage — fullscreen video or photo slideshow for the non-flight modes.
+	 *
+	 * Everything on it is a function of the wall clock: which slide, which
+	 * clip, and how far into the clip. See `use-media-clock.svelte.ts` for the
+	 * video half and the docstring on `slideIndex` for the still half.
+	 *
+	 * Exit: a long press on the stage (ported from aero-1: 1.2 s, 16 px move
+	 * tolerance), or Escape where there is a keyboard. It used to be a bare
+	 * click, which on a wall at shoulder height means anyone brushing past it.
+	 *
+	 * The exit is LOCAL — this pane only. A follower cannot POST /api/wall
+	 * without the admin token, so the honest scope is the same as aero-1's
+	 * long-press: this screen returns to flight, the other two keep playing
+	 * until the next push. The desync signal in the fleet rollup is what makes
+	 * that visible to an operator rather than a surprise.
 	 */
 	import { useDisplay } from '../display.svelte.js';
+	import { useMediaClock } from './use-media-clock.svelte.js';
 
 	const display = useDisplay();
 
@@ -12,7 +26,6 @@
 
 	const mode = $derived(display.config.displayMode);
 
-	// Video playlist calculation
 	const videoList = $derived(
 		display.config.videoPlaylist.length > 0
 			? display.config.videoPlaylist
@@ -20,8 +33,9 @@
 				? [display.config.videoUrl]
 				: []
 	);
-	const activeVideoUrl = $derived(
-		videoList.length > 0 ? videoList[display.config.videoIndex % videoList.length] : ''
+	const video = useMediaClock(
+		() => videoList,
+		() => display.view.wallSec
 	);
 
 	// Image slideshow calculation
@@ -50,52 +64,93 @@
 
 	const currentImageUrl = $derived(playableImages.length > 0 ? playableImages[slideIndex] : '');
 
+	/**
+	 * After total media failure, return to flight so the wall is not stuck on
+	 * a black screen reading "Media failed to load" until someone drives to
+	 * the site. Same 4 s aero-1 uses: long enough to read, short enough that a
+	 * bad URL costs the room a blink rather than an evening.
+	 */
+	const AUTO_FLIGHT_AFTER_MS = 4000;
+	let autoFlightTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function returnToFlight() {
+		display.config.displayMode = 'flight';
+	}
+
 	function markFailed(url: string) {
 		if (!url || failedUrls.includes(url)) return;
 		failedUrls = [...failedUrls, url];
 		if (mode === 'video' || urls.filter((u) => !failedUrls.includes(u)).length === 0) {
 			mediaError = true;
+			if (autoFlightTimer) clearTimeout(autoFlightTimer);
+			autoFlightTimer = setTimeout(returnToFlight, AUTO_FLIGHT_AFTER_MS);
 		}
 	}
 
-	function onVideoEnded() {
-		if (videoList.length > 1) {
-			display.config.videoIndex = (display.config.videoIndex + 1) % videoList.length;
+	const LONG_PRESS_MS = 1200;
+	const LONG_PRESS_MOVE_PX = 16;
+	let pressTimer: ReturnType<typeof setTimeout> | null = null;
+	let pressX = 0;
+	let pressY = 0;
+
+	function clearPress() {
+		if (pressTimer) clearTimeout(pressTimer);
+		pressTimer = null;
+	}
+	function onPointerDown(e: PointerEvent) {
+		pressX = e.clientX;
+		pressY = e.clientY;
+		clearPress();
+		pressTimer = setTimeout(() => {
+			pressTimer = null;
+			returnToFlight();
+		}, LONG_PRESS_MS);
+	}
+	function onPointerMove(e: PointerEvent) {
+		if (pressTimer && Math.hypot(e.clientX - pressX, e.clientY - pressY) > LONG_PRESS_MOVE_PX) {
+			clearPress();
 		}
 	}
+
+	$effect(() => () => {
+		clearPress();
+		if (autoFlightTimer) clearTimeout(autoFlightTimer);
+	});
 </script>
 
 {#if mode !== 'flight'}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		class="media-stage"
 		role="img"
-		aria-label="Media Stage"
-		onclick={() => {
-			display.config.displayMode = 'flight';
-		}}
+		aria-label="Media Stage — hold to return to flight"
+		onpointerdown={onPointerDown}
+		onpointermove={onPointerMove}
+		onpointerup={clearPress}
+		onpointercancel={clearPress}
+		onpointerleave={clearPress}
 	>
 		{#if mode === 'standby'}
 			<div class="standby-screen">
-				<span class="standby-hint">Touch screen or press Escape to wake</span>
+				<span class="standby-hint">Hold the screen or press Escape to wake</span>
 			</div>
 		{:else if mediaError}
 			<div class="empty">
 				Media failed to load
-				<span class="hint">Click or press Escape to return to flight</span>
+				<span class="hint">Returning to flight…</span>
 			</div>
-		{:else if mode === 'video' && activeVideoUrl}
-			<video
-				class="media"
-				src={activeVideoUrl}
-				autoplay
-				muted
-				loop={videoList.length <= 1}
-				playsinline
-				onended={onVideoEnded}
-				onerror={() => markFailed(activeVideoUrl)}
-			></video>
+		{:else if mode === 'video' && video.url}
+			{#key video.url}
+				<video
+					class="media"
+					src={video.url}
+					autoplay
+					muted
+					loop={videoList.length <= 1}
+					playsinline
+					onerror={() => markFailed(video.url)}
+					{@attach video.attach}
+				></video>
+			{/key}
 		{:else if mode === 'screensaver' && currentImageUrl}
 			{#key currentImageUrl}
 				<img
@@ -108,7 +163,7 @@
 		{:else}
 			<div class="empty">
 				No media specified
-				<span class="hint">Click to return to flight</span>
+				<span class="hint">Hold the screen to return to flight</span>
 			</div>
 		{/if}
 	</div>
@@ -123,7 +178,7 @@
 		place-items: center;
 		overflow: hidden;
 		z-index: 25;
-		cursor: pointer;
+		touch-action: none;
 	}
 	.media {
 		width: 100%;

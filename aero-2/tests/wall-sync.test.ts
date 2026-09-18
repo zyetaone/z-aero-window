@@ -210,7 +210,6 @@ describe('audioUrls on the receive side', () => {
 		const config = createSettings();
 		applyWallState(state({ audioUrls: ['/api/media/abc123def4567890.mp3'] }), config, 100);
 		expect(config.audioPlaylist).toEqual(['/api/media/abc123def4567890.mp3']);
-		expect(config.audioTrackIndex, 'a new playlist starts at its first track').toBe(0);
 		expect(config.audioMode, 'tracks with the mode still at synth is two switches for one intent').toBe('playlist');
 		expect(config.audioEnabled).toBe(true);
 	});
@@ -222,7 +221,9 @@ describe('audioUrls on the receive side', () => {
 		applyWallState(push, left, 100);
 		applyWallState(push, right, 100);
 		expect(left.audioPlaylist).toEqual(right.audioPlaylist);
-		expect(left.audioTrackIndex).toBe(right.audioTrackIndex);
+		// Which TRACK is playing is not config at all any more: it is derived
+		// from the wall clock and the playlist (media-clock.test.ts), so two
+		// panes holding the same list at the same second cannot disagree.
 	});
 
 	/**
@@ -260,7 +261,6 @@ describe('mediaUrls on the receive side', () => {
 		applyWallState(state({ mediaUrls: ['/a.mp4', '/b.mp4'], displayMode: 'video' }), config, 100);
 		expect(config.videoPlaylist).toEqual(['/a.mp4', '/b.mp4']);
 		expect(config.videoUrl).toBe('/a.mp4');
-		expect(config.videoIndex, 'a new playlist must start at its first track').toBe(0);
 		expect(config.displayMode).toBe('video');
 	});
 

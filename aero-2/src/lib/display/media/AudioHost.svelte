@@ -8,6 +8,7 @@
 	import { onDestroy } from 'svelte';
 	import { useDisplay } from '../display.svelte.js';
 	import { AmbientAudioEngine } from './ambient-audio.js';
+	import { useMediaClock } from './use-media-clock.svelte.js';
 
 	const display = useDisplay();
 	const synthAudio = new AmbientAudioEngine();
@@ -62,9 +63,17 @@
 		}
 	}
 
-	const currentTrackUrl = $derived(
-		display.config.audioPlaylist[display.config.audioTrackIndex] ?? ''
+	/**
+	 * Which track and how far in, from the wall clock. `audioTrackIndex += 1`
+	 * on `onended` was a per-pane counter: three panes with three HDMI speakers
+	 * in one room played three copies of the soundtrack phasing against each
+	 * other, which is the failure you HEAR. See use-media-clock.svelte.ts.
+	 */
+	const track = useMediaClock(
+		() => display.config.audioPlaylist,
+		() => display.view.wallSec
 	);
+	const currentTrackUrl = $derived(track.url);
 
 	$effect(() => {
 		if (display.config.audioEnabled) {
@@ -94,13 +103,6 @@
 		synthAudio.setAltitude(agl);
 	});
 
-	function onTrackEnded() {
-		if (display.config.audioPlaylist.length > 1) {
-			display.config.audioTrackIndex =
-				(display.config.audioTrackIndex + 1) % display.config.audioPlaylist.length;
-		}
-	}
-
 	onDestroy(() => {
 		synthAudio.destroy();
 		if (audioElement) {
@@ -113,11 +115,13 @@
 <svelte:window onclick={ensureInit} onkeydown={ensureInit} />
 
 {#if display.config.audioMode === 'playlist' && currentTrackUrl}
-	<audio
-		bind:this={audioElement}
-		src={currentTrackUrl}
-		onended={onTrackEnded}
-		loop={display.config.audioPlaylist.length <= 1}
-		preload="auto"
-	></audio>
+	{#key currentTrackUrl}
+		<audio
+			bind:this={audioElement}
+			src={currentTrackUrl}
+			loop={display.config.audioPlaylist.length <= 1}
+			preload="auto"
+			{@attach track.attach}
+		></audio>
+	{/key}
 {/if}

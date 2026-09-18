@@ -225,7 +225,6 @@ export class PaneSettings {
 	videoUrl = $state<string>('');
 	/** Raw for the same reason as `place`: assigned wholesale, never spliced. */
 	videoPlaylist = $state.raw<string[]>([]);
-	videoIndex = $state<number>(0);
 	screensaverUrls = $state.raw<string[]>([]);
 
 	/** Multi-Pi Fleet Parallax Role */
@@ -242,7 +241,6 @@ export class PaneSettings {
 	 */
 	audioMode = $state<AudioMode>('synth');
 	audioPlaylist = $state.raw<string[]>([]);
-	audioTrackIndex = $state<number>(0);
 
 	constructor(initial?: Partial<PaneSettings>) {
 		if (initial) Object.assign(this, initial);
@@ -401,7 +399,6 @@ export class PaneSettings {
 				.map((u) => u.trim())
 				.filter(Boolean);
 			this.audioPlaylist = urls;
-			this.audioTrackIndex = 0;
 			if (urls.length > 0) {
 				this.audioMode = 'playlist';
 				this.audioEnabled = true;

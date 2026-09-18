@@ -123,7 +123,6 @@ describe('readSettings', () => {
 	it('takes the audio playlist from the URL and switches to playlist mode', () => {
 		const p = paramsFor('?audio=/rain.ogg,/wind.ogg');
 		expect(p.audioPlaylist).toEqual(['/rain.ogg', '/wind.ogg']);
-		expect(p.audioTrackIndex).toBe(0);
 		// A URL naming files with the mode still on `synth` is two switches for
 		// one intent, and the files would never be heard.
 		expect(p.audioMode).toBe('playlist');

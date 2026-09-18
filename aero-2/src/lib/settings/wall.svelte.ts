@@ -164,7 +164,6 @@ export function applyWallState(
 		config.videoPlaylist = videos;
 		config.screensaverUrls = stills;
 		config.videoUrl = videos[0] ?? '';
-		config.videoIndex = 0;
 	}
 
 	/**
@@ -180,7 +179,6 @@ export function applyWallState(
 	 */
 	if ((state.audioUrls ?? []).length > 0) {
 		config.audioPlaylist = state.audioUrls.map((u) => resolveMediaUrl(u, origin));
-		config.audioTrackIndex = 0;
 		config.audioMode = 'playlist';
 		config.audioEnabled = true;
 	}
