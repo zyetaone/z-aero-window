@@ -2,17 +2,33 @@
 
 Circadian-aware digital airplane window display built with SvelteKit, Cesium, and CSS effect layers for Raspberry Pi kiosk deployments.
 
-**Zyeta product · engineered by [rdtect](https://github.com/rdtect)** — attribution SSOT: `src/lib/credits.ts`. Stakeholder docs (architecture, terms, lifecycle, credits): **`/wiki`**.
+**Zyeta product · engineered by [rdtect](https://github.com/rdtect)** — attribution SSOT: `credits.ts` in each app's `src/lib/`. Stakeholder docs (architecture, terms, lifecycle, credits): **`/wiki`**.
+
+## Two apps
+
+This repo holds two applications, and the root is neither — **there is no root
+`package.json`**, so every `bun run ...` below must be run from one of them.
+
+| Path | What it is |
+| --- | --- |
+| `aero-1/` | v1 — Cesium + Threlte. Feature-complete, and **what the Pi fleet runs today**. |
+| `aero-2/` | The rewrite — MapLibre + Three, ADR-007 wall sync. Pre-ship. |
+| `data/` `deploy/` `docs/` | Shared, at the root. `data/` is symlinked into `aero-1/`. |
+
+A measured comparison of the two is in `docs/AERO-1-VS-AERO-2.md`.
 
 ## Quick start
 
 ```bash
+cd aero-1          # or aero-2
 bun install
-cp .env.example .env
+cp .env.example .env   # each app has its own
 bun run dev
 ```
 
 ## Commands
+
+Run from `aero-1/` or `aero-2/`. At the root they fail with "Script not found".
 
 | Command | Purpose |
 | --- | --- |
@@ -26,6 +42,9 @@ bun run dev
 
 ## Environment
 
+aero-1's variables. aero-2 declares its public ones in `aero-2/src/env.ts`
+(inlined at build time) — see `aero-2/AGENTS.md`.
+
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `VITE_CESIUM_ION_TOKEN` | Build-time | Cesium terrain and Ion-backed assets. Stays on the build machine; never shipped to Pis. |
@@ -36,15 +55,17 @@ bun run dev
 | `AERO_WIFI_RESET_TOKEN` | Pi runtime | Bearer-token gate for `POST /api/wifi/reset`. Same fail-closed pattern. |
 | `AERO_PUSH_WORKER_URL` | No | Optional Cloudflare Worker URL for OTA bundle/config push |
 
-## Root layout
+## Layout
 
-- `src/` — app state, simulation engines, routes, and UI
-- `static/` — runtime assets such as models, textures, and the service worker
+At the repo root:
+
+- `aero-1/`, `aero-2/` — the two apps; each holds its own `src/`, `static/`,
+  `scripts/`, `server.ts` and `package.json`
 - `docs/` — ADRs, codemaps, standards, and reference notes
 - `deploy/` — Raspberry Pi provisioning and updater scripts
-- `scripts/` — one-off local asset and offline tile helper scripts
-- `server.ts` — Bun runtime entrypoint for production/fleet use
-- `CLAUDE.md`, `.agent/`, `.jules/`, `.serena/` — repo-local automation and agent metadata
+- `data/` — tiles and generated assets (gitignored; symlinked into `aero-1/`)
+- `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.claude/`, `.serena/` — agent instructions
+  and repo-local automation
 
 ## Key docs
 

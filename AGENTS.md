@@ -28,7 +28,7 @@
 
 ## Project Overview
 
-Aero Dynamic Window renders a **circadian-aware digital airplane window display** for office wellbeing. It composites CesiumJS globe/terrain/buildings with an optional Three.js photoreal overlay, CSS effect layers, and cabin chrome (oval frame, blind, wing silhouette). Designed for **Raspberry Pi 5 fleet deployment** in headless Chromium kiosk mode. Active branch: `hybrid-v2`.
+Aero Dynamic Window renders a **circadian-aware digital airplane window display** for office wellbeing. It composites CesiumJS globe/terrain/buildings with an optional Three.js photoreal overlay, CSS effect layers, and cabin chrome (oval frame, blind, wing silhouette). Designed for **Raspberry Pi 5 fleet deployment** in headless Chromium kiosk mode. Work lands on `main`; the fleet updater tracks `release`, which CI fast-forwards only from a green `main`.
 
 ## Architecture & Data Flow
 
@@ -36,7 +36,7 @@ Aero Dynamic Window renders a **circadian-aware digital airplane window display*
 
 ```
 Cesium globe (terrain, buildings, VIIRS night-lights, post-process color grade)
-  └── Three.js overlay (clouds, wing, sky-extras, neon, postprocess) — flag-gated, default OFF
+  └── Three.js overlay (clouds, wing, sky-extras, neon, postprocess) — flag-gated, default ON
        └── CSS effect layers (haze, artsy clouds, rain, lightning, frost, micro-events)
             └── Shell chrome (oval window frame, blind, glass vignette, HUD)
 ```
