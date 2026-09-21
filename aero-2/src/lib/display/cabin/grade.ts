@@ -25,7 +25,13 @@ export interface GradeWash {
 
 /** Peak opacities: washes, not filters — the world stays readable. */
 export const GRADE_WARM_MAX = 0.14;
-export const GRADE_COOL_MAX = 0.16;
+/**
+ * Zero since 2026-09-21: a 16% blue wash over black lifts the night floor to
+ * navy, which is the opposite of the Feb look (void, then lights). Kept as a
+ * knob rather than deleted so Grade.svelte's shape stays; raise it only if the
+ * night reads flat on hardware.
+ */
+export const GRADE_COOL_MAX = 0;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 

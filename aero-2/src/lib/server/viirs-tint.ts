@@ -95,11 +95,22 @@ export function tintViirs(pngBytes: Uint8Array): Uint8Array {
 				}
 			}
 			const grain = grainValue(x & ~1, y & ~1) / 255;
-			const mult = 0.8 + 0.4 * grain;
+			// Colour scales with luminance too (Feb: light = colour * lum): mids dim, cores bright.
+			const mult = (0.8 + 0.4 * grain) * (0.35 + 0.65 * t * t);
 			out.data[i] = Math.max(0, Math.min(255, Math.round(r * mult)));
 			out.data[i + 1] = Math.max(0, Math.min(255, Math.round(g * mult)));
 			out.data[i + 2] = Math.max(0, Math.min(255, Math.round(b * mult)));
-			out.data[i + 3] = Math.round((inA / 255) * Math.pow(t, 0.8) * 255);
+			/**
+			 * Alpha knee at 0.35..0.75, not lum^0.8. z8 VIIRS over a conurbation is
+			 * mid-bright almost everywhere (Dubai: ~4 in 5 pixels above 0.12), so a
+			 * low floor pasted a cream sheet over the city. Feb's Cesium look kept
+			 * only the top of the range (contrast 1.8 + colorToAlpha + lum<0.2
+			 * crush); this is that threshold as one smoothstep. Measured
+			 * 2026-09-21, same frozen viewpoint: cores and road filaments over a
+			 * dark city instead of a blanket.
+			 */
+			const k = Math.max(0, Math.min(1, (t - 0.35) / 0.4));
+			out.data[i + 3] = Math.round((inA / 255) * (k * k * (3 - 2 * k)) * 255);
 		}
 	}
 	return new Uint8Array(PNG.sync.write(out));
