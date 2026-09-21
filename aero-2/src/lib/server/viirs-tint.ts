@@ -36,7 +36,7 @@ import { grainValue } from './grain.js';
 type RGB = readonly [number, number, number];
 const DEEP: RGB = [120, 60, 20];
 const MID: RGB = [255, 150, 60];
-const TOP: RGB = [255, 205, 140];
+const TOP: RGB = [250, 170, 80];
 
 function lerp(a: number, b: number, t: number): number {
 	return a + (b - a) * t;
@@ -77,9 +77,9 @@ export function tintViirs(pngBytes: Uint8Array): Uint8Array {
 				if (h < 0.6) {
 					// Sodium/amber majority: as ramped.
 				} else if (h < 0.78) {
-					r = lerp(r, 255, 0.5);
-					g = lerp(g, 232, 0.5);
-					b = lerp(b, 205, 0.5);
+					r = lerp(r, 255, 0.3);
+					g = lerp(g, 232, 0.3);
+					b = lerp(b, 205, 0.3);
 				} else if (h < 0.9) {
 					r = lerp(r, 205, 0.45);
 					g = lerp(g, 222, 0.45);
@@ -96,7 +96,7 @@ export function tintViirs(pngBytes: Uint8Array): Uint8Array {
 			}
 			const grain = grainValue(x & ~1, y & ~1) / 255;
 			// Colour scales with luminance too (Feb: light = colour * lum): mids dim, cores bright.
-			const mult = (0.8 + 0.4 * grain) * (0.35 + 0.65 * t * t);
+			const mult = (0.8 + 0.4 * grain) * (0.25 + 0.6 * t * t);
 			out.data[i] = Math.max(0, Math.min(255, Math.round(r * mult)));
 			out.data[i + 1] = Math.max(0, Math.min(255, Math.round(g * mult)));
 			out.data[i + 2] = Math.max(0, Math.min(255, Math.round(b * mult)));
