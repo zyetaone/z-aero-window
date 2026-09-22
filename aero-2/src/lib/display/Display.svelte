@@ -50,6 +50,23 @@
 
 	const display = useDisplay();
 
+	/**
+	 * Night grade on the world, before the cabin chrome is drawn over it.
+	 *
+	 * Continuous in `display.night` (ADR-007: a function of the wall clock, so
+	 * three panes agree and dusk ramps instead of popping). At full night it is
+	 * contrast 1.3 / saturate 0.85 / brightness 0.9, which took the 6 km Dubai
+	 * frame from a flat grey-green wash to amber filaments on a near-black void
+	 * in the Sep-22 A/B against the Feb-18 Cesium reference. A compositor colour
+	 * matrix, not a render pass: no measurable frame cost on the Mac, Pi unmeasured.
+	 * Rounded to 0.01 so the style attribute is not rewritten every frame.
+	 */
+	const nightGrade = $derived.by(() => {
+		const n = Math.round(display.night * 100) / 100;
+		if (n <= 0) return 'none';
+		return `contrast(${1 + 0.3 * n}) saturate(${1 - 0.15 * n}) brightness(${1 - 0.1 * n})`;
+	});
+
 	function onStageError(error: unknown) {
 		console.error('[AeroDisplay] 3D World Stage error caught by boundary:', error);
 	}
@@ -327,7 +344,12 @@
 <div class="aero-display">
 	<!-- 3D World protected by Svelte 5 Error Boundary -->
 	<svelte:boundary onerror={onStageError}>
-		<Stage />
+		<!-- Sized explicitly: a non-none filter makes this the containing block for
+		     Stage's absolutely positioned canvas, so an unsized wrapper would collapse
+		     it to zero height the moment night begins. -->
+		<div class="world-graded" style:filter={nightGrade}>
+			<Stage />
+		</div>
 
 		<!-- Inside the boundary, like the rest of the 3D world: Clouds runs its
 		     own WebGL context and can lose it exactly the way Stage can. It sat
@@ -396,6 +418,10 @@
 		background: #000;
 		overflow: hidden;
 		user-select: none;
+	}
+	.world-graded {
+		position: absolute;
+		inset: 0;
 	}
 	.stage-error-fallback {
 		position: absolute;
