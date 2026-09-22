@@ -38,8 +38,11 @@
 	import { IMAGERY_GRADE, TILE_MAXZOOM, TILE_SIZE, tileTemplates } from '#lib/settings/tiles.js';
 	import { PUBLIC_TILE_SERVER_URL } from '$app/env/public';
 	import { useDisplay } from '../display.svelte.js';
+	import { NIGHT_VECTOR_TOP_M } from './sun.js';
 
 	const display = useDisplay();
+	/** Metres above the road-lamp handover over which the cruise exposure ramps in. */
+	const CRUISE_EXPOSURE_SPAN_M = 4000;
 	// PUBLIC_TILE_SERVER_URL, so a pane can read tiles from a peer on the wall.
 	const tiles = tileTemplates(PUBLIC_TILE_SERVER_URL);
 
@@ -54,6 +57,23 @@
 	 * layers arriving on different ramps would read as one of them lagging.
 	 */
 	const nightLightOpacity = $derived(Math.min(0.9, night ** 1.5));
+
+	/**
+	 * Exposure with altitude. VIIRS stops at z8, about 470 m a pixel, so from
+	 * cruise a city is a solid orange sheet of stretched pixels. A passenger
+	 * sees the opposite: the higher you are, the more the city collapses to
+	 * its bright cores with black between. Above the vector handover the
+	 * raster dims, gains contrast (crushes its dim skirt) and loses its
+	 * brightest cream. Values poked live at 12 km over Dubai on 2026-09-22
+	 * under the committed world grade. The ramp starts where the road lamps
+	 * hand over (NIGHT_VECTOR_TOP_M) and is full 4 km above it.
+	 */
+	const cruise = $derived(
+		Math.max(0, Math.min(1, (display.view.aglM - NIGHT_VECTOR_TOP_M) / CRUISE_EXPOSURE_SPAN_M))
+	);
+	const viirsOpacity = $derived(nightLightOpacity * (1 - 0.6 * cruise));
+	const viirsContrast = $derived(0.55 * cruise);
+	const viirsBrightnessMax = $derived(1 - 0.3 * cruise);
 </script>
 
 <!-- VIIRS is a black frame with bright cities, so over ground the grade has
@@ -70,7 +90,9 @@
 	>
 		<RasterLayer
 			paint={{
-				'raster-opacity': nightLightOpacity,
+				'raster-opacity': viirsOpacity,
+				'raster-contrast': viirsContrast,
+				'raster-brightness-max': viirsBrightnessMax,
 				'raster-fade-duration': IMAGERY_GRADE.fadeDuration,
 				'raster-resampling': IMAGERY_GRADE.resampling
 			}}
