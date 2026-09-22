@@ -76,8 +76,9 @@ while [[ $# -gt 0 ]]; do
 		--group)  AERO_GROUP="$2"; shift 2 ;;
 		--branch) REPO_BRANCH="$2"; shift 2 ;;
 		--units-only) UNITS_ONLY=true; shift ;;
+		--app)    AERO_APP_SUBDIR="$2"; shift 2 ;;
 		--help|-h)
-			echo "Usage: install.sh [--role left|center|right|solo] [--group <id>] [--branch <git-branch>] [--units-only]"
+			echo "Usage: install.sh [--role left|center|right|solo] [--group <id>] [--branch <git-branch>] [--app aero-1|aero-2] [--units-only]"
 			exit 0 ;;
 		*)  echo "Unknown argument: $1" >&2; exit 1 ;;
 	esac
@@ -88,6 +89,27 @@ if [[ $EUID -ne 0 ]]; then
 	exit 1
 fi
 
+# Which application this Pi runs. The repo holds two (aero-1/, aero-2/) and the
+# root has no package.json, so the choice must be explicit and it must be made
+# BEFORE step 4 builds — the build used to run at INSTALL_DIR, which has nothing
+# to build, and the updater's fallback chain then served aero-1 to a Pi that was
+# meant to run aero-2. Precedence: --app / AERO_APP_SUBDIR, then whatever this
+# Pi's config.env already says (so --units-only never flips a fielded Pi), then
+# aero-2 for a fresh install. The value is written into config.env by step 5
+# and read by aero-updater.sh on every run; it is deliberately NOT in the
+# additive block below, so an OTA run cannot cut a fielded aero-1 Pi over.
+if [[ -z "${AERO_APP_SUBDIR:-}" && -f /etc/aero/config.env ]]; then
+	AERO_APP_SUBDIR="$(command grep -oP '^AERO_APP_SUBDIR=\K.*' /etc/aero/config.env 2>/dev/null || true)"
+fi
+if [[ -z "${AERO_APP_SUBDIR:-}" ]]; then
+	if [[ -f "${INSTALL_DIR}/aero-1/build/index.js" && ! -f "${INSTALL_DIR}/aero-2/build/index.js" ]]; then
+		AERO_APP_SUBDIR="aero-1"   # fielded Pi with no record: keep what it runs; --app aero-2 is the cutover
+	else
+		AERO_APP_SUBDIR="aero-2"
+	fi
+fi
+APP_DIR="${INSTALL_DIR}/${AERO_APP_SUBDIR}"
+
 echo "============================================"
 echo "  Aero Window — Pi 5 Installer"
 echo "============================================"
@@ -96,6 +118,7 @@ echo "Group:   ${AERO_GROUP}"
 echo "Branch:  ${REPO_BRANCH}"
 echo "User:    ${PI_USER}"
 echo "Target:  ${INSTALL_DIR}"
+echo "App:     ${AERO_APP_SUBDIR}"
 echo ""
 
 if [[ "${UNITS_ONLY}" == true ]]; then
@@ -185,7 +208,7 @@ else
 	echo "           Re-run as: sudo VITE_CESIUM_ION_TOKEN=... bash $0 ..."
 fi
 
-sudo -u "${PI_USER}" bash -c "cd '${INSTALL_DIR}' && '${BUN_BIN}' install"
+sudo -u "${PI_USER}" bash -c "cd '${APP_DIR}' && '${BUN_BIN}' install"
 # VITE_* are compile-time in Vite, so they must be present HERE — this build
 # runs before /etc/aero/config.env is written (step 5), and would otherwise
 # bake in "no local tile server" no matter what config.env later says. Passed
@@ -208,7 +231,7 @@ if [[ -f /etc/aero/config.env ]]; then
 	EXISTING_MEDIA_ORIGINS="$(command grep -oP '^AERO_MEDIA_ORIGINS=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 	EXISTING_WALL_ORIGIN="$(command grep -oP '^PUBLIC_WALL_ORIGIN=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 fi
-sudo -u "${PI_USER}" bash -c "cd '${INSTALL_DIR}' && VITE_TILE_SERVER_URL='${VITE_TILE_SERVER_URL:-/api/tiles}' AERO_MEDIA_ORIGINS='${AERO_MEDIA_ORIGINS:-${EXISTING_MEDIA_ORIGINS}}' PUBLIC_WALL_ORIGIN='${PUBLIC_WALL_ORIGIN:-${EXISTING_WALL_ORIGIN}}' '${BUN_BIN}' run build"
+sudo -u "${PI_USER}" bash -c "cd '${APP_DIR}' && VITE_TILE_SERVER_URL='${VITE_TILE_SERVER_URL:-/api/tiles}' AERO_MEDIA_ORIGINS='${AERO_MEDIA_ORIGINS:-${EXISTING_MEDIA_ORIGINS}}' PUBLIC_WALL_ORIGIN='${PUBLIC_WALL_ORIGIN:-${EXISTING_WALL_ORIGIN}}' '${BUN_BIN}' run build"
 
 # ─── Step 5: Write environment config ─────────────────────────────────────────
 
@@ -329,6 +352,7 @@ AERO_FLEET_TOKEN=${EXISTING_FLEET_TOKEN}
 AERO_WIFI_RESET_TOKEN=${EXISTING_WIFI_RESET_TOKEN}
 AERO_BUN_BIN=${BUN_BIN}
 AERO_BRANCH=release
+AERO_APP_SUBDIR=${AERO_APP_SUBDIR}
 TILE_DIR=${TILE_DIR_VALUE}
 CESIUM_ION_TOKEN=${EXISTING_ION_TOKEN}
 # Client-side base for the packaged tile cache. Vite inlines VITE_* at BUILD
@@ -411,17 +435,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # a unit that assumes they still are runs `bun run serve` somewhere with no
 # package.json.
 #
-# Detected, not hardcoded, so re-running the installer on an already-fielded
-# Pi does the right thing whichever layout that Pi is on.
-if [[ -n "${AERO_APP_SUBDIR:-}" ]]; then
-	APP_DIR="${INSTALL_DIR}/${AERO_APP_SUBDIR}"
-elif [[ -f "${INSTALL_DIR}/package.json" ]]; then
-	APP_DIR="${INSTALL_DIR}"
-elif [[ -f "${INSTALL_DIR}/aero-1/package.json" ]]; then
-	APP_DIR="${INSTALL_DIR}/aero-1"
-else
-	APP_DIR="${INSTALL_DIR}"
-fi
+# Chosen once at the top of this script (--app, then config.env, then the
+# fresh-install default), so re-running the installer on an already-fielded
+# Pi keeps whichever app that Pi already runs.
+# APP_DIR was resolved once, right after argument parsing (see there), so the
+# build in step 4 and the units here cannot disagree about which app this is.
 echo "  app directory: ${APP_DIR}"
 
 for unit in aero-xserver.service aero-app.service aero-kiosk.service aero-updater.service; do

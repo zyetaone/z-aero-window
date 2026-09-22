@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/zyetaone/z-aero-window/main/deploy/
 Or locally from a checkout on the Pi:
 
 ```bash
-sudo bash deploy/pi/install.sh --role center --group corridor-a
+sudo bash deploy/pi/install.sh --role center --group corridor-a --app aero-2
 ```
 
 Arguments:
