@@ -8,6 +8,7 @@
  */
 
 import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import type { RequestHandler } from './$types';
 import {
 	parseRange,
@@ -19,6 +20,7 @@ import {
 } from '#lib/server/tiles.js';
 import { corsPreflight, lanCorsHeaders } from '#lib/server/cors.js';
 import { safeResolveWithin } from '#lib/server/fs-guard.js';
+import { tintViirs } from '#lib/server/viirs-tint.js';
 
 const TILE_DIR = resolveTileDir().replace(/\/$/, '') + '/';
 
@@ -219,6 +221,50 @@ async function resolveTileResponse(
 	return null;
 }
 
+/**
+ * VIIRS serves tinted, never raw.
+ *
+ * The frame is EDF-white at the cores; the client has no color ramp
+ * (`raster-color` is not a MapLibre paint), so the mask is baked here:
+ * luminance → amber alpha + grain tooth (server/viirs-tint.ts). Local pack
+ * and dev remote fallback flow through the same tint, one look everywhere.
+ * Reads the whole tile (they are tens of KB) because tinting is per-pixel;
+ * the immutable cache header means each address pays that once.
+ */
+async function serveViirsTile(
+	wmtsPath: string,
+	cors: Record<string, string>
+): Promise<Response | null> {
+	let bytes: Uint8Array | null = null;
+	const local = safeResolveWithin(TILE_DIR, wmtsPath);
+	if (!local.forbidden && !local.notFound) {
+		try {
+			bytes = new Uint8Array(await readFile(local.filePath));
+		} catch {
+			bytes = null;
+		}
+	}
+	if (!bytes && remoteFallbackEnabled()) {
+		const remote = remoteTileUrl(wmtsPath);
+		if (remote) {
+			try {
+				const res = await fetch(remote, { signal: AbortSignal.timeout(REMOTE_TIMEOUT_MS) });
+				if (res.ok) bytes = new Uint8Array(await res.arrayBuffer());
+			} catch {
+				bytes = null;
+			}
+		}
+	}
+	if (!bytes) return null;
+	try {
+		bytes = tintViirs(bytes);
+	} catch {
+		// Fail open to the raw frame rather than 500ing the city lights.
+	}
+	const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+	return serveTile(body as ArrayBuffer, 'image/png', cors);
+}
+
 export const OPTIONS: RequestHandler = corsPreflight('GET, OPTIONS');
 
 export const GET: RequestHandler = async ({ params, request }) => {
@@ -235,6 +281,13 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	const wmtsPath = xyzMatch
 		? `${xyzMatch[1]}/${xyzMatch[2]}/${xyzMatch[4]}/${xyzMatch[3]}.${xyzMatch[5]}`
 		: path;
+
+	const layer = xyzMatch ? xyzMatch[1] : path.split('/')[0];
+	if (layer === 'viirs') {
+		const tinted = await serveViirsTile(wmtsPath, cors);
+		if (tinted) return tinted;
+		return new Response('Not found', { status: 404, headers: cors });
+	}
 
 	const hit = await resolveTileResponse(
 		wmtsPath,
