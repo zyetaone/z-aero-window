@@ -199,7 +199,7 @@
 				'line-color': color,
 				'line-width': bloomWidth,
 				'line-blur': 3,
-				'line-opacity': 0.3 * glow
+				'line-opacity': 0.1 * glow
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>
@@ -208,7 +208,9 @@
 			paint={{
 				'line-color': color,
 				'line-width': width,
-				'line-opacity': 0.85 * glow
+				'line-opacity': 0.85 * glow,
+				// ponytail: lamps are dots, not a lit ribbon; [0,2] with round caps is one dot per width
+				'line-dasharray': [0, 2]
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>
