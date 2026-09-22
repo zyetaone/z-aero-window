@@ -360,12 +360,24 @@ export class AeroDisplay {
 			this.#cruiseFrom = null;
 			return next;
 		}
+		// Named fields, NOT `{ ...this.config }`. PaneSettings is a runes class,
+		// so its fields are prototype accessors and a spread copies none of
+		// them: azimuth and pitch arrived undefined, the old pose's target went
+		// NaN, and MapLibre threw on the first frame of every rotation hop.
+		// Pinned captures (`?place=`) never cross a boundary, which is how the
+		// crash survived every visual A/B until the blind-drop hop was filmed.
+		const c = this.config;
 		const old = calculateCameraView(wallSec, {
-			...this.config,
 			place: from.place,
 			floorM: from.floorM,
 			ceilingM: from.ceilingM,
-			direction: from.direction
+			direction: from.direction,
+			azimuthDeg: c.azimuthDeg,
+			pitchDeg: c.pitchDeg,
+			speed: c.speed,
+			clockOffsetH: c.clockOffsetH,
+			fleetRole: c.fleetRole,
+			weather: c.weather
 		});
 		old.groundM = next.groundM;
 		return blendViews(old, next, t);
