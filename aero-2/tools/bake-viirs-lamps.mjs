@@ -26,6 +26,7 @@
  * Deterministic and idempotent: same packs, same bytes. Existing tiles are
  * skipped unless --force. Re-run after any roads or VIIRS refresh:
  *   node tools/bake-viirs-lamps.mjs [city ...] [--force] [--zooms 9,10,11]
+ *   node tools/bake-viirs-lamps.mjs --self-check   # synthetic parent + road, no data/
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
@@ -266,6 +267,32 @@ function bakeCity(name) {
 		`  ${name}: ${features.length} roads → lamps ${counts.lamps}, passthrough ${counts.passthrough}, no z8 parent ${counts['no-parent']}, skipped ${counts.skipped} (${((Date.now() - t0) / 1000).toFixed(1)}s)`
 	);
 }
+
+/** One runnable check with no data dependency: a flat parent and one road
+ * must bake to mostly-dark pixels with lamps brighter than the parent. The
+ * first real bake failed exactly this (a clipping gain lifted the floor). */
+function selfCheck() {
+	const parent = new PNG({ width: SIZE, height: SIZE });
+	parent.data.fill(128);
+	parentCache.set('0/0', parent);
+	const z = 11;
+	const road = { properties: { class: 'primary', glow: 1 }, px: {}, bboxPx: {} };
+	const x0 = 0, y0 = 0;
+	road.px[z] = [[x0 * SIZE + 10, y0 * SIZE + 128], [x0 * SIZE + 246, y0 * SIZE + 128]];
+	road.bboxPx[z] = [x0 * SIZE + 10, y0 * SIZE + 128, x0 * SIZE + 246, y0 * SIZE + 128];
+	const radiance = upsampledRadiance(z, 0, 0);
+	const mask = lampMask([road], z, 0, 0, 25);
+	let dark = 0, max = 0;
+	for (let i = 0; i < SIZE * SIZE; i++) {
+		const v = radiance[i] * (FLOOR + (DOT_GAIN - FLOOR) * mask[i]);
+		if (v < 32) dark++;
+		if (v > max) max = v;
+	}
+	const ok = dark / (SIZE * SIZE) > 0.8 && max > 128;
+	console.log(`self-check: dark ${(dark / 65536).toFixed(3)} max ${max.toFixed(0)} → ${ok ? 'ok' : 'FAIL'}`);
+	process.exit(ok ? 0 : 1);
+}
+if (args.includes('--self-check')) selfCheck();
 
 const cities = cityArgs.length
 	? cityArgs
