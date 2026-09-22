@@ -212,13 +212,13 @@ describe('downtown thread in production config', () => {
 	 * The thread tests above pin `?speed=1` so the wall second maps 1:1 onto
 	 * the climb. The kiosk flies at 4x, where the pass window (240 s slots)
 	 * and the climb (900/4 = 225 s) beat against each other — so this asserts
-	 * the beat actually lands: at wallSec 2250 the slot phase is 90
-	 * (mid-pass) and the climb is at its floor (gate open).
+	 * the beat actually lands: at wallSec 675 the slot phase is 75 (mid-pass,
+	 * DWELL_SEC = 600) and the climb is at its floor (gate open).
 	 */
 	it('threads at default speed, not just at speed=1', () => {
 		for (const id of ['hyderabad', 'denver']) {
 			const place = Location.byId(id);
-			const v = calculateCameraView(2250, paramsFor(`?place=${id}`));
+			const v = calculateCameraView(675, paramsFor(`?place=${id}`));
 			expect(kmBetween(v.lat, v.lon, place.lat, place.lon), `${id} off-thread`).toBeLessThan(
 				6
 			);

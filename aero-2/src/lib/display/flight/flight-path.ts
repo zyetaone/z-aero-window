@@ -105,8 +105,8 @@ export const CLIMB_PERIOD_SEC = 900;
  *
  * Content pacing, not mechanism: v1's director ran ~2:10 per location, tuned
  * for passers-by rather than the desk-workers this installation actually sits
- * in front of. Four minutes is a starting point for a calmer room, and it is
- * one number to change.
+ * in front of. Ten minutes, the middle of the fielded aero-1 band (7 to 15),
+ * and it is one number to change.
  *
  * Lives here, not in the director, for two compounding reasons. The view
  * layer cannot import the director without closing an import cycle
@@ -117,7 +117,29 @@ export const CLIMB_PERIOD_SEC = 900;
  * reactive layer. Re-exported from the director so its importers do not
  * churn.
  */
-export const DWELL_SEC = 240;
+export const DWELL_SEC = 600;
+
+/**
+ * The blind comes down for the hop, the way aero-1 staged every location
+ * change: shut on departure, open on arrival. Nothing "flies" between
+ * cities; the passenger looks at the shade for a moment and the world has
+ * moved on when it lifts. A pure function of the wall clock, so three panes
+ * close and open on the same second without exchanging anything.
+ *
+ * LEAD hides the last seconds of the old place; LAG covers the new place's
+ * tile draw. LAG is sized for a Pi, not a Mac: lifting on a half-drawn
+ * city is the one failure a wall cannot hide, and three panes lifting at
+ * different moments would be worse, which is why this is a constant and
+ * not a tiles-loaded gate.
+ */
+export const BLIND_LEAD_SEC = 6;
+export const BLIND_LAG_SEC = 12;
+
+/** Is the automatic blind down at this second? Closed across every slot boundary. */
+export function blindClosedAt(wallSec: number): boolean {
+	const phase = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
+	return phase >= DWELL_SEC - BLIND_LEAD_SEC || phase < BLIND_LAG_SEC;
+}
 
 const TWO_PI = Math.PI * 2;
 const M_PER_DEG_LAT = 111_320;

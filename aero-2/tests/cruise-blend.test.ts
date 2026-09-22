@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { DWELL_SEC } from '#lib/display/flight/flight-path.js';
 import { blendViews, calculateCameraView } from '#lib/display/flight/view.js';
 import { windDriftAngle } from '#lib/display/flight/flight-path.js';
 import { readSettings } from '#lib/settings/settings.svelte.js';
@@ -68,7 +69,7 @@ describe('windDriftAngle', () => {
  * The glide must start where every pane can compute, not where each one looked.
  */
 describe('cruiseStartSec', () => {
-	const DWELL = 240;
+	const DWELL = DWELL_SEC;
 
 	it('snaps a slot-driven change back to the boundary', () => {
 		const boundary = 1_788_940_080 - (1_788_940_080 % DWELL);

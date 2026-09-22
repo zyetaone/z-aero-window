@@ -6,7 +6,8 @@ import {
 	DWELL_SEC
 } from '../src/lib/display/flight/director.svelte.js';
 import { createSettings } from '../src/lib/settings/settings.svelte.js';
-import { LOCATIONS } from '../src/lib/settings/locations.js';
+import { ROTATION } from '../src/lib/settings/locations.js';
+import { blindClosedAt, BLIND_LAG_SEC, BLIND_LEAD_SEC } from '../src/lib/display/flight/flight-path.js';
 
 /**
  * These replace tests that asserted `currentDestinationIndex` walked 0, 1, 2.
@@ -41,11 +42,23 @@ describe('the destination is derived, not decided', () => {
 		expect(destinationAt(DWELL_SEC, seed).id).not.toBe(first);
 	});
 
-	it('visits every location in the catalog over a full rotation', () => {
+	it('visits every rotation stop over a full rotation', () => {
 		const seed = rotationSeedFor(0);
 		const seen = new Set<string>();
-		for (let i = 0; i < LOCATIONS.length; i++) seen.add(destinationAt(i * DWELL_SEC, seed).id);
-		expect(seen.size).toBe(LOCATIONS.length);
+		for (let i = 0; i < ROTATION.length; i++) seen.add(destinationAt(i * DWELL_SEC, seed).id);
+		expect(seen.size).toBe(ROTATION.length);
+	});
+
+	it('drops the blind across every slot boundary and nowhere else', () => {
+		for (let slot = 0; slot < 4; slot++) {
+			const boundary = slot * DWELL_SEC;
+			expect(blindClosedAt(boundary - 1), 'lead').toBe(true);
+			expect(blindClosedAt(boundary), 'boundary').toBe(true);
+			expect(blindClosedAt(boundary + BLIND_LAG_SEC - 1), 'lag').toBe(true);
+			expect(blindClosedAt(boundary + BLIND_LAG_SEC), 'lifted').toBe(false);
+			expect(blindClosedAt(boundary + DWELL_SEC / 2), 'mid-slot').toBe(false);
+			expect(blindClosedAt(boundary + DWELL_SEC - BLIND_LEAD_SEC - 1), 'before lead').toBe(false);
+		}
 	});
 
 	/**
@@ -78,8 +91,12 @@ describe('the director moves the whole envelope, not just the place', () => {
 		const settings = createSettings();
 		const director = new FlightDirector(settings);
 
-		const target = director.destinationFor(DWELL_SEC * 6);
-		director.tick(DWELL_SEC * 6);
+		// A slot whose stop is not the place the settings start on, else setPlace
+		// is rightly skipped and there is no envelope move to observe.
+		let slot = 6;
+		while (director.destinationFor(DWELL_SEC * slot).id === settings.place.id) slot++;
+		const target = director.destinationFor(DWELL_SEC * slot);
+		director.tick(DWELL_SEC * slot);
 
 		expect(settings.place.id).toBe(target.id);
 		expect(settings.floorM).toBe(target.climbFloorM);

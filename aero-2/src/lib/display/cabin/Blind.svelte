@@ -9,7 +9,7 @@
 	const display = useDisplay();
 	const blind = useBlind(display);
 
-	const showDiscoverable = $derived(!display.config.blindOpen && !blind.hasAnimated);
+	const showDiscoverable = $derived(!display.blindOpen && !blind.hasAnimated);
 </script>
 
 <div class="blind-clip" {@attach blind.attach}>
@@ -29,7 +29,7 @@
 		aria-valuemax={105}
 		style:transform={blind.transform}
 		style:transition={blind.transition}
-		style:pointer-events={display.config.blindOpen ? 'none' : 'auto'}
+		style:pointer-events={display.blindOpen ? 'none' : 'auto'}
 	>
 		<div class="blind-slats"></div>
 		<BlindInfoCard />
@@ -42,7 +42,7 @@
 		{/if}
 	</div>
 
-	{#if display.config.blindOpen}
+	{#if display.blindOpen}
 		<div
 			class="blind-grab"
 			onpointerdown={blind.onPointerDown}

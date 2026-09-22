@@ -21,7 +21,7 @@
  * to drift.
  */
 
-import { LOCATIONS, Location } from '../../settings/locations.js';
+import { ROTATION, Location } from '../../settings/locations.js';
 import type { PaneSettings } from '../../settings/settings.svelte.js';
 import { DWELL_SEC as _DWELL_SEC } from './flight-path.js';
 
@@ -43,8 +43,8 @@ function slotOf(wallSec: number): number {
 
 export function destinationAt(wallSec: number, rotationSeed = 0): Location {
 	const slot = slotOf(wallSec);
-	const index = (((slot + rotationSeed) % LOCATIONS.length) + LOCATIONS.length) % LOCATIONS.length;
-	return LOCATIONS[index];
+	const index = (((slot + rotationSeed) % ROTATION.length) + ROTATION.length) % ROTATION.length;
+	return ROTATION[index];
 }
 
 /** Whole days since the epoch — the same integer on every pane, all day. */

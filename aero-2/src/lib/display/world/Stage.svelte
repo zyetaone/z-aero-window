@@ -155,7 +155,11 @@
 		attributionControl={false}
 	>
 		<!-- 3D Spherical Earth Globe Projection & Solar Lighting -->
-		<Projection type="globe" />
+		<!-- Mercator, not globe: MapLibre 6.6's globe path ignores raster-brightness
+		     and the sky colours below zoom 12, which is the whole flight envelope.
+		     Measured 2026-09-22: at 12 km the sky was grey and the night ground
+		     daylight-bright until the projection was flipped live. -->
+		<Projection type="mercator" />
 		<Light anchor="map" position={sunPos} />
 
 		<Ground />

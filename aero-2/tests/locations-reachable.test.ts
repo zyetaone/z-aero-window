@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { destinationAt, rotationSeedFor } from '#lib/display/flight/director.svelte.js';
-import { Location, LOCATIONS } from '#lib/settings/locations.js';
+import { Location, LOCATIONS, ROTATION } from '#lib/settings/locations.js';
 import { SENTINEL2_PLACES, WATER_PLACES } from '#lib/settings/tiles.js';
 
 describe('every location is actually reachable', () => {
@@ -17,18 +17,24 @@ describe('every location is actually reachable', () => {
 		}
 	});
 
-	it('has the whole catalogue in the rotation pool', () => {
-		expect(LOCATIONS.map((l) => l.id).sort()).toEqual(Location.CATALOG.map((l) => l.id).sort());
+	it('rotates over a packed subset of the catalogue, no duplicates', () => {
+		const ids = ROTATION.map((l) => l.id);
+		expect(new Set(ids).size).toBe(ids.length);
+		expect(ids.length).toBeGreaterThanOrEqual(2);
+		for (const id of ids) expect(Location.isValid(id), `${id} not in catalogue`).toBe(true);
+		// A rotation stop without a sharp basemap is a void on the offline Pi.
+		const unpacked = ids.filter((id) => !SENTINEL2_PLACES.has(id));
+		expect(unpacked, `rotation stops without a Sentinel-2 pack: ${unpacked.join(', ')}`).toEqual([]);
 	});
 
-	it('visits all 11 within one day of slots', () => {
+	it('visits every rotation stop within one day of slots', () => {
 		const seen = new Set<string>();
 		const seed = rotationSeedFor(1_770_000_000);
 		// DWELL_SEC slots across a day, sampled densely enough to cover the cycle.
 		for (let s = 0; s < 4000; s++) {
 			seen.add(destinationAt(1_770_000_000 + s * 60, seed).id);
 		}
-		const missing = LOCATIONS.map((l) => l.id).filter((id) => !seen.has(id));
+		const missing = ROTATION.map((l) => l.id).filter((id) => !seen.has(id));
 		expect(missing, `never visited: ${missing.join(', ')}`).toEqual([]);
 	});
 

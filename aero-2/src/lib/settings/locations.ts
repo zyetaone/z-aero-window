@@ -285,3 +285,25 @@ const PLACE_MOODS: Record<string, PlaceMood> = {
 };
 
 export const LOCATIONS = Location.all();
+
+/**
+ * The places the wall actually flies between.
+ *
+ * Six, not eleven. The fielded aero-1 rotation hopped between a curated set
+ * and the room read as a journey; eleven places on a four-minute dwell read
+ * as a slideshow. Home first, then the Southwest hubs, with Dubai for a
+ * daylight hour while India is at its desk (every US hub is night during
+ * IST office hours). Every entry has a Sentinel-2 pack, a roads pack, a
+ * towns pack and a buildings pack on disk; add a place here only after
+ * packing it, or the offline Pi shows a void for ten minutes.
+ *
+ * The catalogue stays whole for the operator picker and `?place=`.
+ */
+export const ROTATION: readonly Location[] = [
+	'hyderabad',
+	'dubai',
+	'dallas',
+	'denver',
+	'las_vegas',
+	'chicago_midway'
+].map((id) => Location.byId(id));

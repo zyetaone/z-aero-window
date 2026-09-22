@@ -5,8 +5,9 @@
 	 */
 	import { useDisplay } from '../display/display.svelte.js';
 	import { Location, LOCATIONS } from './locations.js';
-	import { SCENE_PRESETS } from './presets.js';
-	import { WEATHERS, FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
+		import { WEATHERS, FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
+	import { DWELL_SEC } from '../display/flight/flight-path.js';
+
 	import { fetchStatus, type KioskStatus } from '#lib/status.js';
 	import { formatClock } from '#lib/format.js';
 	import Knob from './Knob.svelte';
@@ -26,8 +27,8 @@
 	const cities = Location.cities();
 	const features = Location.features();
 
-	type TabId = 'presets' | 'camera' | 'wing' | 'atmosphere' | 'terrain' | 'cabin' | 'wall';
-	let activeTab = $state<TabId>('presets');
+	type TabId = 'flight' | 'cabin' | 'wall';
+	let activeTab = $state<TabId>('flight');
 
 	// `formatClock`, not a private stamp: this drawer's copy ROUNDED the
 	// minutes while the Hud floored them, so the two clocks on one pane could
@@ -80,37 +81,15 @@
 			>
 		</header>
 
-		<!-- Subsystem Navigation Tabs -->
+		<!-- Three tabs. The camera, airframe, atmosphere and terrain tabs
+		     went in the Sep-22 simplification: nineteen knobs nobody at the wall
+		     should touch. The fields and URL knobs still exist for tuning. -->
 		<nav class="tab-bar">
 			<button
 				type="button"
 				class="tab-btn"
-				class:active={activeTab === 'presets'}
-				onclick={() => (activeTab = 'presets')}>🎯 Presets</button
-			>
-			<button
-				type="button"
-				class="tab-btn"
-				class:active={activeTab === 'camera'}
-				onclick={() => (activeTab = 'camera')}>📷 Camera</button
-			>
-			<button
-				type="button"
-				class="tab-btn"
-				class:active={activeTab === 'wing'}
-				onclick={() => (activeTab = 'wing')}>✈️ Airframe</button
-			>
-			<button
-				type="button"
-				class="tab-btn"
-				class:active={activeTab === 'atmosphere'}
-				onclick={() => (activeTab = 'atmosphere')}>☁️ Atmosphere</button
-			>
-			<button
-				type="button"
-				class="tab-btn"
-				class:active={activeTab === 'terrain'}
-				onclick={() => (activeTab = 'terrain')}>🗺️ Terrain</button
+				class:active={activeTab === 'flight'}
+				onclick={() => (activeTab = 'flight')}>✈️ Flight</button
 			>
 			<button
 				type="button"
@@ -127,27 +106,7 @@
 		</nav>
 
 		<div class="content">
-			{#if activeTab === 'presets'}
-				<section class="section">
-					<h4>Scene Composition Presets</h4>
-					<div class="preset-grid">
-						{#each SCENE_PRESETS as preset}
-							<button
-								type="button"
-								class="preset-card"
-								onclick={() => config.applyPreset(preset, Date.now() / 1000)}
-							>
-								<div class="preset-top">
-									<span class="preset-icon">{preset.icon}</span>
-									<span class="preset-badge">{preset.badge}</span>
-								</div>
-								<div class="preset-title">{preset.name}</div>
-								<div class="preset-desc">{preset.description}</div>
-							</button>
-						{/each}
-					</div>
-				</section>
-
+			{#if activeTab === 'flight'}
 				<section class="section">
 					<h4>Destination Selector</h4>
 					<div class="location-select-wrap">
@@ -173,186 +132,24 @@
 						</select>
 					</div>
 
-					<Segmented
-						label="Jump To"
-						options={LOCATIONS}
-						isActive={(loc) => config.place.id === loc.id}
-						onselect={(loc) => config.setPlace(loc)}
-						format={(loc) => loc.name}
-						key={(loc) => loc.id}
-					/>
-				</section>
-			{:else if activeTab === 'camera'}
-				<section class="section">
-					<h4>Camera Sightline & Perspective</h4>
-					<Knob
-						{config}
-						key="pitchDeg"
-						label="Camera Pitch"
-						step={1}
-						format={(v) => `${Math.round(v)}°`}
-					/>
-					<Knob
-						{config}
-						key="azimuthDeg"
-						label="Camera Azimuth"
-						step={5}
-						format={(v) => `${Math.round(v)}°`}
-					/>
-					<Knob
-						{config}
-						key="speed"
-						label="Flight Speed Multiplier"
-						step={0.1}
-						format={(v) => `${v.toFixed(1)}x`}
-					/>
 				</section>
 
 				<section class="section">
-					<h4>Flight Envelope & Circadian Clock</h4>
-					<Knob
-						{config}
-						key="floorM"
-						label="Altitude Floor"
-						step={100}
-						format={(v) =>
-							`${Math.round(v).toLocaleString()} m · ${Math.round(v * 3.28084).toLocaleString()} ft`}
-					/>
-					<Knob
-						{config}
-						key="ceilingM"
-						label="Altitude Ceiling"
-						step={100}
-						format={(v) =>
-							`${Math.round(v).toLocaleString()} m · ${Math.round(v * 3.28084).toLocaleString()} ft`}
-					/>
+					<h4>Journey</h4>
+					<!-- Rotation on/off is a wall key; it is set from the Wall tab so all
+					     three panes change together (ADR-007). -->
+					<Segmented
+					label="Weather Condition"
+					options={WEATHERS}
+					isActive={(w) => config.weather === w}
+					onselect={(w) => (config.weather = w)}
+				/>
 					<Knob
 						{config}
 						key="clockOffsetH"
 						label="Circadian Time of Day"
 						step={0.25}
 						format={() => clockLabel}
-					/>
-				</section>
-			{:else if activeTab === 'wing'}
-				<section class="section">
-					<h4>Aircraft Airframe (3D Boeing 737)</h4>
-					<Toggle
-						checked={config.wing}
-						label="Show 3D Wing Airframe"
-						description="Render WebGL wing with strobe beacons and navigation lights"
-						onchange={(val) => (config.wing = val)}
-					/>
-					<Knob
-						{config}
-						key="wingScale"
-						label="Wing Scale"
-						step={0.05}
-						format={(v) => `${v.toFixed(2)}x`}
-					/>
-					<Knob
-						{config}
-						key="wingOffsetX"
-						label="Horizontal Offset X"
-						step={5}
-						format={(v) => `${Math.round(v)} px`}
-					/>
-					<Knob
-						{config}
-						key="wingOffsetY"
-						label="Vertical Offset Y"
-						step={5}
-						format={(v) => `${Math.round(v)} px`}
-					/>
-					<Knob
-						{config}
-						key="wingPitchDeg"
-						label="Wing Pitch Offset"
-						step={0.5}
-						format={(v) => `${v.toFixed(1)}°`}
-					/>
-					<Knob
-						{config}
-						key="wingYawDeg"
-						label="Wing Sweep / Yaw (Y-Axis)"
-						step={0.5}
-						format={(v) => `${v.toFixed(1)}°`}
-					/>
-					<Knob
-						{config}
-						key="wingRollFactor"
-						label="Banking Roll Response"
-						step={0.1}
-						format={(v) => `${v.toFixed(2)}x`}
-					/>
-				</section>
-			{:else if activeTab === 'atmosphere'}
-				<Segmented
-					label="Weather Condition"
-					options={WEATHERS}
-					isActive={(w) => config.weather === w}
-					onselect={(w) => (config.weather = w)}
-				/>
-
-				<section class="section">
-					<h4>Atmospheric Cloud Deck</h4>
-					<Toggle
-						checked={config.clouds}
-						label="Volumetric Cloud Deck"
-						description="Multi-tier altitude cloud deck (cumulus, mid deck, and high cirrus veil)"
-						onchange={(val) => (config.clouds = val)}
-					/>
-					<Knob
-						{config}
-						key="cloudDensity"
-						label="Cloud Density"
-						step={0.05}
-						format={(v) => `${Math.round(v * 100)}%`}
-					/>
-					<Knob
-						{config}
-						key="cloudSpeed"
-						label="Drift Speed"
-						step={0.1}
-						format={(v) => `${v.toFixed(1)}x`}
-					/>
-					<Knob
-						{config}
-						key="cloudAltitudeM"
-						label="Deck Base Altitude"
-						step={250}
-						format={(v) => `${Math.round(v).toLocaleString()} m`}
-					/>
-					<Knob
-						{config}
-						key="cloudOpacity"
-						label="Cloud Opacity"
-						step={0.05}
-						format={(v) => `${Math.round(v * 100)}%`}
-					/>
-				</section>
-			{:else if activeTab === 'terrain'}
-				<section class="section">
-					<h4>3D Terrain & Satellite Imagery</h4>
-					<Knob
-						{config}
-						key="shade"
-						label="Topological Hillshade"
-						step={0.05}
-						format={(v) => `${Math.round(v * 100)}%`}
-					/>
-					<Knob
-						{config}
-						key="exaggeration"
-						label="3D Terrain Elevation Exaggeration"
-						step={0.05}
-						format={(v) => `${v.toFixed(2)}x`}
-					/>
-					<Toggle
-						checked={config.colorRelief}
-						label="Hypsometric Color Relief"
-						description="Apply elevation gradient tint layer to terrain"
-						onchange={(val) => (config.colorRelief = val)}
 					/>
 				</section>
 			{:else if activeTab === 'cabin'}
@@ -389,6 +186,13 @@
 						/>
 					{/if}
 				</section>
+
+				<Segmented
+					label="Render Quality"
+					options={['performance', 'balanced', 'ultra'] as const}
+					isActive={(q) => config.qualityMode === q}
+					onselect={(q) => (config.qualityMode = q)}
+				/>
 
 				<Segmented
 					label="Multi-Pi Fleet Parallax Role"
@@ -681,55 +485,6 @@
 		padding-bottom: 0.4rem;
 	}
 
-	.preset-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 8px;
-	}
-	.preset-card {
-		background: rgba(255, 255, 255, 0.04);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 8px;
-		padding: 10px;
-		text-align: left;
-		cursor: pointer;
-		transition: all 0.15s ease;
-		color: inherit;
-	}
-	.preset-card:hover {
-		background: var(--glass-border-subtle);
-		border-color: rgba(56, 189, 248, 0.4);
-		transform: translateY(-1px);
-	}
-	.preset-top {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 4px;
-	}
-	.preset-icon {
-		font-size: 1.1rem;
-	}
-	.preset-badge {
-		font-size: 0.65rem;
-		padding: 2px 6px;
-		background: rgba(56, 189, 248, 0.15);
-		color: var(--accent-cyan);
-		border-radius: 4px;
-		text-transform: uppercase;
-		font-weight: 600;
-	}
-	.preset-title {
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: #ffffff;
-		margin-bottom: 2px;
-	}
-	.preset-desc {
-		font-size: 0.72rem;
-		color: var(--text-muted);
-		line-height: 1.3;
-	}
 
 	.glass-select {
 		width: 100%;

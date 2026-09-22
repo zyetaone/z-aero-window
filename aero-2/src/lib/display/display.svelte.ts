@@ -27,7 +27,7 @@ import {
  */
 const CRUISE_BLEND_SEC = 3.5;
 
-import { phaseFor } from './flight/flight-path.js';
+import { blindClosedAt, phaseFor } from './flight/flight-path.js';
 import { DWELL_SEC, FlightDirector } from './flight/director.svelte.js';
 import { resolveAtmosphere, type AtmosphereState } from './world/atmosphere.js';
 import { nightAmount, sunPosition, type SunPosition } from './world/sun.js';
@@ -235,6 +235,19 @@ export class AeroDisplay {
 	 * nothing exchanged.
 	 */
 	solarSec: number = $derived.by(() => this.view.wallSec + this.config.clockOffsetH * 3600);
+
+	/**
+	 * What the shade is actually doing: the passenger's setting, overridden
+	 * by the automatic occlusion across every rotation boundary.
+	 *
+	 * Derived, never written back. `config.blindOpen` is in the wall snapshot
+	 * and is persisted; an auto-close that wrote it would push "blind closed"
+	 * to the wall and survive a reload. A pinned place (`rotate` off) never
+	 * occludes: nothing is changing under the shade.
+	 */
+	blindOpen: boolean = $derived.by(
+		() => this.config.blindOpen && !(this.config.rotate && blindClosedAt(this.view.wallSec))
+	);
 
 	advanceLocation(): void {
 		this.director.advanceDestination(Date.now() / 1000);

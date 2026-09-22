@@ -23,7 +23,7 @@ export function useBlind(display: AeroDisplay) {
 	let lastFlightAtMs = 0;
 	let isDragging = $state(false);
 	let hasAnimated = $state(false);
-	let dragY = $state(display.config.blindOpen ? OPEN_Y : CLOSED_Y);
+	let dragY = $state(display.blindOpen ? OPEN_Y : CLOSED_Y);
 
 	let containerHeight = 0;
 	let dragStartY = 0;
@@ -39,7 +39,7 @@ export function useBlind(display: AeroDisplay) {
 	// Keep dragY in sync with external model changes when not dragging.
 	$effect(() => {
 		if (!isDragging) {
-			dragY = display.config.blindOpen ? OPEN_Y : CLOSED_Y;
+			dragY = display.blindOpen ? OPEN_Y : CLOSED_Y;
 		}
 	});
 
