@@ -135,7 +135,7 @@
 				</section>
 
 				<section class="section">
-					<h4>Journey</h4>
+					<h4>Conditions</h4>
 					<!-- Rotation on/off is a wall key; it is set from the Wall tab so all
 					     three panes change together (ADR-007). -->
 					<Segmented
