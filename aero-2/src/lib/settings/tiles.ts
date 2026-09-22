@@ -167,6 +167,8 @@ export const IMAGERY_GRADE = {
 	fadeDuration: 0
 };
 
+const VIIRS_TINT_VERSION = 2;
+
 export function tileTemplates(prefix = '/api/tiles'): {
 	sentinel2: string[];
 	gibs: string[];
@@ -177,7 +179,11 @@ export function tileTemplates(prefix = '/api/tiles'): {
 	return {
 		sentinel2: [`${prefix}/xyz/sentinel2/{z}/{x}/{y}.jpg`],
 		gibs: [`${prefix}/xyz/gibs/{z}/{x}/{y}.jpg`],
-		viirs: [`${prefix}/xyz/viirs/{z}/{x}/{y}.png`],
+		// The route now tints VIIRS server-side, so z/x/y stopped being the whole
+		// address -- the same URL yields different bytes after a tint change, and
+		// the immutable year on it means a fielded pane would never ask again.
+		// Bump on any change to server/viirs-tint.ts.
+		viirs: [`${prefix}/xyz/viirs/{z}/{x}/{y}.png?v=${VIIRS_TINT_VERSION}`],
 		terrarium: [`${prefix}/xyz/terrarium/{z}/{x}/{y}.png`],
 		// PNG, not JPEG: this is a MASK, and compression ringing at a shoreline
 		// paints sheen onto the beach.

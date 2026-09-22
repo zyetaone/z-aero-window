@@ -450,7 +450,10 @@ describe('every tile source the client names, the server can serve', () => {
 			// The client asks in xyz form and the server answers in WMTS form;
 			// the extension has to survive that hop, so take it from the
 			// template the client actually mounts rather than assuming one.
-			const ext = /\.(jpg|jpeg|png)$/.exec(urls[0])?.[1];
+			// A cache-busting query may trail the extension (viirs carries one
+			// because the server tints it, so z/x/y is no longer the whole
+			// address); the extension is still what the route splits on.
+			const ext = /\.(jpg|jpeg|png)(\?[^/]*)?$/.exec(urls[0])?.[1];
 			expect(ext, `${slug} template declares no image extension`).toBeTruthy();
 
 			const built = remoteTileUrl(`${slug}/4/3/2.${ext}`);
@@ -502,7 +505,7 @@ describe('every tile source the client names, the server can serve', () => {
 			// through gdal2tiles. Demanding an entry in a table that only describes
 			// WMTS downloads would be asserting the wrong tool owns it.
 			if (NO_UPSTREAM.has(slug)) continue;
-			const wanted = /\.(jpg|jpeg|png)$/.exec(urls[0])?.[1];
+			const wanted = /\.(jpg|jpeg|png)(\?[^/]*)?$/.exec(urls[0])?.[1];
 			expect(packed[slug], `packager has no extension for "${slug}"`).toBeTruthy();
 			expect(
 				packed[slug],

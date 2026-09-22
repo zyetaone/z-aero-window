@@ -61,7 +61,10 @@ describe('tile URL shape', () => {
 		for (const [layer, tpl] of Object.entries(tileTemplates())) {
 			expect(tpl[0], `${layer} must route through /api/tiles`).toContain('/api/tiles/');
 			expect(tpl[0], `${layer} needs the xyz/ segment`).toContain('/xyz/');
-			expect(tpl[0], `${layer} needs a file extension`).toMatch(/\.(jpg|png)$/);
+			// A cache-busting query may follow the extension (viirs carries one
+			// because the server tints it), but the extension must still be the
+			// last thing in the path — that is what the route splits on.
+			expect(tpl[0], `${layer} needs a file extension`).toMatch(/\.(jpg|png)(\?[^/]*)?$/);
 		}
 	});
 
