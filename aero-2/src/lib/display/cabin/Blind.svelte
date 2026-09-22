@@ -9,7 +9,9 @@
 	const display = useDisplay();
 	const blind = useBlind(display);
 
-	const showDiscoverable = $derived(!display.blindOpen && !blind.hasAnimated);
+	// The passenger's setting, not the effective state: the automatic hop
+	// occlusion must not breathe the "drag me" handle at a wall every ten minutes.
+	const showDiscoverable = $derived(!display.config.blindOpen && !blind.hasAnimated);
 </script>
 
 <div class="blind-clip" {@attach blind.attach}>
