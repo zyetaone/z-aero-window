@@ -19,6 +19,11 @@
 		type KioskStatus,
 		type FleetDevice
 	} from '#lib/status.js';
+	import Wall from '#lib/settings/Wall.svelte';
+	import { WallSync } from '#lib/settings/wall.svelte.js';
+	import { createWallPoller } from '#lib/settings/wall-poll.js';
+	import { PaneSettings } from '#lib/settings/settings.svelte.js';
+	import { PUBLIC_WALL_ORIGIN } from '$app/env/public';
 
 	let status = $state<KioskStatus | null>(null);
 	let statusError = $state<string | null>(null);
@@ -87,9 +92,66 @@
 
 	const now = $state({ ms: Date.now() });
 	$effect(() => {
-		const id = setInterval(() => (now.ms = Date.now()), 5_000);
+		const id = setInterval(() => {
+			now.ms = Date.now();
+			// Consume due snapshots so "applied version" and the countdown mean
+			// the same thing here as on a pane. The config it lands in is this
+			// page's throwaway seed, never a display.
+			wallSync.applyDue(now.ms / 1000, wallConfig);
+		}, 5_000);
 		return () => clearInterval(id);
 	});
+
+	/**
+	 * The Wall tab, here. `Wall.svelte` was written to be mounted from /admin
+	 * ("omitted by /admin, which has no display context") and never was, so the
+	 * one page an operator opens could launch a preset on one device and could
+	 * not change the wall. Same component, same draft-then-push contract, same
+	 * poller as a pane: this page follows the wall origin exactly as a pane does,
+	 * so the countdown and the applied version are the wall's, not a guess.
+	 *
+	 * `applyAtWallSec` is epoch seconds (wall-store.ts), so `Date.now() / 1000`
+	 * is the right clock for the countdown without a display.
+	 */
+	const wallConfig = new PaneSettings();
+	const wallSync = new WallSync(PUBLIC_WALL_ORIGIN);
+	$effect(() => {
+		const poller = createWallPoller(wallSync, PUBLIC_WALL_ORIGIN);
+		void poller.poll();
+		return () => poller.stop();
+	});
+
+	/**
+	 * Wi-Fi reset — the hatch for a venue whose SSID or password changed.
+	 * Resets THIS Pi (the one serving the page), not the fleet: the request
+	 * purges its saved Wi-Fi and reboots it into the setup portal, so this page
+	 * goes unreachable a couple of seconds after a 200. Token per use, in
+	 * memory only, for the same reason as the update token above.
+	 */
+	let wifiToken = $state('');
+	let wifiStatus = $state<string | null>(null);
+	let wifiBusy = $state(false);
+
+	async function resetWifi() {
+		if (!wifiToken || wifiBusy) return;
+		wifiBusy = true;
+		wifiStatus = null;
+		try {
+			const res = await fetch('/api/wifi/reset', {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${wifiToken}`, 'content-type': 'application/json' },
+				body: '{}'
+			});
+			const body = (await res.json()) as { message?: string; error?: string };
+			wifiStatus = res.ok
+				? (body.message ?? 'Wi-Fi reset scheduled.')
+				: `${res.status}: ${body.error ?? body.message ?? 'refused'}`;
+		} catch (err) {
+			wifiStatus = err instanceof Error ? err.message : 'unreachable';
+		} finally {
+			wifiBusy = false;
+		}
+	}
 
 	const isOnline = (d: FleetDevice) => now.ms - d.receivedAtMs < FLEET_ONLINE_WINDOW_MS;
 
@@ -295,6 +357,17 @@
 		</section>
 	</div>
 
+	<!-- The wall: the one control that reaches every pane at once. -->
+	<section class="card telemetry-section">
+		<h2>🧭 Wall</h2>
+		<p class="card-desc">
+			Destination, preset, weather, clock, blind, rotation and media for every pane together. Landed
+			on the wall clock, so it applies a few seconds after the push.
+			{#if PUBLIC_WALL_ORIGIN}Wall origin: <code>{PUBLIC_WALL_ORIGIN}</code>.{/if}
+		</p>
+		<Wall config={wallConfig} wall={wallSync} nowSec={() => Date.now() / 1000} />
+	</section>
+
 	<!-- Fleet Health — every pane on the wall, not just this one -->
 	<section class="card telemetry-section">
 		<h2>🌡️ Fleet Health</h2>
@@ -426,6 +499,32 @@
 				<span class="val">{Math.round((status?.uptimeSec ?? 0) / 60)} minutes</span>
 			</div>
 		</div>
+
+		<!-- Wi-Fi reset for THIS device. Refused (503) until the setup portal is
+		     installed, because without it this button is a remote brick. -->
+		<div class="update-row">
+			<input
+				type="password"
+				placeholder="AERO_WIFI_RESET_TOKEN"
+				bind:value={wifiToken}
+				aria-label="Wi-Fi reset token"
+			/>
+			<button
+				type="button"
+				class="glass-btn"
+				disabled={!wifiToken || wifiBusy}
+				onclick={resetWifi}
+			>
+				{wifiBusy ? 'Resetting…' : 'Reset this device’s Wi-Fi'}
+			</button>
+		</div>
+		<p class="fleet-note">
+			Clears saved Wi-Fi on <strong>{status?.hostname ?? 'this device'}</strong> and reboots it
+			into the setup portal. This page will go unreachable; reconnect via the portal SSID.
+		</p>
+		{#if wifiStatus}
+			<p class="fleet-note">{wifiStatus}</p>
+		{/if}
 	</section>
 
 	<footer class="footer">
