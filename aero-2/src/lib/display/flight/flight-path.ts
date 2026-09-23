@@ -10,9 +10,11 @@ export const ORBIT = {
 	 *
 	 * Was 0.08 / 0.25 — a 3.1x swing that made the ground track a flower. ~1.1x
 	 * is a gentle bump: an ellipse that is not machine-perfect, not a spirograph.
+	 * 0.225/0.25 (25 km north-south, 42 km east-west) put the city on the
+	 * horizon for most of each circuit; 0.19/0.21 keeps it under the wing.
 	 */
-	majorMin: 0.225,
-	majorMax: 0.25,
+	majorMin: 0.19,
+	majorMax: 0.21,
 	/**
 	 * Breathe cycles per circuit. MUST be a whole number, or the track never
 	 * returns to its own start and the drawn loop shows a seam. Low, so the

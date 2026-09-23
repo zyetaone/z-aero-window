@@ -158,7 +158,22 @@ export function atmosphericTurbulence(wallSec: number, weather: Weather = 'clear
 	const lowFreq = Math.sin(t * 0.73) * Math.cos(t * 0.37);
 	const midFreq = Math.sin(t * 3.41 + 1.2) * 0.5 + Math.cos(t * 5.13) * 0.3;
 
-	const composite = (lowFreq * 0.55 + midFreq * 0.45) * intensity;
+	/**
+	 * Discrete bumps (aero-1's bump events): three per slot at slot-seeded
+	 * seconds, each a decaying 0.6 Hz ring over ~8 s. Present even in clear
+	 * air, scaled up by weather. Same grid, same slot noise, so every pane
+	 * hits the same pocket at the same second.
+	 */
+	const slot = Math.floor(t / DWELL_SEC);
+	const phase = t - slot * DWELL_SEC;
+	let bump = 0;
+	for (let k = 0; k < 3; k++) {
+		const at = 20 + slotNoise(slot, 31 + k) * (DWELL_SEC - 40);
+		const rel = phase - at;
+		if (rel >= 0 && rel < 10) bump += Math.exp(-rel / 2.5) * Math.sin(rel * 2 * Math.PI * 0.6);
+	}
+
+	const composite = (lowFreq * 0.55 + midFreq * 0.45) * intensity + bump * 0.7 * (0.25 + intensity);
 
 	return {
 		pitchJitterDeg: composite * 0.45,
@@ -253,7 +268,14 @@ export class FlightCamera {
 		 * At 0.85 gain, entering a turn dramatically reveals the ground/city below,
 		 * and exiting/levelling opens the window to the horizon and sky canopy.
 		 */
-		const BANK_VIEW_GAIN = 0.85;
+		/**
+		 * 0.85 when bank reached the world ONLY as a pitch offset. Stage now
+		 * rolls the map by the bank (WORLD_ROLL_GAIN), so the same bank was
+		 * counted twice: the horizon rolled AND the sightline lifted toward
+		 * it, and every turn swung the window from mostly ground to mostly
+		 * sky. A small residual keeps a hint of the nose-up feel of a turn.
+		 */
+		const BANK_VIEW_GAIN = 0.3;
 		const bankOffset = (plane.bankDeg ?? 0) * BANK_VIEW_GAIN;
 
 		/**
@@ -372,11 +394,23 @@ export class FlightCamera {
 }
 
 export function calculateCameraView(wallSec: number, params: CameraParams): CameraView {
+	/**
+	 * Each visit cruises at its own level. The ceiling drops by up to 30% of
+	 * the climb band on a per-slot draw (never the floor: every clearance
+	 * argument is about the floor), so one visit tops out near 13 km and the
+	 * next holds 10. Same slot, same number, on every pane.
+	 */
+	const slot = Math.floor(wallSec / DWELL_SEC);
+	const band = params.ceilingM - params.floorM;
+	const ceilingM = Math.max(
+		params.floorM + band * 0.5,
+		params.ceilingM - band * 0.3 * slotNoise(slot, 11)
+	);
 	const track = new FlightTrack(
 		params.place.lat,
 		params.place.lon,
 		params.floorM,
-		params.ceilingM,
+		ceilingM,
 		params.direction ?? 1,
 		// Derived here, from the same second as the pose. See `phaseFor`.
 		phaseFor(params.place, wallSec)
@@ -437,9 +471,18 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	 * whether the pass engages.
 	 */
 	const thread = downtownTimeAt(((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC) * gate;
-	if (thread <= 0) return big;
+	if (thread <= 0) return holdFloor(big, params.floorM);
 	const spiral = downtownPose(plane, params.place.lat, params.place.lon, params.floorM, thread);
-	return camera.project(spiral, utcOffset, wallSec, params.place.lat, params.place.lon, weather);
+	// downtownAltM never undercuts the place floor, so the floor holds here too.
+	return holdFloor(
+		camera.project(spiral, utcOffset, wallSec, params.place.lat, params.place.lon, weather),
+		params.floorM
+	);
+}
+
+/** Turbulence may perturb the pose; it may not take it under the climb floor. */
+function holdFloor(view: CameraView, floorM: number): CameraView {
+	return view.aglM >= floorM ? view : { ...view, aglM: floorM };
 }
 
 /**

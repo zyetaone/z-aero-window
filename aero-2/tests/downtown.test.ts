@@ -122,7 +122,7 @@ describe('downtownWarpSec', () => {
 		const arc = kmBetween(a.lat, a.lon, b.lat, b.lon);
 		expect(kmBetween(a.lat, a.lon, place.lat, place.lon)).toBeLessThan(6);
 		expect(kmBetween(b.lat, b.lon, place.lat, place.lon)).toBeLessThan(6);
-		expect(arc).toBeGreaterThan(0.4);
+		expect(arc).toBeGreaterThan(0.25);
 		expect(arc).toBeLessThan(2.5);
 		for (const v of [a, b]) {
 			expect(Number.isFinite(v.planeHeadingDeg)).toBe(true);
@@ -178,13 +178,13 @@ describe('downtown thread in the view', () => {
 	it('is still on the big loop outside the pass', () => {
 		const place = Location.byId('hyderabad');
 		const v = calculateCameraView(0, paramsFor('?place=hyderabad'));
-		expect(kmBetween(v.lat, v.lon, place.lat, place.lon)).toBeGreaterThan(20);
+		expect(kmBetween(v.lat, v.lon, place.lat, place.lon)).toBeGreaterThan(15);
 	});
 
 	it('never threads features', () => {
 		const place = Location.byId('himalayas');
 		const v = calculateCameraView(100, paramsFor('?place=himalayas'));
-		expect(kmBetween(v.lat, v.lon, place.lat, place.lon)).toBeGreaterThan(20);
+		expect(kmBetween(v.lat, v.lon, place.lat, place.lon)).toBeGreaterThan(15);
 		expect(v.aglM).toBeGreaterThanOrEqual(5999);
 	});
 
@@ -248,7 +248,7 @@ describe('downtown thread in production config', () => {
 		const high = calculateCameraView(1350, paramsFor('?place=hyderabad&speed=1'));
 		expect(kmBetween(low.lat, low.lon, place.lat, place.lon)).toBeLessThan(6);
 		expect(low.aglM).toBeLessThan(downtownAltM(place.climbFloorM) + 100);
-		expect(kmBetween(high.lat, high.lon, place.lat, place.lon)).toBeGreaterThan(20);
+		expect(kmBetween(high.lat, high.lon, place.lat, place.lon)).toBeGreaterThan(15);
 		expect(high.aglM).toBeGreaterThan(9000);
 	});
 

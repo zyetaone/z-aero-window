@@ -218,6 +218,7 @@
 		const basePos: number[] = [];
 		/** Half-size of the square a sprite wraps in as the aircraft moves past it. */
 		const wrapR: number[] = [];
+		const edgeFade: number[] = [];
 
 		function buildCloudDeck() {
 			while (cloudGroup.children.length > 0) {
@@ -231,6 +232,7 @@
 			baseRot.length = 0;
 			basePos.length = 0;
 			wrapR.length = 0;
+			edgeFade.length = 0;
 
 			if (textures.length === 0) return;
 
@@ -272,7 +274,7 @@
 				Math.round((7 + density * 15) * qualityScale * (1 + (coverageScale - 1) * 1.25))
 			);
 			for (let c = 0; c < nearCount; c++) {
-				emitCluster(textures, 2_500, 32_000, 2_000, 4_500, 4, 6, 0.12, rng, 0);
+				emitCluster(textures, 4_000, 32_000, 3_200, 5_000, 4, 6, 0.12, rng, 0);
 			}
 
 			// ── 3. High-Altitude Cirrus Veil Bands (40 km - 180 km, +3500m) ─────────
@@ -400,6 +402,7 @@
 				baseRot.push(mat.rotation);
 				basePos.push(ox, oz);
 				wrapR.push(radiusMin + radiusSpan + scaleMin + scaleSpan);
+				edgeFade.push(1);
 			}
 		}
 
@@ -524,8 +527,14 @@
 					px = rx;
 				}
 				const r = wrapR[i];
-				s.position.x = wrap(px - eastM, r);
-				s.position.z = wrap(pz + northM, r);
+				const wx = wrap(px - eastM, r);
+				const wz = wrap(pz + northM, r);
+				s.position.x = wx;
+				s.position.z = wz;
+				// Fade to nothing over the outer 12% of the tier square, so a sprite
+				// that wraps to the far side does so invisible instead of popping.
+				const edge = Math.max(0, Math.min(1, (r - Math.max(Math.abs(wx), Math.abs(wz))) / (0.12 * r)));
+				edgeFade[i] = edge;
 
 				// Forward Mie scatter
 				_spriteWorld.copy(s.position).applyMatrix4(cloudGroup.matrixWorld);
@@ -552,7 +561,7 @@
 					litG * nightDark * coolG + moonLit * 1.0,
 					litB * nightDark * coolB + moonLit * 1.25
 				);
-				mat.opacity = baseO * opacityScale;
+				mat.opacity = baseO * opacityScale * (edgeFade[i] ?? 1);
 			}
 
 			renderer.render(scene, camera);

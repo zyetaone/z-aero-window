@@ -20,10 +20,24 @@
 	const altitudeFade = $derived(Math.round(Math.max(0, Math.min(1, (8000 - aglM) / 2500)) * 100) / 100);
 
 	// Dynamic building color transitioning from day concrete to night illuminated facade
+	// Ramped by height, not one flat tone: low stock reads dark, towers light,
+	// which is the depth cue a flat colour and 8 m median data never gave.
 	const buildingColor = $derived.by(() => {
-		if (night < 0.2) return '#d1d5db'; // Daylight architectural limestone
-		if (night < 0.6) return '#f59e0b'; // Sunset golden hour reflection
-		return '#38bdf8'; // Night skyglow and illuminated office window luminescence
+		const [lo, hi] =
+			night < 0.2
+				? ['#9aa0aa', '#f4f5f7'] // daylight: shadowed low stock -> lit towers
+				: night < 0.6
+					? ['#a86a2a', '#ffd27a'] // golden hour
+					: ['#1e3a5f', '#7dd3fc']; // dusk into night
+		return [
+			'interpolate',
+			['linear'],
+			['coalesce', ['get', 'height'], 20],
+			4,
+			lo,
+			60,
+			hi
+		] as never;
 	});
 
 	/**
@@ -79,6 +93,7 @@
 		<FillExtrusionLayer
 			paint={{
 				'fill-extrusion-color': buildingColor,
+				'fill-extrusion-vertical-gradient': true,
 				'fill-extrusion-height': ['coalesce', ['get', 'height'], 20],
 				'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
 				'fill-extrusion-opacity': dayOpacity

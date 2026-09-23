@@ -23,7 +23,7 @@
 
 import { ROTATION, Location } from '../../settings/locations.js';
 import type { PaneSettings } from '../../settings/settings.svelte.js';
-import { DWELL_SEC as _DWELL_SEC } from './flight-path.js';
+import { DWELL_SEC as _DWELL_SEC, mulberry32 } from './flight-path.js';
 
 /** Re-exported from `flight-path` — kept so this module's many importers do not churn. */
 export const DWELL_SEC = _DWELL_SEC;
@@ -41,10 +41,28 @@ function slotOf(wallSec: number): number {
 	return Math.floor(Math.max(0, wallSec) / DWELL_SEC);
 }
 
+/**
+ * The day's order of the rotation: a Fisher-Yates shuffle seeded by the day,
+ * so the sequence of cities differs from yesterday's but is the same on
+ * every pane. Six consecutive slots never cross a day boundary's worth of
+ * order change mid-cycle in a way a pane could disagree about: the day
+ * index is the same integer everywhere.
+ */
+function orderFor(day: number): readonly Location[] {
+	const rand = mulberry32((day * 7919) >>> 0);
+	const out = [...ROTATION];
+	for (let i = out.length - 1; i > 0; i--) {
+		const j = Math.floor(rand() * (i + 1));
+		[out[i], out[j]] = [out[j], out[i]];
+	}
+	return out;
+}
+
 export function destinationAt(wallSec: number, rotationSeed = 0): Location {
 	const slot = slotOf(wallSec);
-	const index = (((slot + rotationSeed) % ROTATION.length) + ROTATION.length) % ROTATION.length;
-	return ROTATION[index];
+	const order = orderFor(rotationSeedFor(wallSec));
+	const index = (((slot + rotationSeed) % order.length) + order.length) % order.length;
+	return order[index];
 }
 
 /** Whole days since the epoch — the same integer on every pane, all day. */
