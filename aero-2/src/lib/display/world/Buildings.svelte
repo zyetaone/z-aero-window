@@ -5,7 +5,7 @@
 	 * Renders realistic city skyscrapers with height-based 3D extrusions,
 	 * solar daytime architectural shading, and evening glowing window illumination.
 	 */
-	import { GeoJSONSource, FillExtrusionLayer, Image } from 'svelte-maplibre-gl';
+	import { GeoJSONSource, FillExtrusionLayer, FillLayer, Image } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
 	import { quantize, slowBeat } from './beat.js';
 
@@ -62,6 +62,8 @@
 	// Windows flicker on their own beats, out of step with the road lamps.
 	const flicker = $derived(0.8 + 0.2 * slowBeat(display.view.wallSec, 2.1, 3.3));
 	const nightOpacity = $derived(quantize(0.95 * altitudeFade * lit * flicker));
+	// The footprint itself glows: forecourts, car parks and lobbies light the block.
+	const footprintOpacity = $derived(quantize(0.45 * altitudeFade * lit));
 </script>
 
 <!-- Gated on the place only. Mounting on altitude re-fetched and re-parsed the
@@ -70,6 +72,7 @@
 {#if !place.isFeature}
 	<Image id="lit-windows" image={windowsImage} />
 	<GeoJSONSource id="city-buildings" data="/api/buildings/{place.id}">
+		<FillLayer paint={{ 'fill-color': '#f2b45c', 'fill-opacity': footprintOpacity }} />
 		<FillExtrusionLayer
 			paint={{
 				'fill-extrusion-color': buildingColor,

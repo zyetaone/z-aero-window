@@ -58,7 +58,28 @@
 	 * the cores between 0.5 and 1.0 together (dasharray cannot blink per lamp;
 	 * the eye reads a whole string breathing as scintillation). 0.01 steps.
 	 */
-	const shimmer = $derived(quantize(0.75 + 0.25 * slowBeat(display.view.wallSec, 1.7, 2.9)));
+	const shimmer = $derived(quantize(0.65 + 0.2 * slowBeat(display.view.wallSec, 1.7, 2.9)));
+
+	/**
+	 * Traffic: a one-unit dash sliding along the arterials, MapLibre's own
+	 * "animate a line" recipe. `line-dasharray` cannot be offset, so twelve
+	 * patterns of one period (dash 1, gap 5) are precomputed with the dash
+	 * at each offset, and the wall clock picks one four times a second: one
+	 * dasharray write per quarter second, identical on every pane. Dash
+	 * lengths are in line-widths, so the same pattern reads as headlights
+	 * spaced to the road's own width at any zoom.
+	 */
+	const TRAFFIC_PERIOD = 6;
+	const TRAFFIC_STEPS = 12;
+	const TRAFFIC_DASHES: number[][] = Array.from({ length: TRAFFIC_STEPS }, (_, i) => {
+		const o = (i / TRAFFIC_STEPS) * TRAFFIC_PERIOD;
+		return o <= TRAFFIC_PERIOD - 1
+			? [0, o, 1, TRAFFIC_PERIOD - 1 - o]
+			: [o - (TRAFFIC_PERIOD - 1), TRAFFIC_PERIOD - 1, TRAFFIC_PERIOD - o, 0];
+	});
+	const trafficDash = $derived(
+		TRAFFIC_DASHES[Math.floor(display.view.wallSec * 4) % TRAFFIC_STEPS]
+	);
 
 	/**
 	 * Fades OUT with altitude, which is the opposite of what a detail layer
@@ -208,7 +229,18 @@
 				'line-color': color,
 				'line-width': bloomWidth,
 				'line-blur': 4,
-				'line-opacity': 0.55 * glow
+				'line-opacity': 0.4 * glow
+			}}
+			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+		/>
+		<LineLayer
+			id="city-roads-traffic"
+			filter={['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]]}
+			paint={{
+				'line-color': '#fff1c9',
+				'line-width': width,
+				'line-opacity': 0.9 * glow,
+				'line-dasharray': trafficDash
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>

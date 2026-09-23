@@ -169,7 +169,13 @@
 		 * ceiling rather than added, so it cannot exceed the range MapLibre
 		 * accepts however the band table is later tuned.
 		 */
-		const weathered = byAltitude + (0.97 - byAltitude) * overcast * 0.75;
+		/**
+		 * Height thickens the view: from cruise the line of sight to the ground
+		 * crosses the whole boundary layer at a slant, so the ground softens as
+		 * the plane climbs even while the air at the window clears.
+		 */
+		const slant = 0.22 * Math.max(0, Math.min(1, (display.view.aglM - 5000) / 7000));
+		const weathered = Math.min(0.97, byAltitude + slant + (0.97 - byAltitude) * overcast * 0.75);
 		/**
 		 * Haze comes and goes. Two slow beats (97 s and 151 s, coprime so the
 		 * product wanders for hours) swing the ground blend ±0.06 around the
