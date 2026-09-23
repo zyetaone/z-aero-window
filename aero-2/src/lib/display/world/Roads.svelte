@@ -62,7 +62,8 @@
 	 * vectors earn their keep on the way DOWN, so they arrive as the raster
 	 * runs out of pixels. 9,000 m to 4,000 m is the descent window.
 	 */
-	const altitudeFade = $derived(Math.max(0, Math.min(1, (9000 - aglM) / 5000)));
+	// 0.01 steps: a raw float per frame is a setPaintProperty per frame.
+	const altitudeFade = $derived(Math.round(Math.max(0, Math.min(1, (9000 - aglM) / 5000)) * 100) / 100);
 
 	const glow = $derived(lightUp * altitudeFade);
 

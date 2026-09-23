@@ -15,7 +15,7 @@
 	const aglM = $derived(display.view.aglM);
 
 	// Fade out buildings when climbing into the upper stratosphere (> 7,500m)
-	const altitudeFade = $derived(Math.max(0, Math.min(1, (8000 - aglM) / 2500)));
+	const altitudeFade = $derived(Math.round(Math.max(0, Math.min(1, (8000 - aglM) / 2500)) * 100) / 100);
 
 	// Dynamic building color transitioning from day concrete to night illuminated facade
 	const buildingColor = $derived.by(() => {
@@ -25,7 +25,10 @@
 	});
 </script>
 
-{#if !place.isFeature && altitudeFade > 0.05}
+<!-- Gated on the place only. Mounting on altitude re-fetched and re-parsed the
+     city on the main thread four times an hour (Roads.svelte says why);
+     fill-extrusion-opacity 0 skips the draw for free. -->
+{#if !place.isFeature}
 	<GeoJSONSource id="city-buildings" data="/api/buildings/{place.id}">
 		<FillExtrusionLayer
 			paint={{

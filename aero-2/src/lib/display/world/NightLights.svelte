@@ -68,9 +68,9 @@
 	 * under the committed world grade. The ramp starts where the road lamps
 	 * hand over (NIGHT_VECTOR_TOP_M) and is full 4 km above it.
 	 */
-	const cruise = $derived(
+	const cruise = $derived.by(() => Math.round(100 * (
 		Math.max(0, Math.min(1, (display.view.aglM - NIGHT_VECTOR_TOP_M) / CRUISE_EXPOSURE_SPAN_M))
-	);
+	)) / 100);
 	const viirsOpacity = $derived(Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise));
 	const viirsContrast = $derived(0.55 * cruise);
 	const viirsBrightnessMax = $derived(1 - 0.3 * cruise);

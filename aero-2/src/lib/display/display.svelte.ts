@@ -205,13 +205,24 @@ export class AeroDisplay {
 	 * thousand times a second. Cached, it recomputes when the pose does: once
 	 * per frame, for every reader.
 	 */
-	sun: SunPosition = $derived.by(() =>
-		sunPosition(
+	sun: SunPosition = $derived.by(() => {
+		const s = sunPosition(
 			this.view.wallSec,
 			this.config.place.lat,
 			this.config.place.utcOffset + this.config.clockOffsetH
-		)
-	);
+		);
+		// Quantised to 0.1° and handed out as the SAME object while unchanged.
+		// Every paint scalar downstream (grade, hillshade, sky, light) derives
+		// from these two numbers; a fresh float each frame meant one
+		// setPaintProperty per key per frame on every layer, each restarting a
+		// 300 ms style transition that never finished. 0.1° is ~24 s of sun.
+		const azimuthDeg = Math.round(s.azimuthDeg * 10) / 10;
+		const elevationDeg = Math.round(s.elevationDeg * 10) / 10;
+		const last = this.#sunLast;
+		if (last.azimuthDeg === azimuthDeg && last.elevationDeg === elevationDeg) return last;
+		return (this.#sunLast = { azimuthDeg, elevationDeg });
+	});
+	#sunLast: SunPosition = { azimuthDeg: 0, elevationDeg: -90 };
 
 	/**
 	 * The wall clock the SCENE is composed at, not the one the room is in.

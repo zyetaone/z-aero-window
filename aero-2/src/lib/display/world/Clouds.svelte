@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	/**
 	 * Clouds — High-Fidelity Photoreal 3D Atmospheric Cloud Deck.
 	 *
@@ -600,7 +601,10 @@
 		void qualityScale;
 		void coverageScale;
 		void display.phase;
-		rebuild?.();
+		// untracked: the builder reads opacityScale and friends, and tracking
+		// them here rebuilt the whole deck on a slider tick instead of taking
+		// the per-frame material path.
+		untrack(() => rebuild?.());
 	});
 </script>
 
