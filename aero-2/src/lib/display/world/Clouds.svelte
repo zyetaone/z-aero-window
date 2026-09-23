@@ -41,6 +41,7 @@
 		WebGLRenderer
 	} from 'three';
 	import { M_PER_DEG_LAT, mulberry32 } from '../flight/flight-path.js';
+	import { DEG2RAD } from '#lib/angles.js';
 	import { Location } from '#lib/settings/locations.js';
 	import { weatherLightLoss } from './atmosphere.js';
 
@@ -480,7 +481,7 @@
 			 * square, so the population never thins out ahead or piles up behind.
 			 */
 			const pl = display.config.place;
-			const eastM = (display.view.lon - pl.lon) * M_PER_DEG_LAT * Math.cos(display.view.lat * (Math.PI / 180));
+			const eastM = (display.view.lon - pl.lon) * M_PER_DEG_LAT * Math.cos(display.view.lat * DEG2RAD);
 			const northM = (display.view.lat - pl.lat) * M_PER_DEG_LAT;
 			const wrap = (v: number, r: number) => ((((v + r) % (2 * r)) + 2 * r) % (2 * r)) - r;
 

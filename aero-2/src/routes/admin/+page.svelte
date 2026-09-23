@@ -135,21 +135,30 @@
 	async function resetWifi() {
 		if (!wifiToken || wifiBusy) return;
 		wifiBusy = true;
-		wifiStatus = null;
+		wifiStatus = await postWithToken('/api/wifi/reset', wifiToken, 'Wi-Fi reset scheduled.');
+		wifiBusy = false;
+	}
+
+	/**
+	 * One bearer POST for the privileged hatches. The explicit JSON
+	 * content-type is load-bearing: SvelteKit's CSRF guard rejects a
+	 * same-origin POST whose content-type looks form-like, and this fetch
+	 * answered 403 "Cross-site POST forbidden" from INSIDE the admin page
+	 * until it was set. Found by driving the real button, not by reading.
+	 */
+	async function postWithToken(url: string, token: string, okText: string): Promise<string> {
 		try {
-			const res = await fetch('/api/wifi/reset', {
+			const res = await fetch(url, {
 				method: 'POST',
-				headers: { Authorization: `Bearer ${wifiToken}`, 'content-type': 'application/json' },
+				headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
 				body: '{}'
 			});
 			const body = (await res.json()) as { message?: string; error?: string };
-			wifiStatus = res.ok
-				? (body.message ?? 'Wi-Fi reset scheduled.')
+			return res.ok
+				? (body.message ?? okText)
 				: `${res.status}: ${body.error ?? body.message ?? 'refused'}`;
 		} catch (err) {
-			wifiStatus = err instanceof Error ? err.message : 'unreachable';
-		} finally {
-			wifiBusy = false;
+			return err instanceof Error ? err.message : 'unreachable';
 		}
 	}
 
@@ -196,29 +205,8 @@
 	async function triggerUpdate() {
 		if (!updateToken || updateBusy) return;
 		updateBusy = true;
-		updateStatus = null;
-		try {
-			const res = await fetch('/api/update', {
-				method: 'POST',
-				headers: {
-					Authorization: `Bearer ${updateToken}`,
-					// SvelteKit's CSRF guard rejects a same-origin POST whose
-					// content-type looks form-like; without an explicit JSON type this
-					// fetch answered 403 "Cross-site POST forbidden" from INSIDE the
-					// admin page. Found by driving the real button, not by reading.
-					'content-type': 'application/json'
-				},
-				body: '{}'
-			});
-			const body = (await res.json()) as { message?: string; error?: string };
-			updateStatus = res.ok
-				? (body.message ?? 'Update triggered.')
-				: `${res.status}: ${body.error ?? body.message ?? 'refused'}`;
-		} catch (err) {
-			updateStatus = err instanceof Error ? err.message : 'unreachable';
-		} finally {
-			updateBusy = false;
-		}
+		updateStatus = await postWithToken('/api/update', updateToken, 'Update triggered.');
+		updateBusy = false;
 	}
 
 	const ago = (ms: number) => {

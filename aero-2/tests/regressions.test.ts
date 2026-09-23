@@ -176,7 +176,9 @@ describe('Sky', () => {
 		// that trips on the explanation of a bug is a guard on prose.
 		const code = findSource('Sky.svelte').replace(/\/\*[\s\S]*?\*\//g, '');
 		expect(code, 're-seeding from the loop index produces a lattice').not.toMatch(/i \* 9301/);
-		expect(code, 'the generator must carry state between stars').toMatch(/seed = \(seed \*/);
+		// One stateful generator for the whole sky: the repo's seeded PRNG, the
+		// same one Clouds and RainGlass use, created once outside the per-star map.
+		expect(code, 'the generator must carry state between stars').toMatch(/const next = mulberry32\(/);
 	});
 
 	/**

@@ -18,7 +18,7 @@
  */
 
 import { antipodeOf, subSolarPoint, type GeoPoint } from './sun.js';
-import { DEG2RAD, RAD2DEG } from '#lib/angles.js';
+import { DEG2RAD, RAD2DEG, wrapSigned } from '#lib/angles.js';
 
 export interface NightBand {
 	/** Outer radius from the antisolar point, degrees. */
@@ -92,10 +92,6 @@ export function circleRing(center: GeoPoint, radiusDeg: number, steps = 72): Geo
 	return pts;
 }
 
-function normLng(lng: number): number {
-	return ((((lng + 180) % 360) + 360) % 360) - 180;
-}
-
 /**
  * Split a closed linear ring at antimeridian crossings into simple parts,
  * each with longitudes normalized into [−180, 180].
@@ -108,7 +104,7 @@ function normLng(lng: number): number {
 export function splitRing(ring: GeoPoint[]): GeoPoint[][] {
 	const parts: GeoPoint[][] = [];
 	let current: GeoPoint[] = [];
-	const push = (p: GeoPoint) => current.push({ lat: p.lat, lng: normLng(p.lng) });
+	const push = (p: GeoPoint) => current.push({ lat: p.lat, lng: wrapSigned(p.lng) });
 	// Rings arrive with continuous (unwrapped) longitudes, so a smooth
 	// meridian crossing shows no jump — detect straddling an 180+360k line.
 	const meridianIndex = (lng: number) => Math.floor((lng - 180) / 360);
@@ -124,7 +120,7 @@ export function splitRing(ring: GeoPoint[]): GeoPoint[][] {
 			const lat = prev.lat + (p.lat - prev.lat) * t;
 			/**
 			 * The cut vertices keep the SIDE they were approached from, and so
-			 * must bypass `normLng` -- which maps +180 to -180 and would put
+			 * must bypass `wrapSigned` -- which maps +180 to -180 and would put
 			 * the eastern piece's boundary on the western edge of the map,
 			 * stretching that polygon across every longitude between.
 			 */
@@ -214,7 +210,7 @@ function coversBothPoles(center: GeoPoint, radiusDeg: number): boolean {
  */
 function poleCapRing(curve: GeoPoint[], pole: 1 | -1): GeoPoint[] {
 	const pts = curve
-		.map((p) => ({ lat: p.lat, lng: normLng(p.lng) }))
+		.map((p) => ({ lat: p.lat, lng: wrapSigned(p.lng) }))
 		.sort((a, b) => a.lng - b.lng);
 	const first = pts[0];
 	const last = pts[pts.length - 1];

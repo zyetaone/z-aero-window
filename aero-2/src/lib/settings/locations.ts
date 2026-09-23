@@ -96,6 +96,10 @@ export class Location {
 	get utcOffset(): number {
 		return offsetHoursNow(this.timeZone);
 	}
+	/** The offset at a wall second, so the render path never asks a second clock (ADR-007). */
+	utcOffsetAt(wallSec: number): number {
+		return offsetHoursNow(this.timeZone, wallSec * 1000);
+	}
 
 	/**
 	 * The catalog, carried over from v1's `content/locations/catalog.ts`.

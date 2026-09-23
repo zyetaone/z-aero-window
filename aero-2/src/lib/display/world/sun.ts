@@ -14,7 +14,7 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 	return t * t * (3 - 2 * t);
 }
 
-import { DEG2RAD, RAD2DEG, signedDelta } from '#lib/angles.js';
+import { DEG2RAD, RAD2DEG, signedDelta, wrapSigned } from '#lib/angles.js';
 
 /** Day of year, 1..366, from a wall-clock epoch in seconds. */
 function dayOfYear(wallSec: number): number {
@@ -58,7 +58,7 @@ export function subSolarPoint(wallSec: number): GeoPoint {
 	const utcHours = (((wallSec % 86400) + 86400) % 86400) / 3600;
 	return {
 		lat: solarDeclination(wallSec),
-		lng: ((180 - utcHours * 15 + 540) % 360) - 180
+		lng: wrapSigned(180 - utcHours * 15)
 	};
 }
 

@@ -11,8 +11,7 @@ import {
 	type OrbitPose,
 	DWELL_SEC,
 	slotNoise,
-	M_PER_DEG_LAT
-} from './flight-path.js';
+	M_PER_DEG_LAT, planarBearing } from './flight-path.js';
 import {
 	DOWNTOWN_GATE_PHASE_SEC,
 	downtownGateAt,
@@ -21,7 +20,6 @@ import {
 	downtownWarpSec
 } from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
-import { signedDelta } from '#lib/angles.js';
 import { Location } from '#lib/settings/locations.js';
 import { resolveLocalHours } from '../world/sun.js';
 
@@ -92,7 +90,7 @@ export const DEFAULT_PITCH_DEG = -10;
  */
 const LOOKAT_MAX_GROUND_DIST_M = 70_000;
 
-import { DEG2RAD } from '#lib/angles.js';
+import { DEG2RAD, signedDelta, wrapSigned } from '#lib/angles.js';
 
 /** Written out in five places before this existed. */
 export const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
@@ -186,14 +184,6 @@ function atmosphericTurbulence(wallSec: number, weather: Weather = 'clear'): Tur
 	};
 }
 
-/** Initial great-circle bearing from one point to another, in degrees. */
-function bearingTo(fromLat: number, fromLon: number, toLat: number, toLon: number): number {
-	const cosLat = Math.cos(fromLat * DEG2RAD) || 1;
-	const dNorth = (toLat - fromLat) * M_PER_DEG_LAT;
-	const dEast = (toLon - fromLon) * M_PER_DEG_LAT * cosLat;
-	return normalizeHeading((Math.atan2(dEast, dNorth) * 180) / Math.PI);
-}
-
 export interface CameraView {
 	lat: number;
 	lon: number;
@@ -258,7 +248,7 @@ export class FlightCamera {
 		const inwardDeg =
 			centerLat === undefined || centerLon === undefined
 				? plane.headingDeg + 90
-				: bearingTo(plane.lat, plane.lon, centerLat, centerLon);
+				: planarBearing(plane.lat, plane.lon, centerLat, centerLon);
 
 		const cameraBearingDeg = normalizeHeading(inwardDeg + this.azimuthDeg);
 
@@ -504,19 +494,18 @@ function holdFloor(view: CameraView, floorM: number): CameraView {
 export function blendViews(a: CameraView, b: CameraView, t: number): CameraView {
 	const s = Math.max(0, Math.min(1, t));
 	const ease = s * s * (3 - 2 * s);
-	const wrapLon = (d: number) => ((d + 540) % 360) - 180;
 	// timeOfDay blends in degree space (15 deg per hour) so a hop across
 	// midnight eases forward instead of rewinding the whole dial.
 	const todD = signedDelta(a.timeOfDay * 15, b.timeOfDay * 15) / 15;
 	return {
 		...b,
 		lat: a.lat + (b.lat - a.lat) * ease,
-		lon: a.lon + wrapLon(b.lon - a.lon) * ease,
+		lon: a.lon + wrapSigned(b.lon - a.lon) * ease,
 		aglM: a.aglM + (b.aglM - a.aglM) * ease,
 		planeHeadingDeg: a.planeHeadingDeg + signedDelta(a.planeHeadingDeg, b.planeHeadingDeg) * ease,
 		bankDeg: a.bankDeg + (b.bankDeg - a.bankDeg) * ease,
 		targetLat: a.targetLat + (b.targetLat - a.targetLat) * ease,
-		targetLon: a.targetLon + wrapLon(b.targetLon - a.targetLon) * ease,
+		targetLon: a.targetLon + wrapSigned(b.targetLon - a.targetLon) * ease,
 		distanceM: a.distanceM + (b.distanceM - a.distanceM) * ease,
 		timeOfDay: a.timeOfDay + todD * ease
 	};

@@ -133,14 +133,8 @@ export class AeroDisplay {
 	#frameCount = 0;
 	#lastFpsUpdate = typeof performance !== 'undefined' ? performance.now() : 0;
 
-	constructor(configOrParams?: PaneSettings | (() => PaneSettings)) {
-		if (typeof configOrParams === 'function') {
-			this.config = configOrParams();
-		} else if (configOrParams) {
-			this.config = configOrParams;
-		} else {
-			this.config = createSettings();
-		}
+	constructor(config: PaneSettings = createSettings()) {
+		this.config = config;
 
 		this.director = new FlightDirector(this.config);
 		this.view = untrack(() => calculateCameraView(Date.now() / 1000, this.config));
@@ -223,7 +217,7 @@ export class AeroDisplay {
 		const s = sunPosition(
 			this.view.wallSec,
 			this.config.place.lat,
-			this.config.place.utcOffset + this.config.clockOffsetH
+			this.config.place.utcOffsetAt(this.view.wallSec) + this.config.clockOffsetH
 		);
 		// Quantised to 0.1° and handed out as the SAME object while unchanged.
 		// Every paint scalar downstream (grade, hillshade, sky, light) derives
@@ -446,8 +440,8 @@ export class AeroDisplay {
 	}
 }
 
-export function createDisplay(configOrParams?: PaneSettings | (() => PaneSettings)): AeroDisplay {
-	const display = new AeroDisplay(configOrParams);
+export function createDisplay(config?: PaneSettings): AeroDisplay {
+	const display = new AeroDisplay(config);
 	setDisplayContext(display);
 	return display;
 }

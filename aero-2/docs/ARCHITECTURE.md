@@ -48,7 +48,7 @@ code it covers and confirming the run goes red.
 
 | #   | Invariant                                                                                  | Enforced by                                                                                    |
 | --- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| 1   | No import cycles                                                                           | `tools/check-cycles.mjs`, in `check` and `test`                                                |
+| 1   | No import cycles                                                                           | `tools/check-repo.mjs`, in `check` and `test`                                                |
 | 2   | The world is a pure function of (wall clock, place, `daySeed`)                             | `tests/integration.test.ts` — scans for `Math.random` and for `+= dt`                          |
 | 3   | Context DI: `createDisplay()` at the root, `useDisplay()` below                            | `tests/regressions.test.ts` — exactly one call site may construct the model                    |
 | 4   | The pure simulation modules import no renderer                                             | `tests/integration.test.ts`                                                                    |
@@ -138,7 +138,7 @@ descends, and a road network is the shape of city lighting from the air.
 `tools/probe-layers.mjs` is what proves it paints — smoke would stay green with
 the source 404ing or the layer at zero opacity.
 
-**#6 and #7 are unenforced.** Both were violated within a day of being written
+**#6 and #7 were the last to be enforced** (`tests/regressions.test.ts` now checks the boundary and the no-barrel rule). Both were violated within a day of being written
 down: `Clouds` ran its own WebGL context outside the boundary until 2026-08-26,
 so a Three.js context loss took the page down while the identical MapLibre
 failure was caught and offered a retry. If either matters enough to keep, it is
@@ -497,9 +497,9 @@ state. Everything else flows one direction: context down, callback props up.
 That is the Svelte 5 idiom that replaced `createEventDispatcher`, and it is
 already what this code does.
 
-### Effects: 15, and each one owns a resource
+### Effects: each one owns a resource
 
-Effects are an escape hatch, so the count matters. All 15 are lifecycle —
+Effects are an escape hatch, so each one has to justify itself (count them with `rg '^\s*\$effect\('`, and do not trust a number written here). Every one is lifecycle —
 `requestAnimationFrame` loops (3), pollers (2), intervals (3), canvas and audio
 mount, the cloud rebuild. Every one returns a teardown, and the teardowns were
 verified by counting allocations against frees: 6 `setInterval` against 4

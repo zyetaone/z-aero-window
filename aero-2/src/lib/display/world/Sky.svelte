@@ -16,6 +16,7 @@
 	import { cssRgb, lerpRgb, weatherLightLoss, cloudedRgb } from './atmosphere.js';
 	import { quantize, slowBeat } from './beat.js';
 	import { WORLD_ROLL_GAIN } from '../flight/view.js';
+	import { mulberry32 } from '../flight/flight-path.js';
 
 	const display = useDisplay();
 
@@ -214,11 +215,7 @@
 	 * Iterating the state is the whole fix. Same seed, same sky, every pane.
 	 */
 	const STARS: Star[] = (() => {
-		let seed = 20260828;
-		const next = () => {
-			seed = (seed * 1103515245 + 12345) % 2147483648;
-			return seed / 2147483648;
-		};
+		const next = mulberry32(20260828);
 		return Array.from({ length: 140 }, () => {
 			const x = next();
 			const y = next();

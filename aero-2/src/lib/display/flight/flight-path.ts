@@ -94,6 +94,7 @@ export const BREATHE_PERIOD_SEC = ORBIT_PERIOD_SEC / ORBIT.petals;
 const TURN_RATE_REF_DEG_PER_SEC = 0.25;
 
 import {
+	DEG2RAD,
 	normalizeHeading as _normalizeHeading,
 	wrapSigned as normalizeSigned
 } from '#lib/angles.js';
@@ -150,6 +151,26 @@ export function blindClosedAt(wallSec: number): boolean {
 
 const TWO_PI = Math.PI * 2;
 export const M_PER_DEG_LAT = 111_320;
+
+/**
+ * Bearing from one point to another on the flat-earth patch a flight uses,
+ * degrees clockwise from north. ONE copy: the camera's look-at and the
+ * track's heading both call this, so the minimap marker and the flown
+ * heading cannot disagree by a drifted cos-lat or metres-per-degree.
+ * `atLat` is where to evaluate the longitude squeeze; defaults to the origin.
+ */
+export function planarBearing(
+	fromLat: number,
+	fromLon: number,
+	toLat: number,
+	toLon: number,
+	atLat: number = fromLat
+): number {
+	const cosLat = Math.cos(atLat * DEG2RAD) || 1;
+	const dNorth = (toLat - fromLat) * M_PER_DEG_LAT;
+	const dEast = (toLon - fromLon) * M_PER_DEG_LAT * cosLat;
+	return normalizeHeading((Math.atan2(dEast, dNorth) * 180) / Math.PI);
+}
 
 /**
  * How far the window pans either side of its aim, degrees.
@@ -346,10 +367,7 @@ export class FlightTrack {
 	headingAt(wallSec: number, dt = 0.5): number {
 		const before = this.positionAt(wallSec - dt);
 		const after = this.positionAt(wallSec + dt);
-		const cosLat = Math.cos((this.centerLat * Math.PI) / 180) || 1;
-		const dNorth = (after.lat - before.lat) * M_PER_DEG_LAT;
-		const dEast = (after.lon - before.lon) * M_PER_DEG_LAT * cosLat;
-		return normalizeHeading((Math.atan2(dEast, dNorth) * 180) / Math.PI);
+		return planarBearing(before.lat, before.lon, after.lat, after.lon, this.centerLat);
 	}
 
 	/**
