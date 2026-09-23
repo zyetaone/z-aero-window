@@ -127,6 +127,14 @@ git config --global --get-all safe.directory 2>/dev/null | command grep -qxF "${
 # release` on any laptop — updates a Pi with no network at all. Same build,
 # probe and rollback pipeline below; only where the commits come from changes.
 USB_DIR="${AERO_USB_DIR:-/media/aero}"
+# $1 strictly later committer time than $2. Equal seconds → not newer, so two
+# builds in one second never flip-flop; the next real release is later anyway.
+is_newer() {
+    local a b
+    a=$(git log -1 --format=%ct "$1" 2>/dev/null || echo 0)
+    b=$(git log -1 --format=%ct "$2" 2>/dev/null || echo 0)
+    [[ "${a}" -gt "${b}" ]]
+}
 SOURCE="origin"
 BUNDLE=$(ls -t "${USB_DIR}"/aero-release*.bundle 2>/dev/null | head -n 1 || true)
 if [[ -n "${BUNDLE}" ]] && git bundle verify "${BUNDLE}" >/dev/null 2>&1; then
@@ -134,10 +142,15 @@ if [[ -n "${BUNDLE}" ]] && git bundle verify "${BUNDLE}" >/dev/null 2>&1; then
     if git fetch "${BUNDLE}" "+refs/heads/${BRANCH}:refs/remotes/usb/${BRANCH}" --quiet 2>&1 | tee -a "${LOG_FILE}"; then
         # A stick left in a Pi must not pin it to the build it carried: only a
         # bundle that is AHEAD of what runs is a source. Old or equal → network.
-        if git merge-base --is-ancestor "usb/${BRANCH}" HEAD 2>/dev/null; then
-            log "Pen drive: bundle is not newer than HEAD — ignoring it"
-        else
+        # Committer time, NOT `merge-base --is-ancestor`: install.sh clones
+        # --depth 20, and a bundle older than that boundary is not reachable
+        # from HEAD at all, so ancestry called a months-old stick "new" and
+        # would have downgraded the Pi. release is CI fast-forward-only, so a
+        # later committer date is a later release.
+        if is_newer "usb/${BRANCH}" HEAD; then
             SOURCE="usb"
+        else
+            log "Pen drive: bundle is not newer than HEAD — ignoring it"
         fi
     else
         log "WARN: bundle fetch failed — falling back to the network"
@@ -156,6 +169,17 @@ REMOTE=$(git rev-parse "${SOURCE}/${BRANCH}")
 
 if [[ "${LOCAL}" == "${REMOTE}" ]]; then
     log "Already up to date (${LOCAL:0:8})"
+    exit 0
+fi
+
+# Forward only, from EITHER source. A pen drive can carry a release commit
+# that origin does not have yet; without this, the next network run would
+# "update" back to the older origin tip, the run after that would take the
+# stick again, and the Pi would rebuild and restart every 15 minutes forever.
+# release is CI fast-forward-only, so "remote is behind HEAD" is never a
+# legitimate update — it is a stale source.
+if ! is_newer "${REMOTE}" "${LOCAL}"; then
+    log "${SOURCE}/${BRANCH} (${REMOTE:0:8}) is behind HEAD (${LOCAL:0:8}) — nothing to apply"
     exit 0
 fi
 

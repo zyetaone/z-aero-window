@@ -510,7 +510,8 @@ if [[ ! -x /usr/local/bin/wifi-connect || ! -d /usr/local/share/wifi-portal ]]; 
 		&& tar -xzf "${WC_TMP}/bin.tar.gz" -C "${WC_TMP}" \
 		&& install -m 755 "$(/usr/bin/find "${WC_TMP}" -type f -name wifi-connect | head -n 1)" /usr/local/bin/wifi-connect \
 		&& rm -rf /usr/local/share/wifi-portal && install -d -m 755 /usr/local/share/wifi-portal \
-		&& tar -xzf "${WC_TMP}/ui.tar.gz" -C /usr/local/share/wifi-portal --strip-components=1; then
+		&& tar -xzf "${WC_TMP}/ui.tar.gz" -C /usr/local/share/wifi-portal \
+		&& [[ -f /usr/local/share/wifi-portal/index.html ]]; then
 		echo "  installed wifi-connect ${WIFI_CONNECT_VERSION} (${WC_ARCH}) + portal UI"
 	else
 		echo "  WARN: wifi-connect download/install failed — /api/wifi/reset will keep refusing (no portal to come back to)"
@@ -527,8 +528,14 @@ install -m 644 "${SCRIPT_DIR}/weekly-cache-clear.cron"   /etc/cron.d/aero-weekly
 # The reload+trigger matters: without it the rule sits on disk doing nothing
 # until the next reboot, so an OTA that "installed pen-drive support" would
 # leave every fielded Pi still ignoring a stick until someone power-cycled it.
-install -m 644 "${SCRIPT_DIR}/99-aero-usb.rules" /etc/udev/rules.d/99-aero-usb.rules
-install -d -m 755 /media/aero
+# The mount point is whatever config.env says AERO_USB_DIR is (the app and the
+# updater read the same key), so the rule is templated like the units rather
+# than hardcoding a path an operator could then change to no effect.
+USB_DIR_VALUE="$(command grep -oP '^AERO_USB_DIR=\K.*' /etc/aero/config.env 2>/dev/null || true)"
+USB_DIR_VALUE="${USB_DIR_VALUE:-/media/aero}"
+sed "s|__AERO_USB_DIR__|${USB_DIR_VALUE}|g" "${SCRIPT_DIR}/99-aero-usb.rules" > /etc/udev/rules.d/99-aero-usb.rules
+chmod 644 /etc/udev/rules.d/99-aero-usb.rules
+install -d -m 755 "${USB_DIR_VALUE}"
 if command -v udevadm >/dev/null 2>&1; then
 	udevadm control --reload-rules >/dev/null 2>&1 || true
 	udevadm trigger --subsystem-match=block >/dev/null 2>&1 || true

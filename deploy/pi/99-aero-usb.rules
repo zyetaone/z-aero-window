@@ -19,5 +19,8 @@
 # ENV{ID_FS_TYPE}!="" skips the whole-disk device that carries only a partition
 # table; without it every insertion also tries to mount /dev/sda and logs a
 # failure the operator has to learn to ignore.
-ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition", ENV{ID_FS_TYPE}!="", RUN+="/usr/bin/systemd-mount --no-block --collect --options ro,noatime,nofail /dev/%k /media/aero"
-ACTION=="remove", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{DEVTYPE}=="partition", RUN+="/usr/bin/systemd-umount /media/aero"
+# No DEVTYPE match: a "superfloppy" stick (filesystem on the whole disk, no
+# partition table) is DEVTYPE=disk, and ID_FS_TYPE!="" already skips the bare
+# table device of a partitioned one. __AERO_USB_DIR__ is rewritten by install.sh.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_TYPE}!="", RUN+="/usr/bin/systemd-mount --no-block --collect --options ro,noatime,nofail /dev/%k __AERO_USB_DIR__"
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemd-umount __AERO_USB_DIR__"
