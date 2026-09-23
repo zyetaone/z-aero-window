@@ -184,7 +184,7 @@
 		 * fog-ground-blend is written a few times a minute, not every frame.
 		 */
 		const drift = slowBeat(display.view.wallSec, 97, 151);
-		return quantize(Math.max(0.05, Math.min(0.97, weathered + 0.06 * drift)));
+		return quantize(Math.max(0.05, Math.min(0.97, weathered + 0.1 * drift)));
 	});
 
 	// ── 2. Celestial Starfield & Solar Radiance ──────────────────────────────

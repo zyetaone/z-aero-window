@@ -88,11 +88,11 @@
 	 * every frame.
 	 */
 	const WEATHER_COVERAGE: Record<string, number> = {
-		clear: 0.45,
-		cloudy: 1.0,
-		rain: 1.25,
-		overcast: 1.5,
-		storm: 1.65
+		clear: 0.35,
+		cloudy: 1.1,
+		rain: 1.55,
+		overcast: 1.9,
+		storm: 2.1
 	};
 	const coverageScale = $derived(WEATHER_COVERAGE[display.weather] ?? 1);
 
@@ -357,7 +357,7 @@
 				const yClamp = Math.max(0, Math.min(1, yNorm));
 				const ySoft = yClamp * yClamp * (3 - 2 * yClamp);
 				const baseBrightness = 0.65 + ySoft * 0.15;
-				const baseOpacity = 0.22 + rand() * 0.26;
+				const baseOpacity = 0.26 + rand() * 0.28;
 
 				const mat = new SpriteMaterial({
 					map: tex,

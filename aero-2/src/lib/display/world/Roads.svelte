@@ -232,7 +232,7 @@
 				'line-color': color,
 				'line-width': bloomWidth,
 				'line-blur': 4,
-				'line-opacity': 0.4 * glow
+				'line-opacity': 0.55 * glow
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>

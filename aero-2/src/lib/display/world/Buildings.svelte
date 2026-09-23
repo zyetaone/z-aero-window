@@ -40,7 +40,7 @@
 		for (let i = 0; i < data.length; i += 4) data.set([16, 18, 28, 255], i);
 		let seed = 0x9e3779b9;
 		const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-		for (let n = 0; n < 130; n++) {
+		for (let n = 0; n < 170; n++) {
 			const x = Math.floor(rand() * WINDOWS_PX);
 			const y = Math.floor(rand() * WINDOWS_PX);
 			const warm = rand() < 0.8;
@@ -66,7 +66,7 @@
 	const deck = $derived(weatherLightLoss(display.weather));
 	const nightOpacity = $derived(quantize(0.95 * altitudeFade * lit * flicker * (1 - 0.8 * deck)));
 	// The footprint itself glows: forecourts, car parks and lobbies light the block.
-	const footprintOpacity = $derived(quantize(0.6 * altitudeFade * lit * (1 - 0.8 * deck)));
+	const footprintOpacity = $derived(quantize(0.7 * altitudeFade * lit * (1 - 0.8 * deck)));
 </script>
 
 <!-- Gated on the place only. Mounting on altitude re-fetched and re-parsed the
