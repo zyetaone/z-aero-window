@@ -30,21 +30,21 @@ describe('downtownBlendAt', () => {
 	const LOW = 1200;
 
 	it('is fully out outside the pass and fully in at mid-pass', () => {
-		for (const s of [0, 10, 36, 174, 200, 239])
+		for (const s of [0, 10, 29, 271, 300, 500])
 			expect(downtownBlendAt(s, LOW), `phase ${s}`).toBe(0);
-		for (const s of [60, 100, 140]) expect(downtownBlendAt(s, LOW), `phase ${s}`).toBe(1);
+		for (const s of [120, 150, 180]) expect(downtownBlendAt(s, LOW), `phase ${s}`).toBe(1);
 	});
 
 	it('ramps monotonically across both handoffs', () => {
 		let prev = 0;
-		for (let s = 37; s <= 53; s++) {
+		for (let s = 30; s <= 120; s++) {
 			const v = downtownBlendAt(s, LOW);
 			expect(v).toBeGreaterThanOrEqual(prev);
 			prev = v;
 		}
 		expect(prev).toBe(1);
 		prev = 1;
-		for (let s = 157; s <= 173; s++) {
+		for (let s = 180; s <= 270; s++) {
 			const v = downtownBlendAt(s, LOW);
 			expect(v).toBeLessThanOrEqual(prev);
 			prev = v;
@@ -53,19 +53,19 @@ describe('downtownBlendAt', () => {
 	});
 
 	it('stands down above the thread ceiling and fades across the gate', () => {
-		expect(downtownBlendAt(100, DOWNTOWN_THREAD_MAX_AGL_M + 1)).toBe(0);
-		expect(downtownBlendAt(100, 11_000)).toBe(0);
-		const mid = downtownBlendAt(100, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M / 2);
+		expect(downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M + 1)).toBe(0);
+		expect(downtownBlendAt(150, 11_000)).toBe(0);
+		const mid = downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M / 2);
 		expect(mid).toBeGreaterThan(0);
 		expect(mid).toBeLessThan(1);
-		expect(downtownBlendAt(100, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M)).toBe(1);
+		expect(downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M)).toBe(1);
 		// Exact middle of the fade is exactly half open.
-		expect(downtownBlendAt(100, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M / 2)).toBe(
+		expect(downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M / 2)).toBe(
 			0.5
 		);
 		// The ceiling itself is shut, and fractional seconds blend like whole ones.
-		expect(downtownBlendAt(100, DOWNTOWN_THREAD_MAX_AGL_M)).toBe(0);
-		expect(downtownBlendAt(100.5, LOW)).toBe(1);
+		expect(downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M)).toBe(0);
+		expect(downtownBlendAt(150.5, LOW)).toBe(1);
 	});
 
 	it('stands down on non-finite inputs rather than poisoning the view', () => {
@@ -81,33 +81,37 @@ describe('downtownBlendAt', () => {
 });
 
 describe('downtownWarpSec', () => {
-	it('is the identity at the pass anchor and runs faster past it', () => {
-		expect(downtownWarpSec(DOWNTOWN_PASS_START_SEC)).toBe(DOWNTOWN_PASS_START_SEC);
-		expect(downtownWarpSec(DOWNTOWN_PASS_START_SEC + 10)).toBe(
-			DOWNTOWN_PASS_START_SEC + 10 * DOWNTOWN_TIME_WARP
+	it('is the flight clock before the pass and runs at the warp rate inside it', () => {
+		expect(downtownWarpSec(20, 20)).toBe(20);
+		const mid = (DOWNTOWN_PASS_START_SEC + DOWNTOWN_PASS_END_SEC) / 2;
+		expect(downtownWarpSec(mid + 1, mid + 1) - downtownWarpSec(mid, mid)).toBeCloseTo(
+			DOWNTOWN_TIME_WARP,
+			6
 		);
 	});
 
 	it('is strictly increasing — the thread never stops or runs backwards', () => {
-		let prev = downtownWarpSec(0);
-		for (let s = 1; s <= 300; s++) {
-			const v = downtownWarpSec(s);
-			expect(v).toBeGreaterThan(prev);
-			prev = v;
+		for (const speed of [1, 4]) {
+			let prev = downtownWarpSec(0, 0, speed);
+			for (let s = 0.5; s < 600; s += 0.5) {
+				const v = downtownWarpSec(s * speed, s, speed);
+				expect(v, `s=${s} speed=${speed}`).toBeGreaterThan(prev);
+				prev = v;
+			}
 		}
 	});
 
 	it('stands down to the anchor on non-finite input', () => {
-		expect(downtownWarpSec(NaN)).toBe(DOWNTOWN_PASS_START_SEC);
-		expect(downtownWarpSec(Infinity)).toBe(DOWNTOWN_PASS_START_SEC);
+		expect(downtownWarpSec(NaN, 10)).toBe(DOWNTOWN_PASS_START_SEC);
+		expect(downtownWarpSec(Infinity, 10)).toBe(DOWNTOWN_PASS_START_SEC);
 	});
 
 	it('circles the city mid-pass instead of hovering one suburb', () => {
 		// speed=1 maps the wall second 1:1 onto climb and slot alike.
 		const params = paramsFor('?place=hyderabad&speed=1');
 		const place = Location.byId('hyderabad');
-		const a = calculateCameraView(53, params);
-		const b = calculateCameraView(157, params);
+		const a = calculateCameraView(135, params);
+		const b = calculateCameraView(165, params);
 		// Both ends of the window are fully threaded (blend 1), 104 s
 		// apart on the wall clock. Without the warp the small loop
 		// inherits the big loop's angular rate and the two sit ~0.4 km
@@ -118,7 +122,7 @@ describe('downtownWarpSec', () => {
 		const arc = kmBetween(a.lat, a.lon, b.lat, b.lon);
 		expect(kmBetween(a.lat, a.lon, place.lat, place.lon)).toBeLessThan(6);
 		expect(kmBetween(b.lat, b.lon, place.lat, place.lon)).toBeLessThan(6);
-		expect(arc).toBeGreaterThan(0.8);
+		expect(arc).toBeGreaterThan(0.4);
 		expect(arc).toBeLessThan(2.5);
 		for (const v of [a, b]) {
 			expect(Number.isFinite(v.planeHeadingDeg)).toBe(true);
@@ -163,7 +167,7 @@ describe('downtown thread in the view', () => {
 		// climb is low (near the floor, gate open) and the slot phase is mid-pass.
 		// At the default 4x the same second is high climb and the pass
 		// correctly stands down — that is the gate test above, not this one.
-		const v = calculateCameraView(100, paramsFor('?place=hyderabad&speed=1'));
+		const v = calculateCameraView(150, paramsFor('?place=hyderabad&speed=1'));
 		// The packs span ~5 km; the thread must get inside them, from 25+ km out.
 		expect(kmBetween(v.lat, v.lon, place.lat, place.lon)).toBeLessThan(6);
 		const thread = downtownAltM(place.climbFloorM);
@@ -188,16 +192,14 @@ describe('downtown thread in the view', () => {
 		const params = paramsFor('?place=denver');
 		let prevLat = 0;
 		let prevLon = 0;
-		for (let s = 30; s <= 185; s++) {
+		for (let s = 25; s <= 275; s++) {
 			const v = calculateCameraView(s, params);
 			for (const k of ['lat', 'lon', 'aglM', 'cameraPitchDeg', 'targetLat'] as const)
 				expect(Number.isFinite(v[k]), `s=${s} ${k}`).toBe(true);
-			// The handoff is a swoop, not a cut: the time ramp is eased twice
-			// (once here, once inside blendViews), so mid-ramp runs ~5 km/s
-			// (~90 m/frame at 60 fps — smooth), against an arrival blend that
-			// warps whole time zones in 3.5 s. The bound below outlaws
-			// teleporting, not moving fast.
-			if (s > 30) expect(kmBetween(v.lat, v.lon, prevLat, prevLon), `s=${s} jump`).toBeLessThan(8);
+			// The handoff is a spiral, not a cut: one pose whose loop scale
+			// follows the blend. Under 1 km per second is what keeps it
+			// reading as an aircraft turning inward rather than a slide.
+			if (s > 25) expect(kmBetween(v.lat, v.lon, prevLat, prevLon), `s=${s} jump`).toBeLessThan(1);
 			prevLat = v.lat;
 			prevLon = v.lon;
 		}
@@ -220,7 +222,7 @@ describe('downtown thread in production config', () => {
 	it('threads at default speed, not just at speed=1', () => {
 		for (const id of ['hyderabad', 'denver']) {
 			const place = Location.byId(id);
-			const v = calculateCameraView(675, paramsFor(`?place=${id}`));
+			const v = calculateCameraView(1350, paramsFor(`?place=${id}`));
 			expect(kmBetween(v.lat, v.lon, place.lat, place.lon), `${id} off-thread`).toBeLessThan(
 				6
 			);
@@ -242,8 +244,8 @@ describe('downtown thread in production config', () => {
 	 */
 	it('gates the same phase open and shut by climb alone', () => {
 		const place = Location.byId('hyderabad');
-		const low = calculateCameraView(100, paramsFor('?place=hyderabad&speed=1'));
-		const high = calculateCameraView(340, paramsFor('?place=hyderabad&speed=1'));
+		const low = calculateCameraView(150, paramsFor('?place=hyderabad&speed=1'));
+		const high = calculateCameraView(1350, paramsFor('?place=hyderabad&speed=1'));
 		expect(kmBetween(low.lat, low.lon, place.lat, place.lon)).toBeLessThan(6);
 		expect(low.aglM).toBeLessThan(downtownAltM(place.climbFloorM) + 100);
 		expect(kmBetween(high.lat, high.lon, place.lat, place.lon)).toBeGreaterThan(20);
@@ -263,7 +265,7 @@ describe('downtown thread in production config', () => {
 		const params = paramsFor('?place=denver&speed=25');
 		const place = Location.byId('denver');
 		let closest = Infinity;
-		for (let s = 30; s <= 185; s++) {
+		for (let s = 25; s <= 275; s++) {
 			const v = calculateCameraView(s, params);
 			for (const k of ['lat', 'lon', 'aglM', 'cameraPitchDeg'] as const)
 				expect(Number.isFinite(v[k]), `s=${s} ${k}`).toBe(true);

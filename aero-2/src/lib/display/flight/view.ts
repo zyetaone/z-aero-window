@@ -12,7 +12,13 @@ import {
 	DWELL_SEC,
 	slotNoise
 } from './flight-path.js';
-import { downtownBlendAt, downtownPose, downtownWarpSec } from './downtown.js';
+import {
+	DOWNTOWN_GATE_PHASE_SEC,
+	downtownGateAt,
+	downtownPose,
+	downtownTimeAt,
+	downtownWarpSec
+} from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
 import { signedDelta } from '#lib/angles.js';
 import { resolveLocalHours } from '../world/sun.js';
@@ -144,12 +150,15 @@ export function atmosphericTurbulence(wallSec: number, weather: Weather = 'clear
 	const intensity = TURBULENCE_INTENSITY[weather];
 	const t = Math.round(wallSec * TURBULENCE_GRID_HZ) / TURBULENCE_GRID_HZ;
 
-	// Multi-octave harmonic noise.
+	/**
+	 * Two octaves, none faster than ~0.8 Hz. There was a third at 14.7 and
+	 * 22.3 rad/s: on the 50 ms grid it held one value for three frames and
+	 * jumped, which read as judder, not weather. A bump is a slow thing.
+	 */
 	const lowFreq = Math.sin(t * 0.73) * Math.cos(t * 0.37);
 	const midFreq = Math.sin(t * 3.41 + 1.2) * 0.5 + Math.cos(t * 5.13) * 0.3;
-	const highFreq = Math.sin(t * 14.7) * Math.sin(t * 22.3) * 0.2;
 
-	const composite = (lowFreq * 0.5 + midFreq * 0.35 + highFreq * 0.15) * intensity;
+	const composite = (lowFreq * 0.55 + midFreq * 0.45) * intensity;
 
 	return {
 		pitchJitterDeg: composite * 0.45,
@@ -372,8 +381,20 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 		// Derived here, from the same second as the pose. See `phaseFor`.
 		phaseFor(params.place, wallSec)
 	);
-	const effectiveSec = wallSec * (params.speed ?? 1.0);
-	const plane = track.poseAt(effectiveSec);
+	const speed = params.speed ?? 1.0;
+	const effectiveSec = wallSec * speed;
+	/**
+	 * One flight clock for the whole slot: the downtown pass runs it faster
+	 * (downtownWarpSec), and the big loop keeps flying from wherever the pass
+	 * left it. Two clocks -- warped inside the pass, plain outside -- put the
+	 * aircraft in two places at the moment the pass let go.
+	 */
+	const slotStart = Math.floor(wallSec / DWELL_SEC) * DWELL_SEC;
+	const gate = params.place.isFeature
+		? 0
+		: downtownGateAt(track.poseAt((slotStart + DOWNTOWN_GATE_PHASE_SEC) * speed).aglM);
+	const flightSec = downtownWarpSec(effectiveSec, wallSec, speed, gate);
+	const plane = track.poseAt(flightSec);
 	const roleOffset = roleYawOffsetDeg(params.fleetRole ?? 'solo');
 	// The operator's aim, the fleet parallax, and the slow look-around —
 	// three independent offsets, one bearing. The sweep keys off wallSec,
@@ -407,29 +428,18 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	/**
 	 * Mid-visit downtown thread. The pass is a wall-slot event like the
 	 * rotation itself, so it keys off wallSec — NOT effectiveSec, which the
-	 * speed knob scales. Blending two full views (not poses) keeps aim,
-	 * turbulence and time-of-day continuous: at 0 the thread view is
-	 * unreachable and at 1 the big loop is, with the handoff eased both
-	 * sides in `downtownBlendAt`.
+	 * speed knob scales. ONE pose: loop scale, clock warp and altitude all
+	 * follow the blend, so the aircraft spirals from the big ring into the
+	 * small one and back out, heading continuous throughout. (It used to
+	 * blend two views 40 km apart, which slid the aircraft sideways at
+	 * kilometres per second and flipped the heading in the handoff.) The
+	 * gate still reads the unwarped climb: the visit's altitude decides
+	 * whether the pass engages.
 	 */
-	const thread = downtownBlendAt(wallSec, plane.aglM);
+	const thread = downtownTimeAt(((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC) * gate;
 	if (thread <= 0) return big;
-	// The thread flies its own clock: position AND heading/bank come from
-	// the warped pose, so the aircraft circles downtown instead of
-	// side-slipping across it holding the big loop's attitude. The gate
-	// above deliberately still reads the unwarped climb — it is the
-	// visit's altitude that decides whether the pass engages.
-	const warpPose = track.poseAt(downtownWarpSec(effectiveSec));
-	const small = downtownPose(warpPose, params.place.lat, params.place.lon, params.floorM);
-	const threadView = camera.project(
-		small,
-		utcOffset,
-		wallSec,
-		params.place.lat,
-		params.place.lon,
-		weather
-	);
-	return blendViews(big, threadView, thread);
+	const spiral = downtownPose(plane, params.place.lat, params.place.lon, params.floorM, thread);
+	return camera.project(spiral, utcOffset, wallSec, params.place.lat, params.place.lon, weather);
 }
 
 /**

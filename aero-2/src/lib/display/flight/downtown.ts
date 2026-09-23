@@ -34,11 +34,17 @@ import { DWELL_SEC } from './flight-path.js';
 /** Seconds into each dwell the pass starts and ends. Inside the slot with
  * margin both sides: the 3.5 s arrival glide is long over by 37 s, and 67 s
  * of big loop remain after the 173 s handoff before the next rotation. */
-export const DOWNTOWN_PASS_START_SEC = 45;
-export const DOWNTOWN_PASS_END_SEC = 165;
+export const DOWNTOWN_PASS_START_SEC = 75;
+export const DOWNTOWN_PASS_END_SEC = 225;
 /** Ease each side of the pass. A cut would teleport ~25 km; 8 s reads as the
  * descent toward the city / climb back out to the loop. */
-export const DOWNTOWN_HANDOFF_SEC = 8;
+/**
+ * 45 s each way (spiral in 30-120 s, downtown 120-180 s, spiral out 180-270 s). The pass used to blend two VIEWS 40 km apart over 8 s, which
+ * measured as a 4-10 km/s slide against the heading and a 190-degree heading
+ * flip in one second (the "rewind"). It is now ONE pose whose loop scale, clock
+ * warp and altitude follow the blend, so the aircraft spirals in and out.
+ */
+export const DOWNTOWN_HANDOFF_SEC = 45;
 /** Big-loop offsets shrink to this fraction: ~2 km N-S, ~3.4 km E-W at the
  * equator (less up-latitude) — city-centre scale, still a loop, not a hover.
  * Sized against the downtown building packs (~5 km span); Hyderabad's pack
@@ -63,9 +69,63 @@ export const DOWNTOWN_LOOP_SCALE = 0.08;
 export const DOWNTOWN_TIME_WARP = 3;
 
 /** Thread-clock second for a flight-clock second: identity at the anchor. */
-export function downtownWarpSec(effectiveSec: number): number {
-	if (!Number.isFinite(effectiveSec)) return DOWNTOWN_PASS_START_SEC;
-	return DOWNTOWN_PASS_START_SEC + (effectiveSec - DOWNTOWN_PASS_START_SEC) * DOWNTOWN_TIME_WARP;
+export function downtownWarpSec(effectiveSec: number, wallSec: number, speed = 1, gate = 1): number {
+	if (!Number.isFinite(effectiveSec) || !Number.isFinite(wallSec)) return DOWNTOWN_PASS_START_SEC;
+	return effectiveSec + speed * (DOWNTOWN_TIME_WARP - 1) * gate * downtownWarpAdvanceSec(wallSec);
+}
+
+/**
+ * How open the altitude gate is for a visit whose climb sits at `aglM` at
+ * the pass midpoint: 1 well below the thread ceiling, 0 at it. Read ONCE per
+ * slot (see view.ts), so it is a constant inside the slot: a gate that
+ * followed the live climb closed mid-pass and, with the thread clock far
+ * ahead of the flight clock, swung the aircraft across the big ring.
+ */
+export function downtownGateAt(aglM: number): number {
+	if (!Number.isFinite(aglM)) return 0;
+	return smooth((DOWNTOWN_THREAD_MAX_AGL_M - aglM) / DOWNTOWN_GATE_FADE_M);
+}
+
+const smooth = (s: number) => {
+	const c = Math.max(0, Math.min(1, s));
+	return c * c * (3 - 2 * c);
+};
+const RAMP_SEC = 2 * DOWNTOWN_HANDOFF_SEC;
+const RAMP_UP_AT = DOWNTOWN_PASS_START_SEC - DOWNTOWN_HANDOFF_SEC;
+const FULL_AT = DOWNTOWN_PASS_START_SEC + DOWNTOWN_HANDOFF_SEC;
+const RAMP_DOWN_AT = DOWNTOWN_PASS_END_SEC - DOWNTOWN_HANDOFF_SEC;
+const OUT_AT = DOWNTOWN_PASS_END_SEC + DOWNTOWN_HANDOFF_SEC;
+
+/** The time half of the blend: 0 outside the pass, smoothstep ramps, 1 inside. */
+export function downtownTimeAt(phase: number): number {
+	if (phase < RAMP_UP_AT || phase > OUT_AT) return 0;
+	if (phase < FULL_AT) return smooth((phase - RAMP_UP_AT) / RAMP_SEC);
+	if (phase > RAMP_DOWN_AT) return 1 - smooth((phase - RAMP_DOWN_AT) / RAMP_SEC);
+	return 1;
+}
+
+/**
+ * Integral of `downtownTimeAt` over the slot so far, in wall seconds. The
+ * thread clock is `effective + (warp-1) * speed * this`, so its rate is
+ * `speed * (1 + (warp-1) * time)`: never below the flight clock's own rate,
+ * never backwards. A blend-scaled warp FACTOR ran the clock backwards on the
+ * way out (the factor fell faster than the time grew) and flipped the
+ * heading; this is closed form, so no pane keeps state to agree on it.
+ */
+export function downtownWarpAdvanceSec(wallSec: number): number {
+	const p = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
+	const rampArea = (c: number) => RAMP_SEC * (c * c * c - (c * c * c * c) / 2);
+	const plateau = RAMP_DOWN_AT - FULL_AT;
+	// Per slot: the clock steps back at the boundary, where the place changes
+	// under the blind anyway. (A pinned place sees that step once per dwell.)
+	if (p <= RAMP_UP_AT) return 0;
+	if (p < FULL_AT) return rampArea((p - RAMP_UP_AT) / RAMP_SEC);
+	if (p <= RAMP_DOWN_AT) return RAMP_SEC / 2 + (p - FULL_AT);
+	if (p < OUT_AT) {
+		const c = (p - RAMP_DOWN_AT) / RAMP_SEC;
+		return RAMP_SEC / 2 + plateau + RAMP_SEC * c - rampArea(c);
+	}
+	return RAMP_SEC + plateau;
 }
 /** Thread altitude floor. Clears the tallest stamped tower (Dubai, 225 m) by
  * 5x, stays in the buildings' full-render band (under ~5,500 m), and never
@@ -83,6 +143,8 @@ export const DOWNTOWN_MIN_AGL_M = 1800;
  */
 export const DOWNTOWN_THREAD_MAX_AGL_M = 6000;
 export const DOWNTOWN_GATE_FADE_M = 500;
+/** Slot phase at which the visit's climb altitude is read for the gate. */
+export const DOWNTOWN_GATE_PHASE_SEC = (DOWNTOWN_PASS_START_SEC + DOWNTOWN_PASS_END_SEC) / 2;
 
 /** Thread altitude for a visit: the floor, unless the floor is lower than is
  * useful — Hyderabad's 400 m floor would thread rooftops at chimney height.
@@ -105,23 +167,9 @@ export function downtownBlendAt(wallSec: number, aglM: number): number {
 	// A NaN climb would otherwise poison the whole view through blendViews;
 	// standing down is the only honest answer to an unknown altitude.
 	if (!Number.isFinite(wallSec) || !Number.isFinite(aglM)) return 0;
-	const smooth = (s: number) => {
-		const c = Math.max(0, Math.min(1, s));
-		return c * c * (3 - 2 * c);
-	};
-	const phase = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
-	const rampUpAt = DOWNTOWN_PASS_START_SEC - DOWNTOWN_HANDOFF_SEC;
-	const rampDownAt = DOWNTOWN_PASS_END_SEC - DOWNTOWN_HANDOFF_SEC;
-	let time = 0;
-	if (phase >= rampUpAt && phase <= DOWNTOWN_PASS_END_SEC + DOWNTOWN_HANDOFF_SEC) {
-		if (phase < DOWNTOWN_PASS_START_SEC + DOWNTOWN_HANDOFF_SEC)
-			time = smooth((phase - rampUpAt) / (2 * DOWNTOWN_HANDOFF_SEC));
-		else if (phase > rampDownAt)
-			time = 1 - smooth((phase - rampDownAt) / (2 * DOWNTOWN_HANDOFF_SEC));
-		else time = 1;
-	}
+	const time = downtownTimeAt(((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC);
 	if (time <= 0) return 0;
-	return time * smooth((DOWNTOWN_THREAD_MAX_AGL_M - aglM) / DOWNTOWN_GATE_FADE_M);
+	return time * downtownGateAt(aglM);
 }
 
 /**
@@ -135,13 +183,15 @@ export function downtownPose(
 	pose: OrbitPose,
 	centerLat: number,
 	centerLon: number,
-	floorM: number
+	floorM: number,
+	blend = 1
 ): OrbitPose {
+	const scale = 1 + (DOWNTOWN_LOOP_SCALE - 1) * blend;
 	return {
-		lat: centerLat + (pose.lat - centerLat) * DOWNTOWN_LOOP_SCALE,
-		lon: centerLon + (pose.lon - centerLon) * DOWNTOWN_LOOP_SCALE,
+		lat: centerLat + (pose.lat - centerLat) * scale,
+		lon: centerLon + (pose.lon - centerLon) * scale,
 		headingDeg: pose.headingDeg,
 		bankDeg: pose.bankDeg,
-		aglM: downtownAltM(floorM)
+		aglM: pose.aglM + (downtownAltM(floorM) - pose.aglM) * blend
 	};
 }

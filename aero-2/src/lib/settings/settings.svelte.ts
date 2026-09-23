@@ -231,7 +231,7 @@ export class PaneSettings {
 	fleetRole = $state<FleetRole>('solo');
 
 	/** Cabin Ambient Soundscape & Audio Playlist */
-	audioEnabled = $state<boolean>(false);
+	audioEnabled = $state<boolean>(true);
 	audioVolume = $state<number>(0.5);
 	/**
 	 * `synth`, because it is the only mode that works with no files.

@@ -45,6 +45,7 @@
 
 	const display = useDisplay();
 
+	const M_PER_DEG_LAT = 111_320;
 	const isVisible = $derived(display.config.clouds);
 	const density = $derived(display.config.cloudDensity);
 	const driftSpeed = $derived(display.config.cloudSpeed);
@@ -144,6 +145,7 @@
 		const cloudGroup = new Group();
 		scene.add(cloudGroup);
 
+
 		const textureLoader = new TextureLoader();
 		const textures: Texture[] = [];
 		let settled = 0;
@@ -214,6 +216,8 @@
 		 */
 		const baseRot: number[] = [];
 		const basePos: number[] = [];
+		/** Half-size of the square a sprite wraps in as the aircraft moves past it. */
+		const wrapR: number[] = [];
 
 		function buildCloudDeck() {
 			while (cloudGroup.children.length > 0) {
@@ -226,6 +230,7 @@
 			shearFactors.length = 0;
 			baseRot.length = 0;
 			basePos.length = 0;
+			wrapR.length = 0;
 
 			if (textures.length === 0) return;
 
@@ -356,7 +361,8 @@
 				const yNorm = (oy - ch + baseScale * 0.1) / (baseScale * 0.2);
 				const yClamp = Math.max(0, Math.min(1, yNorm));
 				const ySoft = yClamp * yClamp * (3 - 2 * yClamp);
-				const baseBrightness = 0.65 + ySoft * 0.15;
+				// White in daylight; `nightDark` in the loop takes it down at night.
+				const baseBrightness = 0.84 + ySoft * 0.14;
 				const baseOpacity = 0.26 + rand() * 0.28;
 
 				const mat = new SpriteMaterial({
@@ -393,6 +399,7 @@
 				shearFactors.push(clusterShear);
 				baseRot.push(mat.rotation);
 				basePos.push(ox, oz);
+				wrapR.push(radiusMin + radiusSpan + scaleMin + scaleSpan);
 			}
 		}
 
@@ -459,6 +466,19 @@
 			const driftPhase = gustPhase * driftSpeed * 0.008;
 			cloudGroup.rotation.y = bearingRad + wallSec * driftSpeed * 0.0006;
 
+			/**
+			 * The deck is fixed to the ground, so it streams past as the
+			 * aircraft flies. Displacement from the destination pin in metres,
+			 * from `view.lat/lon` (a wall-clock function, so every pane agrees
+			 * and a reboot rejoins mid-stream). Group-local axes are compass
+			 * aligned: +X east, -Z north. Each sprite wraps inside its own tier
+			 * square, so the population never thins out ahead or piles up behind.
+			 */
+			const pl = display.config.place;
+			const eastM = (display.view.lon - pl.lon) * M_PER_DEG_LAT * Math.cos(display.view.lat * (Math.PI / 180));
+			const northM = (display.view.lat - pl.lat) * M_PER_DEG_LAT;
+			const wrap = (v: number, r: number) => ((((v + r) % (2 * r)) + 2 * r) % (2 * r)) - r;
+
 			// ── Per-Sprite 3D Solar Lighting & Mie Forward-Scatter ─────────────────
 			const sunElev = display.sun.elevationDeg;
 			const sunAzimuth = display.sun.azimuthDeg;
@@ -493,15 +513,19 @@
 				// Spin & shear, both SET from the clock rather than nudged.
 				mat.rotation = (baseRot[i] ?? 0) + rotSpeeds[i] * gustPhase;
 				const shear = shearFactors[i] ?? 0;
+				let px = basePos[i * 2];
+				let pz = basePos[i * 2 + 1];
 				if (shear !== 0) {
 					const angle = driftPhase * shear;
 					const cs = Math.cos(angle);
 					const sn = Math.sin(angle);
-					const px = basePos[i * 2];
-					const pz = basePos[i * 2 + 1];
-					s.position.x = px * cs - pz * sn;
-					s.position.z = px * sn + pz * cs;
+					const rx = px * cs - pz * sn;
+					pz = px * sn + pz * cs;
+					px = rx;
 				}
+				const r = wrapR[i];
+				s.position.x = wrap(px - eastM, r);
+				s.position.z = wrap(pz + northM, r);
 
 				// Forward Mie scatter
 				_spriteWorld.copy(s.position).applyMatrix4(cloudGroup.matrixWorld);

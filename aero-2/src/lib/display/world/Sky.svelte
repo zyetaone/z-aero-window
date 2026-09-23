@@ -15,6 +15,7 @@
 	import { signedDelta } from '#lib/angles.js';
 	import { cssRgb, lerpRgb, weatherLightLoss, cloudedRgb } from './atmosphere.js';
 	import { quantize, slowBeat } from './beat.js';
+	import { WORLD_ROLL_GAIN } from '../flight/view.js';
 
 	const display = useDisplay();
 
@@ -264,6 +265,21 @@
 	 * bank, so the mask now tracks the horizon instead of trying to out-run it,
 	 * and the fade band is back to being a soft edge rather than a tolerance.
 	 */
+	/**
+	 * A cloud/haze DECK as a CSS band, not as sprites or a textured quad: a
+	 * gradient below the horizon, aligned to it, that thickens with weather
+	 * and only shows while the aircraft is above the deck altitude. Zero
+	 * texture memory, one compositing layer, and it rolls with the horizon.
+	 */
+	const aboveDeck = $derived(
+		quantize(Math.max(0, Math.min(1, (display.view.aglM - display.config.cloudAltitudeM - 300) / 600)))
+	);
+	const deckAmount = $derived(quantize(Math.max(0, Math.min(0.92, overcast * 1.35)) * aboveDeck));
+	const deckRgb = $derived(
+		lerpRgb([0.93, 0.93, 0.95], [0.15, 0.16, 0.19], night)
+			.map((v) => Math.round(v * 255))
+			.join(', ')
+	);
 	const HORIZON_AT_LEVEL = 36;
 	const PER_DEGREE = 0.9;
 	const horizonPct = $derived(
@@ -288,11 +304,22 @@
 	style:--night={night}
 	style:--dusk={duskFactor}
 	style:--sun-x="{sunScreenX}%"
+	style:--roll="{quantize(-bank * WORLD_ROLL_GAIN, 0.1)}deg"
 	aria-hidden="true"
 >
 	<!-- Golden Hour Solar Flare Radiance -->
 	{#if duskFactor > 0.05}
 		<div class="dusk-radiance" style:opacity={duskFactor * (1 - night)}></div>
+	{/if}
+
+	<!-- Cloud deck seen from above: a horizon-aligned band, CSS only -->
+	{#if deckAmount > 0.01}
+		<div
+			class="haze-deck"
+			style:--horizon="{horizonPct}%"
+			style:--deck={deckRgb}
+			style:opacity={deckAmount}
+		></div>
 	{/if}
 
 	<!-- Deep Space Milky Way & Starfield (Fades in at night) -->
@@ -314,22 +341,18 @@
 </div>
 
 <style>
-	/* This used to `rotate(var(--view-bank))`, on the stated grounds that the
-	   horizon tilts with the airframe. It does not. Bank never reaches the map
-	   as roll -- `calculateCameraOptionsFromTo` derives bearing and pitch from
-	   geometry and has nothing to derive roll from, and nothing else sets it --
-	   so bank reaches the WORLD as a pitch offset (BANK_VIEW_GAIN) and reached
-	   this OVERLAY as a rotation. One input, two different visual answers: the
-	   stars banked against a horizon that had stayed level, which made the mask
-	   error above worse rather than cancelling it.
-
-	   Rolling the map instead is the other way to make these agree, and is
-	   probably the better-looking one -- MapLibre takes `roll` in CameraOptions
-	   -- but bank is already spent on pitch, so it needs that double-count
-	   resolved first. That is a camera design decision, not a bug fix. */
+	/* Rolls with the world. Stage.svelte now passes `roll: -bankDeg *
+	   WORLD_ROLL_GAIN` to MapLibre, so the map horizon tilts on every bank;
+	   the same angle here keeps the horizon mask on the horizon instead of
+	   leaving stars on the ground on the low-wing side. (An earlier version
+	   rotated this overlay while the map stayed level, which was the opposite
+	   mismatch; the fix was always to give both one answer.) Quantised to
+	   0.1 degrees so the style is not rewritten every frame. */
 	.sky-celestial-overlay {
 		position: absolute;
 		inset: 0;
+		transform: rotate(var(--roll, 0deg));
+		transform-origin: 50% var(--horizon, 40%);
 		overflow: hidden;
 		pointer-events: none;
 		z-index: 1;
@@ -351,6 +374,21 @@
 		);
 		filter: blur(24px);
 		pointer-events: none;
+	}
+
+	.haze-deck {
+		position: absolute;
+		inset: 0;
+		/* Clear sky right at the horizon line, the deck filling in below it:
+		   thin and far at the top of the band, solid nearer the aircraft. */
+		background: linear-gradient(
+			to bottom,
+			transparent 0,
+			transparent calc(var(--horizon) - 1%),
+			rgba(var(--deck), 0.45) calc(var(--horizon) + 5%),
+			rgba(var(--deck), 0.92) calc(var(--horizon) + 22%),
+			rgba(var(--deck), 0.96) 100%
+		);
 	}
 
 	.starfield {

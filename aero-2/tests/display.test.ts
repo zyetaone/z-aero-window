@@ -136,7 +136,8 @@ describe('readSettings', () => {
 		const p = paramsFor('?audio=');
 		expect(p.audioPlaylist).toEqual([]);
 		expect(p.audioMode).toBe('synth');
-		expect(p.audioEnabled).toBe(false);
+		// Sound is on by default (synth rumble); an empty param must not touch it.
+		expect(p.audioEnabled).toBe(true);
 	});
 
 	/**
