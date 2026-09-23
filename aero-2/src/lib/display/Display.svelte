@@ -49,6 +49,8 @@
 	let { hud = true, children }: Props = $props();
 
 	const display = useDisplay();
+	// DEV harness handle (the branch's headless capture scripts poke knobs through it).
+	if (import.meta.env.DEV) (globalThis as unknown as { __display?: unknown }).__display = display;
 
 	/**
 	 * Night grade on the world, before the cabin chrome is drawn over it.

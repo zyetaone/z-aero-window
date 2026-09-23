@@ -50,7 +50,15 @@
 		}
 		return { width: WINDOWS_PX, height: WINDOWS_PX, data };
 	})();
-	const litWindows = $derived(night >= 0.6);
+	/**
+	 * Two layers over one source, cross-faded on `night`: a pattern cannot be
+	 * toggled (MapLibre rejects `undefined`, and a bare colour layer cannot
+	 * show windows), and opacity 0 skips a fill-extrusion draw, so the day
+	 * layer costs nothing at night and vice versa.
+	 */
+	const lit = $derived(Math.round(Math.max(0, Math.min(1, (night - 0.5) / 0.3)) * 100) / 100);
+	const dayOpacity = $derived(Math.round(0.85 * altitudeFade * (1 - lit) * 100) / 100);
+	const nightOpacity = $derived(Math.round(0.85 * altitudeFade * lit * 100) / 100);
 </script>
 
 <!-- Gated on the place only. Mounting on altitude re-fetched and re-parsed the
@@ -62,10 +70,17 @@
 		<FillExtrusionLayer
 			paint={{
 				'fill-extrusion-color': buildingColor,
-				'fill-extrusion-pattern': litWindows ? 'lit-windows' : undefined,
 				'fill-extrusion-height': ['coalesce', ['get', 'height'], 20],
 				'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-				'fill-extrusion-opacity': 0.85 * altitudeFade
+				'fill-extrusion-opacity': dayOpacity
+			}}
+		/>
+		<FillExtrusionLayer
+			paint={{
+				'fill-extrusion-pattern': 'lit-windows',
+				'fill-extrusion-height': ['coalesce', ['get', 'height'], 20],
+				'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+				'fill-extrusion-opacity': nightOpacity
 			}}
 		/>
 	</GeoJSONSource>
