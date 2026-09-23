@@ -178,30 +178,15 @@ export class PaneSettings {
 	/** Weather conditions (clear, cloudy, rain, overcast, storm) */
 	weather = $state<Weather>('clear');
 	/**
-	 * Live sky follows the real atmosphere (see LiveWeather.svelte).
+	 * The sky follows the schedule unless pinned (`weatherAt` in display.svelte.ts).
 	 *
 	 * ON unless pinned: an explicit `?weather=` means the operator staged a
-	 * scenario and the sky must not wander off it mid-measurement. Offline
-	 * never flips this — a failed fetch simply changes nothing.
+	 * scenario and the sky must not wander off it. The real-atmosphere poller
+	 * (LiveWeather.svelte) that once wrote through here is gone; the wall-clock
+	 * schedule replaced it, and `weather` remains a wall key with the drawer
+	 * and wall.svelte.ts as its only writers.
 	 */
 	liveWeather = $state<boolean>(true);
-
-	/**
-	 * The one writer LiveWeather may call (ADR-007).
-	 *
-	 * `weather` is a wall key: only this file and wall.svelte.ts may assign
-	 * it, and a per-field wall PATCH is the merge rule ADR-007 refuses to
-	 * build — so the poller never writes config itself and never POSTs. It
-	 * advises; this method writes, idempotently: same value, no assignment,
-	 * no deck re-roll, no fleet broadcast churn.
-	 *
-	 * Precedence is latest-writer-wins, same tolerance as the operator
-	 * drawer's own entry: a pushed drill holds until the next live poll
-	 * (≤15 min) reasserts the real sky.
-	 */
-	applyLiveWeather(w: Weather): void {
-		if (this.weather !== w) this.weather = w;
-	}
 	qualityMode = $state<'ultra' | 'balanced' | 'performance'>('balanced');
 
 	/** Display Modes (flight, video, screensaver, standby) */

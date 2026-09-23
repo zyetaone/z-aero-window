@@ -15,6 +15,7 @@
  */
 
 import { duskHorizonMix } from '../world/sun.js';
+import { clamp01 } from '#lib/angles.js';
 
 export interface GradeWash {
 	/** Warm dusk wash opacity, 0..1. */
@@ -33,7 +34,6 @@ export const GRADE_WARM_MAX = 0.14;
  */
 export const GRADE_COOL_MAX = 0;
 
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 export function gradeWash(night: number, sunElevationDeg: number): GradeWash {
 	if (!Number.isFinite(night) || !Number.isFinite(sunElevationDeg))
