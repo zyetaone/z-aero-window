@@ -132,7 +132,13 @@ BUNDLE=$(ls -t "${USB_DIR}"/aero-release*.bundle 2>/dev/null | head -n 1 || true
 if [[ -n "${BUNDLE}" ]] && git bundle verify "${BUNDLE}" >/dev/null 2>&1; then
     log "Pen drive: fetching ${BRANCH} from ${BUNDLE}"
     if git fetch "${BUNDLE}" "+refs/heads/${BRANCH}:refs/remotes/usb/${BRANCH}" --quiet 2>&1 | tee -a "${LOG_FILE}"; then
-        SOURCE="usb"
+        # A stick left in a Pi must not pin it to the build it carried: only a
+        # bundle that is AHEAD of what runs is a source. Old or equal → network.
+        if git merge-base --is-ancestor "usb/${BRANCH}" HEAD 2>/dev/null; then
+            log "Pen drive: bundle is not newer than HEAD — ignoring it"
+        else
+            SOURCE="usb"
+        fi
     else
         log "WARN: bundle fetch failed — falling back to the network"
     fi
