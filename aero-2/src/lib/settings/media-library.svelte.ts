@@ -8,7 +8,7 @@
  *
  * THE TOKEN IS NEVER PERSISTED. It lives in this module for as long as the tab
  * is open and goes nowhere else — not localStorage, not sessionStorage, not a
- * URL. That is the same rule `AdminSoftware.svelte` states for the update
+ * URL. That is the same rule the on-demand update block in `routes/admin/+page.svelte` follows for the update
  * token, and for the same reason: an admin credential in a browser store on a
  * kiosk-adjacent laptop outlives the operator's attention.
  *

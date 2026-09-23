@@ -230,11 +230,10 @@ describe("ADR-007's one mutation path is structural, not documented", () => {
 	const KNOWN = [
 		'display/cabin/use-blind.svelte.ts (blindOpen)',
 		'display/media/MediaStage.svelte (displayMode)',
-		'settings/Settings.svelte (weather)',
 		'settings/Settings.svelte (blindOpen)'
 	];
 
-	it('writes a wall key onto config nowhere but its owners and the known four', () => {
+	it('writes a wall key onto config nowhere but its owners and the known three', () => {
 		const offenders: string[] = [];
 		for (const file of simSources()) {
 			const rel = file.replace(/^src\/lib\//, '');

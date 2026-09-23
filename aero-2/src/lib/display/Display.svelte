@@ -60,7 +60,7 @@
 			display.config.nudge('azimuthDeg', az);
 			display.config.nudge('pitchDeg', pitch);
 		},
-		ignoreClosest: 'aside, nav, button, .blind-grab, .blind-slats, .qr-backdrop, .look-controls, .minimap'
+		ignoreClosest: 'aside, nav, button, .blind-clip, .blind-grab, .blind-slats, .qr-backdrop, .look-controls, .minimap'
 	});
 	// DEV harness handle (the branch's headless capture scripts poke knobs through it).
 	if (import.meta.env.DEV) (globalThis as unknown as { __display?: unknown }).__display = display;

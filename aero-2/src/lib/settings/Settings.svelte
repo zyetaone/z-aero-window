@@ -1,11 +1,11 @@
 <script lang="ts">
 	/**
 	 * Settings — Operator Tuning Drawer & System Diagnostics Panel.
-	 * Categorized into 6 logical operator tabs with dual range/number inputs and toggle switches.
+	 * Categorized into 3 operator tabs (flight, cabin, wall) with dual range/number inputs and toggle switches.
 	 */
 	import { useDisplay } from '../display/display.svelte.js';
 	import { Location, LOCATIONS } from './locations.js';
-		import { WEATHERS, FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
+		import { FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
 	import { DWELL_SEC } from '../display/flight/flight-path.js';
 
 	import { fetchStatus, type KioskStatus } from '#lib/status.js';
@@ -136,14 +136,9 @@
 
 				<section class="section">
 					<h4>Conditions</h4>
-					<!-- Rotation on/off is a wall key; it is set from the Wall tab so all
-					     three panes change together (ADR-007). -->
-					<Segmented
-					label="Weather Condition"
-					options={WEATHERS}
-					isActive={(w) => config.weather === w}
-					onselect={(w) => (config.weather = w)}
-				/>
+					<!-- Rotation and weather are wall keys; they are set from the Wall tab
+					     so all three panes change together (ADR-007). A local weather
+					     control lived here and split the panorama. -->
 					<Knob
 						{config}
 						key="clockOffsetH"

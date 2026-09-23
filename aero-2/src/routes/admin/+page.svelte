@@ -262,7 +262,7 @@
 		<section class="card">
 			<h2>🎨 Scene Composition Presets</h2>
 			<p class="card-desc">
-				Push curated atmospheric, lighting, and terrain compositions to kiosks.
+				Open a curated composition on this device. To change the wall, use a pane's Wall tab.
 			</p>
 
 			<div class="presets-list">

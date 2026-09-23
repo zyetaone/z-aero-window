@@ -149,7 +149,7 @@ export function blindClosedAt(wallSec: number): boolean {
 }
 
 const TWO_PI = Math.PI * 2;
-const M_PER_DEG_LAT = 111_320;
+export const M_PER_DEG_LAT = 111_320;
 
 /**
  * How far the window pans either side of its aim, degrees.
