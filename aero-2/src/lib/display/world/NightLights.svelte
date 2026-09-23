@@ -71,7 +71,19 @@
 	const cruise = $derived.by(() => Math.round(100 * (
 		Math.max(0, Math.min(1, (display.view.aglM - NIGHT_VECTOR_TOP_M) / CRUISE_EXPOSURE_SPAN_M))
 	)) / 100);
-	const viirsOpacity = $derived(Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise));
+	/**
+	 * Low pass: below ~2.5 km the road lamps and lit windows carry the city, and
+	 * the raster, stretched to metres per pixel, is an orange blanket under
+	 * them. It hands two-thirds of itself over to the vectors from 2.5 km down
+	 * to 1 km (0.01 steps); the rest stays as the ambient glow between roads
+	 * that a city never loses.
+	 */
+	const lowPass = $derived(
+		Math.round(Math.max(0, Math.min(1, (display.view.aglM - 1000) / 1500)) * 100) / 100
+	);
+	const viirsOpacity = $derived(
+		Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise) * (0.25 + 0.75 * lowPass)
+	);
 	const viirsContrast = $derived(0.55 * cruise);
 	const viirsBrightnessMax = $derived(1 - 0.3 * cruise);
 </script>

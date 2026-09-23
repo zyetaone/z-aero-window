@@ -210,8 +210,11 @@
 				'line-color': color,
 				'line-width': width,
 				'line-opacity': 0.85 * glow,
-				// ponytail: lamps are dots, not a lit ribbon; [0,2] with round caps is one dot per width
-				'line-dasharray': [0, 2]
+				// Lamps are dots, not a lit ribbon: zero-length dashes on round caps.
+				// Dasharray cannot vary per feature, so the irregularity is in the
+				// pattern itself: five unequal gaps that repeat, which the eye reads
+				// as random spacing rather than a picket fence.
+				'line-dasharray': [0, 3, 0, 4.5, 0, 2.5, 0, 5.5, 0, 3.5]
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>
