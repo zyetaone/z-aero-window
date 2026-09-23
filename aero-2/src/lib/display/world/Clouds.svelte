@@ -42,7 +42,7 @@
 	} from 'three';
 	import { M_PER_DEG_LAT, mulberry32 } from '../flight/flight-path.js';
 	import { DEG2RAD } from '#lib/angles.js';
-	import { Location } from '#lib/settings/locations.js';
+	import { Location } from '#lib/locations.js';
 	import { weatherLightLoss } from './atmosphere.js';
 
 	const display = useDisplay();

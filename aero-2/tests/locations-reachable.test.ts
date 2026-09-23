@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { destinationAt, rotationSeedFor } from '#lib/display/flight/director.svelte.js';
-import { Location, LOCATIONS, ROTATION } from '#lib/settings/locations.js';
+import { Location, LOCATIONS, ROTATION } from '#lib/locations.js';
 import { SENTINEL2_PLACES, WATER_PLACES } from '#lib/settings/tiles.js';
 
 describe('every location is actually reachable', () => {

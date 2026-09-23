@@ -21,7 +21,7 @@
  * to drift.
  */
 
-import { ROTATION, Location } from '../../settings/locations.js';
+import { ROTATION, Location } from '../../locations.js';
 import type { PaneSettings } from '../../settings/settings.svelte.js';
 import { DWELL_SEC as _DWELL_SEC, mulberry32 } from './flight-path.js';
 

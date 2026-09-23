@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { SCENE_PRESETS } from '#lib/settings/presets.js';
 import { PaneSettings } from '#lib/settings/settings.svelte.js';
 import { localHourAtSunElevation, resolveLocalHours, sunPosition } from '#lib/display/world/sun.js';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 
 describe('Scene Composition Presets', () => {
 	it('defines all required preset metadata and config fields', () => {

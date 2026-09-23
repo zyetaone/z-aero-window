@@ -20,7 +20,7 @@ import {
 	downtownWarpSec
 } from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 import { resolveLocalHours } from '../world/sun.js';
 
 export interface CameraParams {

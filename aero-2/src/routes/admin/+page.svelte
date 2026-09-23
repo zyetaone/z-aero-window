@@ -10,7 +10,7 @@
 		PRODUCT_STAGE,
 		PRODUCT_PARTNERS
 	} from '#lib/credits.js';
-	import { LOCATIONS } from '#lib/settings/locations.js';
+	import { LOCATIONS } from '#lib/locations.js';
 	import { SCENE_PRESETS } from '#lib/settings/presets.js';
 	import {
 		fetchStatus,

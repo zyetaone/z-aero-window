@@ -3,7 +3,7 @@
  * Single source of truth for all live simulation knobs.
  */
 
-import { LOCATIONS, Location } from './locations.js';
+import { LOCATIONS, Location } from '../locations.js';
 import { SCENE_PRESETS, type ScenePreset } from './presets.js';
 import { HILLSHADE_DEFAULT, TERRAIN_EXAGGERATION } from './tiles.js';
 import { ALTITUDE_FLOOR_M, ALTITUDE_CEILING_M } from '../display/flight/flight-path.js';
@@ -17,7 +17,7 @@ import { FLEET_ROLES, type FleetRole } from '../display/flight/parallax.js';
 import { localHourAtSunElevation, resolveLocalHours } from '../display/world/sun.js';
 import { wrapSigned } from '#lib/angles.js';
 
-export { Location } from './locations.js';
+export { Location } from '../locations.js';
 export { FLEET_ROLES, type FleetRole } from '../display/flight/parallax.js';
 export { WEATHERS, type Weather } from '../display/flight/view.js';
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCameraView } from '#lib/display/flight/view.js';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 import { sunPosition, nightAmount } from '#lib/display/world/sun.js';
 
 /**

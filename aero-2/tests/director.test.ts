@@ -6,7 +6,7 @@ import {
 	DWELL_SEC
 } from '../src/lib/display/flight/director.svelte.js';
 import { createSettings } from '../src/lib/settings/settings.svelte.js';
-import { ROTATION } from '../src/lib/settings/locations.js';
+import { ROTATION } from '../src/lib/locations.js';
 import { blindClosedAt, BLIND_LAG_SEC, BLIND_LEAD_SEC } from '../src/lib/display/flight/flight-path.js';
 
 /**

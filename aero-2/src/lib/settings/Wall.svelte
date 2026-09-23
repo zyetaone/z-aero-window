@@ -17,7 +17,7 @@
 	import MediaPicker from './MediaPicker.svelte';
 	import Segmented from './Segmented.svelte';
 	import Toggle from './Toggle.svelte';
-	import { LOCATIONS, type Location } from './locations.js';
+	import { LOCATIONS, type Location } from '../locations.js';
 	import { SCENE_PRESETS } from './presets.js';
 	import { KNOB_RANGE, WEATHERS, type PaneSettings } from './settings.svelte.js';
 	import type { WallSync } from './wall.svelte.js';

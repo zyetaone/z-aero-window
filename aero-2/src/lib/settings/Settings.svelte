@@ -4,7 +4,7 @@
 	 * Categorized into 3 operator tabs (flight, cabin, wall) with dual range/number inputs and toggle switches.
 	 */
 	import { useDisplay } from '../display/display.svelte.js';
-	import { Location, LOCATIONS } from './locations.js';
+	import { Location, LOCATIONS } from '../locations.js';
 		import { FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
 	import { DWELL_SEC } from '../display/flight/flight-path.js';
 

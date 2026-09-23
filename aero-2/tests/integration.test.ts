@@ -25,7 +25,7 @@ import { join, resolve } from 'node:path';
 import { calculateCameraView } from '#lib/display/flight/view.js';
 import { resolveAtmosphere } from '#lib/display/world/atmosphere.js';
 import { sunPosition, nightAmount } from '#lib/display/world/sun.js';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 import {
 	tileTemplates,
 	TILE_MAXZOOM,
@@ -305,7 +305,7 @@ describe('the architecture invariants are actually held', () => {
 		'src/lib/display/world/atmosphere.ts',
 		'src/lib/display/world/sun.ts',
 		'src/lib/settings/settings.svelte.ts',
-		'src/lib/settings/locations.ts'
+		'src/lib/locations.ts'
 	];
 
 	it('keeps the pure simulation modules free of any renderer', () => {

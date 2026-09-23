@@ -40,7 +40,7 @@
 	import { useDisplay } from '../display.svelte.js';
 	import { NIGHT_VECTOR_TOP_M } from './sun.js';
 	import { weatherLightLoss } from './atmosphere.js';
-	import { Location } from '#lib/settings/locations.js';
+	import { Location } from '#lib/locations.js';
 
 	const display = useDisplay();
 	/** Metres above the road-lamp handover over which the cruise exposure ramps in. */

@@ -26,7 +26,7 @@
 		NIGHT_MOUNT_OFF,
 		NIGHT_MOUNT_ON
 	} from './sun.js';
-	import { Location } from '#lib/settings/locations.js';
+	import { Location } from '#lib/locations.js';
 
 	const display = useDisplay();
 

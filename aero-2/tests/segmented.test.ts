@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { LOCATIONS } from '#lib/settings/locations.js';
+import { LOCATIONS } from '#lib/locations.js';
 import { SCENE_PRESETS } from '#lib/settings/presets.js';
 import { WEATHERS } from '#lib/display/flight/view.js';
 import { FLEET_ROLES, AUDIO_MODES } from '#lib/settings/settings.svelte.js';

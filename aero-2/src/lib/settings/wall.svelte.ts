@@ -18,7 +18,7 @@
  * config at every `wallSec`.
  */
 
-import { Location } from './locations.js';
+import { Location } from '../locations.js';
 import type { PaneSettings } from './settings.svelte.js';
 import { resolveMediaUrl, splitMediaByKind, type WallSnapshot, type WallState } from '#lib/wall.js';
 
