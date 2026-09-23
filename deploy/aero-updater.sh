@@ -122,13 +122,31 @@ git config --global --get-all safe.directory 2>/dev/null | command grep -qxF "${
 # Explicit refspec: fielded Pis were provisioned with single-branch shallow
 # clones whose default fetch refspec only covers their original branch — a
 # plain `git fetch origin release` would never materialise the remote ref.
-git fetch origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" --quiet 2>&1 | tee -a "${LOG_FILE}" || {
-    log "WARN: git fetch failed (no network, or '${BRANCH}' not published yet?) — skipping update"
-    exit 0
-}
+# Pen drive first. A stick mounted at /media/aero (99-aero-usb.rules) holding a
+# `git bundle` of the release branch — `git bundle create aero-release.bundle
+# release` on any laptop — updates a Pi with no network at all. Same build,
+# probe and rollback pipeline below; only where the commits come from changes.
+USB_DIR="${AERO_USB_DIR:-/media/aero}"
+SOURCE="origin"
+BUNDLE=$(ls -t "${USB_DIR}"/aero-release*.bundle 2>/dev/null | head -n 1 || true)
+if [[ -n "${BUNDLE}" ]] && git bundle verify "${BUNDLE}" >/dev/null 2>&1; then
+    log "Pen drive: fetching ${BRANCH} from ${BUNDLE}"
+    if git fetch "${BUNDLE}" "+refs/heads/${BRANCH}:refs/remotes/usb/${BRANCH}" --quiet 2>&1 | tee -a "${LOG_FILE}"; then
+        SOURCE="usb"
+    else
+        log "WARN: bundle fetch failed — falling back to the network"
+    fi
+fi
+
+if [[ "${SOURCE}" == "origin" ]]; then
+    git fetch origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" --quiet 2>&1 | tee -a "${LOG_FILE}" || {
+        log "WARN: git fetch failed (no network, or '${BRANCH}' not published yet?) — skipping update"
+        exit 0
+    }
+fi
 
 LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse "origin/${BRANCH}")
+REMOTE=$(git rev-parse "${SOURCE}/${BRANCH}")
 
 if [[ "${LOCAL}" == "${REMOTE}" ]]; then
     log "Already up to date (${LOCAL:0:8})"
@@ -217,7 +235,7 @@ rollback() {
 # ─── 2. Pull changes ─────────────────────────────────────────────────────
 
 log "Pulling changes..."
-git reset --hard "origin/${BRANCH}" 2>&1 | tee -a "${LOG_FILE}"
+git reset --hard "${SOURCE}/${BRANCH}" 2>&1 | tee -a "${LOG_FILE}"
 log "Updated to $(git rev-parse --short HEAD): $(git log -1 --format='%s')"
 
 # The pull is what can relocate the app (the aero-1/ split is one such commit),
