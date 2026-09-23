@@ -87,7 +87,7 @@ const WMTS_TILE_PATH =
  * templates describe URLs while this describes disk. They will drift only if a
  * new raster source is added, which is the moment to read both.
  */
-export const REQUIRED_TILE_ASSETS = [
+const REQUIRED_TILE_ASSETS = [
 	{ name: 'gibs', path: 'gibs', kind: 'dir', fatal: true },
 	{ name: 'terrain.pmtiles', path: 'terrain.pmtiles', kind: 'file', fatal: true },
 	{ name: 'viirs', path: 'viirs', kind: 'dir', fatal: false },
@@ -336,8 +336,8 @@ export const GIBS_DATE = '2026-07-02';
  * GoogleMapsCompatible_Level8 is the whole pyramid: there is no z9+. That is
  * fine, because it is a glow laid under the horizon haze, not detail.
  */
-export const VIIRS_LAYER = 'VIIRS_NOAA20_GapFilled_BRDF_Corrected_DayNightBand_Radiance';
-export const VIIRS_DATE = '2026-07-15';
+const VIIRS_LAYER = 'VIIRS_NOAA20_GapFilled_BRDF_Corrected_DayNightBand_Radiance';
+const VIIRS_DATE = '2026-07-15';
 
 export function remoteTileUrl(subPath: string): string | null {
 	const m = subPath.match(WMTS_TILE_PATH);

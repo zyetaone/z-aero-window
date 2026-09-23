@@ -80,7 +80,7 @@ function anchorOf(i: number): number {
 	return Number.isFinite(band.topM) ? (floor + band.topM) / 2 : STRATOSPHERE_ANCHOR_M;
 }
 
-export function lerp(a: number, b: number, t: number): number {
+function lerp(a: number, b: number, t: number): number {
 	return a + (b - a) * t;
 }
 
@@ -170,7 +170,7 @@ export function resolveAtmosphere(aglM: number): AtmosphereState {
  * is a bright day with cumulus and barely dims at all, while the step from
  * `rain` to `overcast` is the sky closing over.
  */
-export const WEATHER_LIGHT_LOSS = {
+const WEATHER_LIGHT_LOSS = {
 	clear: 0,
 	cloudy: 0.14,
 	rain: 0.52,

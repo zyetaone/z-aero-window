@@ -91,7 +91,7 @@ export const BREATHE_PERIOD_SEC = ORBIT_PERIOD_SEC / ORBIT.petals;
  * rather than against a closed form keeps the bank honest when the path is
  * tuned — change `aspect` and the roll follows without a second edit.
  */
-export const TURN_RATE_REF_DEG_PER_SEC = 0.25;
+const TURN_RATE_REF_DEG_PER_SEC = 0.25;
 
 import {
 	normalizeHeading as _normalizeHeading,

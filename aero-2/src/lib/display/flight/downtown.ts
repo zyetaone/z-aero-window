@@ -50,7 +50,7 @@ export const DOWNTOWN_HANDOFF_SEC = 45;
  * Sized against the downtown building packs (~5 km span); Hyderabad's pack
  * sits ~11 km off its pin, so the thread circles empty ground there until
  * that pack is repacked — the loop is right, the content is misplaced. */
-export const DOWNTOWN_LOOP_SCALE = 0.08;
+const DOWNTOWN_LOOP_SCALE = 0.08;
 /**
  * How much faster the thread traverses its small loop than the big loop
  * would. Without it the pass is a hover, not a rotation: the small loop
@@ -112,7 +112,7 @@ export function downtownTimeAt(phase: number): number {
  * way out (the factor fell faster than the time grew) and flipped the
  * heading; this is closed form, so no pane keeps state to agree on it.
  */
-export function downtownWarpAdvanceSec(wallSec: number): number {
+function downtownWarpAdvanceSec(wallSec: number): number {
 	const p = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
 	const rampArea = (c: number) => RAMP_SEC * (c * c * c - (c * c * c * c) / 2);
 	const plateau = RAMP_DOWN_AT - FULL_AT;

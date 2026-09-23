@@ -90,7 +90,7 @@ export const DEFAULT_PITCH_DEG = -10;
  * first bites around ~4,900 m AGL and holds the target at 70 km all the way
  * to the ceiling.
  */
-export const LOOKAT_MAX_GROUND_DIST_M = 70_000;
+const LOOKAT_MAX_GROUND_DIST_M = 70_000;
 
 import { DEG2RAD } from '#lib/angles.js';
 
@@ -140,7 +140,7 @@ const TURBULENCE_INTENSITY = {
 	storm: 1.0
 } as const satisfies Record<Weather, number>;
 
-export interface Turbulence {
+interface Turbulence {
 	pitchJitterDeg: number;
 	rollJitterDeg: number;
 	verticalBumpM: number;
@@ -148,7 +148,7 @@ export interface Turbulence {
 	intensity: number;
 }
 
-export function atmosphericTurbulence(wallSec: number, weather: Weather = 'clear'): Turbulence {
+function atmosphericTurbulence(wallSec: number, weather: Weather = 'clear'): Turbulence {
 	const intensity = TURBULENCE_INTENSITY[weather];
 	const t = Math.round(wallSec * TURBULENCE_GRID_HZ) / TURBULENCE_GRID_HZ;
 

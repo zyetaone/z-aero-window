@@ -38,8 +38,5 @@ export const PRODUCT_YEAR = 2026;
  */
 export const PRODUCT_STAGE: string | null = 'Beta';
 
-/** One-line credit for footers and meta. */
-export const PRODUCT_CREDIT_LINE = `${PRODUCT_NAME} · ${PRODUCT_OWNER} · engineered by ${ENGINEERED_BY} · ${PRODUCT_YEAR}`;
-
 /** Slightly longer credit for wiki / architecture surfaces. */
 export const PRODUCT_CREDIT_BLURB = `${PRODUCT_SHORT} is a ${PRODUCT_OWNER} product. Engine, architecture, and fleet systems by ${ENGINEERED_BY}.`;

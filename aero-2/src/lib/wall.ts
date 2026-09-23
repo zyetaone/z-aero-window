@@ -27,8 +27,6 @@ export const WALL_KEYS = [
 	'audioUrls'
 ] as const;
 
-export type WallKey = (typeof WALL_KEYS)[number];
-
 export interface WallState {
 	placeId: string;
 	presetId: string;

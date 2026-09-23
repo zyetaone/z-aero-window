@@ -12,7 +12,7 @@
  *
  * All pure and unit-tested: subsolar point, great-circle destinations,
  * small-circle rings, antimeridian splitting, band assembly. The component
- * (`Terminator.svelte`) only refreshes the FeatureCollection every 60 s —
+ * (a map layer, when one mounts it) only refreshes the FeatureCollection every 60 s —
  * the sun moves 0.25°/minute, so finer updates would churn the source for
  * an invisible difference.
  */
@@ -187,7 +187,7 @@ export function splitRing(ring: GeoPoint[]): GeoPoint[][] {
  * 72..96 winding is the normal case, not an edge case: measured over a year,
  * the 90 deg cap winds around a pole 83% of the time.
  */
-export function windingPole(center: GeoPoint, radiusDeg: number): 1 | -1 | 0 {
+function windingPole(center: GeoPoint, radiusDeg: number): 1 | -1 | 0 {
 	const inNorth = 90 - center.lat < radiusDeg;
 	const inSouth = 90 + center.lat < radiusDeg;
 	if (inNorth === inSouth) return 0;
@@ -195,7 +195,7 @@ export function windingPole(center: GeoPoint, radiusDeg: number): 1 | -1 | 0 {
 }
 
 /** True when the cap swallows both poles -- it is then a complement, not a disk. */
-export function coversBothPoles(center: GeoPoint, radiusDeg: number): boolean {
+function coversBothPoles(center: GeoPoint, radiusDeg: number): boolean {
 	return 90 - center.lat < radiusDeg && 90 + center.lat < radiusDeg;
 }
 

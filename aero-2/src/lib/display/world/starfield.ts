@@ -14,7 +14,7 @@
  *
  * This module holds everything unit-testable: the deterministic star
  * population (same seed → same sky on every pane of the wall) and the shell
- * elevation guard. GL lives in `Starfield.svelte`; nothing here touches it.
+ * elevation guard. GL belongs to whichever layer draws these; nothing here touches it.
  */
 
 import { YALE_STAR_COUNT, yaleCatalog } from './yale-stars.js';

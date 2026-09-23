@@ -18,8 +18,6 @@ import { localHourAtSunElevation, resolveLocalHours } from '../display/world/sun
 import { wrapSigned } from '#lib/angles.js';
 
 export { Location } from './locations.js';
-export { SCENE_PRESETS, type ScenePreset } from './presets.js';
-export { tileTemplates } from './tiles.js';
 export { FLEET_ROLES, type FleetRole } from '../display/flight/parallax.js';
 export { WEATHERS, type Weather } from '../display/flight/view.js';
 

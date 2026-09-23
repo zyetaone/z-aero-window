@@ -330,8 +330,8 @@ export const LOCATIONS = Location.all();
  * and the room read as a journey; eleven places on a four-minute dwell read
  * as a slideshow. Home first, then the Southwest hubs, with Dubai for a
  * daylight hour while India is at its desk (every US hub is night during
- * IST office hours). Every entry has a Sentinel-2 pack, a roads pack, a
- * towns pack and a buildings pack on disk; add a place here only after
+ * IST office hours). Every entry has a Sentinel-2 pack, a roads pack and a
+ * buildings pack on disk; add a place here only after
  * packing it, or the offline Pi shows a void for ten minutes.
  *
  * The catalogue stays whole for the operator picker and `?place=`.

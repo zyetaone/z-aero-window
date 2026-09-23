@@ -24,7 +24,7 @@ import { parseWallState, type WallSnapshot, type WallState } from '#lib/wall.js'
  */
 export const LEAD_SEC = 5;
 
-export const DEFAULT_WALL_PATH = 'data/wall.json';
+const DEFAULT_WALL_PATH = 'data/wall.json';
 
 const EMPTY: WallState = {
 	placeId: '',

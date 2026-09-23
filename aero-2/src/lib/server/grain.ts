@@ -14,9 +14,8 @@
  * for the DEFLATE — no image dependency. Test seam: `grainPng()` twice must
  * be byte-equal, and the header must parse as 256×256 grey.
  */
-import { deflateSync } from 'node:zlib';
 
-export const GRAIN_SIZE = 256;
+const GRAIN_SIZE = 256;
 /** Lattice cells across the tile — features ~8 px, under the z8 block. */
 const CELLS = 32;
 /** Mean grey with ±amplitude tooth. */
@@ -65,71 +64,4 @@ export function grainValue(x: number, y: number): number {
 	const d = lat[y1 * CELLS + x1];
 	const v = a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 	return Math.max(0, Math.min(255, Math.round(MEAN + (v - 0.5) * 2 * AMPLITUDE)));
-}
-
-const CRC_TABLE = (() => {
-	const t = new Uint32Array(256);
-	for (let n = 0; n < 256; n++) {
-		let c = n;
-		for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-		t[n] = c >>> 0;
-	}
-	return t;
-})();
-
-function crc32(bytes: Uint8Array): number {
-	let c = 0xffffffff;
-	for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
-	return (c ^ 0xffffffff) >>> 0;
-}
-
-function chunk(type: string, data: Uint8Array): Uint8Array {
-	const out = new Uint8Array(12 + data.length);
-	const dv = new DataView(out.buffer);
-	dv.setUint32(0, data.length);
-	for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
-	out.set(data, 8);
-	const crc = crc32(out.subarray(4, 8 + data.length));
-	dv.setUint32(8 + data.length, crc);
-	return out;
-}
-
-function concat(parts: Uint8Array[]): Uint8Array {
-	const total = parts.reduce((n, p) => n + p.length, 0);
-	const out = new Uint8Array(total);
-	let o = 0;
-	for (const p of parts) {
-		out.set(p, o);
-		o += p.length;
-	}
-	return out;
-}
-
-let cached: Uint8Array | null = null;
-
-/** The full PNG file bytes — grey, 256×256, deterministic. */
-export function grainPng(): Uint8Array {
-	if (cached) return cached;
-	const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
-	const ihdr = new Uint8Array(13);
-	const dv = new DataView(ihdr.buffer);
-	dv.setUint32(0, GRAIN_SIZE);
-	dv.setUint32(4, GRAIN_SIZE);
-	ihdr[8] = 8; // bit depth
-	ihdr[9] = 0; // grey
-	const raw = new Uint8Array(GRAIN_SIZE * (GRAIN_SIZE + 1));
-	for (let y = 0; y < GRAIN_SIZE; y++) {
-		raw[y * (GRAIN_SIZE + 1)] = 0; // filter: none
-		for (let x = 0; x < GRAIN_SIZE; x++) {
-			raw[y * (GRAIN_SIZE + 1) + 1 + x] = grainValue(x, y);
-		}
-	}
-	const idat = deflateSync(raw);
-	cached = concat([
-		sig,
-		chunk('IHDR', ihdr),
-		chunk('IDAT', new Uint8Array(idat)),
-		chunk('IEND', new Uint8Array(0))
-	]);
-	return cached;
 }
