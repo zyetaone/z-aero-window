@@ -25,7 +25,7 @@ export const ORBIT = {
 	 * East-west radius as a multiple of north-south. >1 is WIDER than tall.
 	 * Was 0.6, which put the long axis up the short screen dimension.
 	 */
-	aspect: 1.7,
+	aspect: 1.35,
 	/**
 	 * Peak roll in degrees at the tightest part of the turn.
 	 *
