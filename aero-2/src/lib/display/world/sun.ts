@@ -253,12 +253,102 @@ export function specularGlint(
 }
 
 /**
- * Where the street vectors take over from the VIIRS raster on a descent:
- * Roads fades in below this altitude and NightLights fades out across the
- * same metres. One home because the two sides live in different files, and
- * silently different windows would read as one layer lagging the other.
+ * Shared night-lighting ramp: every emitted-light layer (VIIRS raster,
+ * vector roads) fades in on night^NIGHT_LIGHT_RAMP so the two arrive
+ * together, and mounts through the ON/OFF hysteresis below (a single epsilon
+ * blinked the sources at twilight — see NIGHT_MOUNT_ON).
+ *
+ * The exponent lived as a bare `1.5` in two components with a comment each
+ * swearing they matched. Caps stay local (VIIRS 0.8, roads 1.0) — those are
+ * per-layer grades, not the shared curve.
+ */
+export const NIGHT_LIGHT_RAMP = 1.5;
+/**
+ * The raster↔vector handover window: street vectors fade in from
+ * NIGHT_VECTOR_TOP_M down across NIGHT_VECTOR_SPAN_M, and the VIIRS raster
+ * fades out across the same metres. One home because the two sides live in
+ * different files (Roads vs NightLights) and silently different windows
+ * would read as one layer lagging the other on every descent.
  */
 export const NIGHT_VECTOR_TOP_M = 9000;
+export const NIGHT_VECTOR_SPAN_M = 5000;
+/**
+ * The far-field window: the arterial dot layer fades in from
+ * NIGHT_FAR_TOP_M down across NIGHT_FAR_SPAN_M, handing over to the
+ * near-field vectors exactly where they arrive (NIGHT_VECTOR_TOP_M).
+ * One home for the same reason as the pair above: two files share one
+ * seam, and a silent 500 m mismatch would double-draw or gap the city
+ * on every descent. The bottom of this window IS the top of that one.
+ */
+export const NIGHT_FAR_TOP_M = 13000;
+export const NIGHT_FAR_SPAN_M = 4000;
+
+/**
+ * Share of the far-field arterial dots at an altitude: 0 where the
+ * near-field vectors have taken over, 1 at cruise. Pure — unit-tested.
+ */
+export function farFieldShare(aglM: number): number {
+	if (!Number.isFinite(aglM)) return 0;
+	return Math.max(
+		0,
+		Math.min(1, (aglM - NIGHT_VECTOR_TOP_M) / NIGHT_FAR_SPAN_M)
+	);
+}
+/**
+ * Dusk/dawn mount hysteresis for the night layers.
+ *
+ * Their opacity ramps cross the mount epsilon SLOWLY at twilight, so a single
+ * gate would mount and unmount the source every few frames while it hovers —
+ * each remount re-parses Denver's 4.4 MB of GeoJSON and the layer visibly
+ * blinks. Latch on above ON_AT, release below OFF_AT.
+ */
+export const NIGHT_MOUNT_ON = 0.03;
+export const NIGHT_MOUNT_OFF = 0.005;
+
+/**
+ * Pure hysteresis latch. Returns the new latched state; the caller holds it
+ * in $state and feeds it back. Unit-tested: the twilight dither is exactly
+ * the class of fault you cannot see in a screenshot.
+ */
+export function hysteresisGate(
+	value: number,
+	latched: boolean,
+	onAt: number,
+	offAt: number
+): boolean {
+	if (!latched && value > onAt) return true;
+	if (latched && value < offAt) return false;
+	return latched;
+}
+
+/**
+ * Lamp shimmer for the vector night lights, a multiplier in [0.8, 1.0].
+ *
+ * A pure function of wall seconds, so every pane on the wall computes the
+ * same value for the same instant without exchanging anything — the flicker
+ * cannot drift pane-to-pane the way per-pane timers would. Frequencies stay
+ * well under the 5 Hz sampler in Roads.svelte (Nyquist 2.5 Hz), so sampling
+ * jitter between panes stays invisible. Unit-tested: bounds and determinism.
+ */
+export function lampFlicker(tSec: number): number {
+	return 0.9 + 0.06 * Math.sin(tSec * 2.1) + 0.04 * Math.sin(tSec * 3.7 + 1.7);
+}
+
+/**
+ * Sparse-lamp glimmer for the glimmer pass, a multiplier in [0.4, 1.0].
+ *
+ * The flicker above breathes every lamp together ±10% — coherent, which is
+ * why the arterials read as one filament dimming in unison. Real street
+ * light shimmers lamp by lamp. A line layer cannot phase-shift per dash, so
+ * the glimmer pass runs a second dash train at an incommensurate period and
+ * THIS deeper, faster envelope: where the two trains cross, lamps flare and
+ * die individually instead of the whole run breathing as one. Same
+ * wall-shared contract as lampFlicker (pure in wall seconds, under the 5 Hz
+ * sampler's Nyquist). Unit-tested: bounds and determinism.
+ */
+export function lampGlimmer(tSec: number): number {
+	return 0.7 + 0.3 * Math.sin(tSec * 4.7 + 1.3) * Math.sin(tSec * 1.9 + 0.4);
+}
 
 export interface MoonPosition extends SunPosition {
 	/** Lit fraction of the disc, 0 new to 1 full. */

@@ -32,7 +32,7 @@ async function etagFor(path: string): Promise<string | null> {
 	}
 }
 
-function geojsonCandidates(city: string, kind: 'buildings' | 'roads'): string[] {
+function geojsonCandidates(city: string, kind: 'buildings' | 'roads' | 'towns'): string[] {
 	const filename = `${city}.geojson`;
 	return [
 		resolve(TILE_DIR, `../data/${kind}`, filename),
@@ -41,13 +41,13 @@ function geojsonCandidates(city: string, kind: 'buildings' | 'roads'): string[] 
 	];
 }
 
-function resolveGeojsonPath(city: string, kind: 'buildings' | 'roads'): string | null {
+function resolveGeojsonPath(city: string, kind: 'buildings' | 'roads' | 'towns'): string | null {
 	return geojsonCandidates(city, kind).find((path) => existsSync(path)) ?? null;
 }
 
 export async function serveCityGeojson(
 	city: string | undefined,
-	kind: 'buildings' | 'roads',
+	kind: 'buildings' | 'roads' | 'towns',
 	ifNoneMatch?: string | null
 ): Promise<Response> {
 	if (!city || !Location.isValid(city)) {

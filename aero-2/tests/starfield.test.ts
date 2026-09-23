@@ -88,7 +88,7 @@ describe('starShellElevation', () => {
 	/**
 	 * `farZ` used to pull the shell down via `Math.min(STAR_SHELL_M, farZ *
 	 * 0.25)`, and the test that pinned it was called "pulls the shell inside a
-	 * tight far plane instead of clipping" — a rationale the in-map starfield's
+	 * tight far plane instead of clipping" — a rationale `Starfield.svelte`'s
 	 * own shader comment already refutes: "the old farZ guard only moved the
 	 * shell nearer, which cannot help — distance, not height, is what exceeds
 	 * far." The shader keeps x/y and substitutes z, so farZ cannot reach the

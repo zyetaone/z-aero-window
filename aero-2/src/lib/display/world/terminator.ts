@@ -12,7 +12,7 @@
  *
  * All pure and unit-tested: subsolar point, great-circle destinations,
  * small-circle rings, antimeridian splitting, band assembly. The component
- * (a map layer, when one mounts it) only refreshes the FeatureCollection every 60 s —
+ * (`Terminator.svelte`) only refreshes the FeatureCollection every 60 s —
  * the sun moves 0.25°/minute, so finer updates would churn the source for
  * an invisible difference.
  */
