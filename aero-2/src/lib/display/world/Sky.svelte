@@ -14,6 +14,7 @@
 	import { duskHorizonMix, duskVaultMix, facingSunAmount } from './sun.js';
 	import { signedDelta } from '#lib/angles.js';
 	import { cssRgb, lerpRgb, weatherLightLoss, cloudedRgb } from './atmosphere.js';
+	import { quantize, slowBeat } from './beat.js';
 
 	const display = useDisplay();
 
@@ -176,9 +177,8 @@
 		 * does. Pure in wallSec: three panes thicken together. 0.01 steps so
 		 * fog-ground-blend is written a few times a minute, not every frame.
 		 */
-		const t = display.view.wallSec;
-		const drift = Math.sin((t * 2 * Math.PI) / 97) * Math.sin((t * 2 * Math.PI) / 151);
-		return Math.round(Math.max(0.05, Math.min(0.97, weathered + 0.06 * drift)) * 100) / 100;
+		const drift = slowBeat(display.view.wallSec, 97, 151);
+		return quantize(Math.max(0.05, Math.min(0.97, weathered + 0.06 * drift)));
 	});
 
 	// ── 2. Celestial Starfield & Solar Radiance ──────────────────────────────

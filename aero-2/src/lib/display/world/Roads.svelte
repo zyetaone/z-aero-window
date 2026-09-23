@@ -35,6 +35,7 @@
 	 */
 	import { GeoJSONSource, LineLayer } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
+	import { quantize, slowBeat } from './beat.js';
 
 	const display = useDisplay();
 
@@ -51,6 +52,13 @@
 	 * so the vector and the photograph arrive together.
 	 */
 	const lightUp = $derived(Math.min(1, night ** 1.5));
+	/**
+	 * Lamps shimmer. Sodium and LED strings seen through 3-6 km of air never
+	 * hold one brightness: heat and haze make them swim. Two quick beats swing
+	 * the cores between 0.7 and 1.0 together (dasharray cannot blink per lamp;
+	 * the eye reads a whole string breathing as scintillation). 0.01 steps.
+	 */
+	const shimmer = $derived(quantize(0.85 + 0.15 * slowBeat(display.view.wallSec, 2.3, 3.7)));
 
 	/**
 	 * Fades OUT with altitude, which is the opposite of what a detail layer
@@ -200,7 +208,7 @@
 				'line-color': color,
 				'line-width': bloomWidth,
 				'line-blur': 3,
-				'line-opacity': 0.1 * glow
+				'line-opacity': 0.3 * glow
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>
@@ -209,12 +217,12 @@
 			paint={{
 				'line-color': color,
 				'line-width': width,
-				'line-opacity': 0.85 * glow,
+				'line-opacity': shimmer * glow,
 				// Lamps are dots, not a lit ribbon: zero-length dashes on round caps.
 				// Dasharray cannot vary per feature, so the irregularity is in the
 				// pattern itself: five unequal gaps that repeat, which the eye reads
 				// as random spacing rather than a picket fence.
-				'line-dasharray': [0, 3, 0, 4.5, 0, 2.5, 0, 5.5, 0, 3.5]
+				'line-dasharray': [0, 4, 0, 6.5, 0, 3.5, 0, 8, 0, 5]
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>

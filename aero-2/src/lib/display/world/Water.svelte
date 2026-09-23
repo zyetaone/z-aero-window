@@ -40,6 +40,7 @@
 	import { useDisplay } from '../display.svelte.js';
 	import { specularGlint } from './sun.js';
 	import { weatherLightLoss } from './atmosphere.js';
+	import { quantize, slowBeat } from './beat.js';
 
 	const display = useDisplay();
 	// PUBLIC_TILE_SERVER_URL, so a pane can read tiles from a peer on the wall.
@@ -80,12 +81,8 @@
 	 * 100%. Pure in wallSec, so three panes breathe together; 0.01 steps, so
 	 * the paint write lands a few times a second, not every frame.
 	 */
-	const breathe = $derived.by(() => {
-		const t = display.view.wallSec;
-		const w = 0.5 + 0.5 * Math.sin((t * 2 * Math.PI) / 7) * Math.sin((t * 2 * Math.PI) / 11);
-		return Math.round((0.7 + 0.3 * w) * 100) / 100;
-	});
-	const opacity = $derived(Math.round(Math.min(0.34, glint * 0.34) * breathe * 100) / 100);
+	const breathe = $derived(0.85 + 0.15 * slowBeat(display.view.wallSec, 7, 11));
+	const opacity = $derived(quantize(Math.min(0.34, glint * 0.34) * breathe));
 </script>
 
 {#if hasMask && opacity > 0.01}
