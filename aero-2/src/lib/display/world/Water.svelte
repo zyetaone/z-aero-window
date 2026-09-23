@@ -60,7 +60,7 @@
 	 * is exactly why a lake goes flat and grey under cloud. Reuses the same
 	 * scalar as the sky and the ground so the three cannot disagree.
 	 */
-	const overcast = $derived(weatherLightLoss(display.config.weather));
+	const overcast = $derived(weatherLightLoss(display.weather));
 
 	const glint = $derived(
 		specularGlint(display.view.cameraBearingDeg, display.sun.azimuthDeg, display.sun.elevationDeg) *

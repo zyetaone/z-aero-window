@@ -35,7 +35,7 @@
 	 */
 	import { GeoJSONSource, LineLayer } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
-	import { quantize, slowBeat } from './beat.js';
+	import { quantize, shiftDash, slowBeat } from './beat.js';
 
 	const display = useDisplay();
 
@@ -61,22 +61,21 @@
 	const shimmer = $derived(quantize(0.65 + 0.2 * slowBeat(display.view.wallSec, 1.7, 2.9)));
 
 	/**
-	 * Traffic: a one-unit dash sliding along the arterials, MapLibre's own
-	 * "animate a line" recipe. `line-dasharray` cannot be offset, so twelve
-	 * patterns of one period (dash 1, gap 5) are precomputed with the dash
-	 * at each offset, and the wall clock picks one four times a second: one
-	 * dasharray write per quarter second, identical on every pane. Dash
-	 * lengths are in line-widths, so the same pattern reads as headlights
+	 * Traffic: dashes of uneven length and spacing sliding along the
+	 * arterials, MapLibre's own "animate a line" recipe. `line-dasharray`
+	 * cannot be offset, so 32 rotations of one irregular pattern are
+	 * precomputed (shiftDash) and the wall clock picks one four times a
+	 * second: one dasharray write per quarter second, identical on every
+	 * pane. Lengths are in line-widths, so the same pattern reads as traffic
 	 * spaced to the road's own width at any zoom.
 	 */
-	const TRAFFIC_PERIOD = 6;
-	const TRAFFIC_STEPS = 12;
-	const TRAFFIC_DASHES: number[][] = Array.from({ length: TRAFFIC_STEPS }, (_, i) => {
-		const o = (i / TRAFFIC_STEPS) * TRAFFIC_PERIOD;
-		return o <= TRAFFIC_PERIOD - 1
-			? [0, o, 1, TRAFFIC_PERIOD - 1 - o]
-			: [o - (TRAFFIC_PERIOD - 1), TRAFFIC_PERIOD - 1, TRAFFIC_PERIOD - o, 0];
-	});
+	/** Dash and gap lengths in line-widths: cars and lorries, bunched and spread. */
+	const TRAFFIC_PATTERN = [1, 4, 0.6, 7, 1.4, 3, 0.8, 9, 1.1, 5];
+	const TRAFFIC_STEPS = 32;
+	const TRAFFIC_PERIOD = TRAFFIC_PATTERN.reduce((a, b) => a + b, 0);
+	const TRAFFIC_DASHES = Array.from({ length: TRAFFIC_STEPS }, (_, i) =>
+		shiftDash(TRAFFIC_PATTERN, (i / TRAFFIC_STEPS) * TRAFFIC_PERIOD)
+	);
 	const trafficDash = $derived(
 		TRAFFIC_DASHES[Math.floor(display.view.wallSec * 4) % TRAFFIC_STEPS]
 	);

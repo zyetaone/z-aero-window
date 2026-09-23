@@ -96,7 +96,7 @@
 	 * it. Leaving crisp sun-angled shading under a storm is the single most
 	 * obvious tell that the weather is only a rain overlay.
 	 */
-	const overcast = $derived(weatherLightLoss(display.config.weather));
+	const overcast = $derived(weatherLightLoss(display.weather));
 	const effectiveHillshade = $derived(
 		display.config.shade * (0.2 + 0.8 * dayFactor) * (1 - overcast * 0.8)
 	);

@@ -8,7 +8,9 @@ import {
 	phaseFor,
 	azimuthSweepAt,
 	FlightTrack,
-	type OrbitPose
+	type OrbitPose,
+	DWELL_SEC,
+	slotNoise
 } from './flight-path.js';
 import { downtownBlendAt, downtownPose, downtownWarpSec } from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
@@ -87,6 +89,20 @@ const M_PER_DEG_LAT = 111_320;
 /** Written out in five places before this existed. */
 export const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
 export type Weather = (typeof WEATHERS)[number];
+
+/**
+ * Cloud periods: which weather a slot flies through when nothing pinned one.
+ *
+ * Roughly one slot in six is a solid deck (overcast: the ground all but
+ * gone), one in six broken cloud, the rest clear. Keyed off the same slot
+ * index as the rotation, so the change lands under the blind drop on the hop
+ * and every pane flies the same sky. Panes running a pinned `?weather=`
+ * or a pushed non-clear weather never reach this.
+ */
+export function scheduledWeather(wallSec: number): Weather {
+	const n = slotNoise(Math.floor(wallSec / DWELL_SEC), 7);
+	return n < 1 / 6 ? 'overcast' : n < 2 / 6 ? 'cloudy' : 'clear';
+}
 
 /**
  * Procedural atmospheric turbulence — micro-shakes, low-frequency bumps, wing flutter.

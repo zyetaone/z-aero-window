@@ -272,3 +272,17 @@ describe('downtown thread in production config', () => {
 		expect(closest, 'gate never engaged at 25x').toBeLessThan(6);
 	});
 });
+
+describe('scheduledWeather', () => {
+	it('is per slot, mostly clear, and identical for every pane', async () => {
+		const { scheduledWeather } = await import('#lib/display/flight/view.js');
+		const seen = new Map<string, number>();
+		for (let slot = 0; slot < 600; slot++) {
+			const w = scheduledWeather(slot * DWELL_SEC + 5);
+			expect(scheduledWeather(slot * DWELL_SEC + DWELL_SEC - 5)).toBe(w);
+			seen.set(w, (seen.get(w) ?? 0) + 1);
+		}
+		expect(seen.get('clear')! > 300).toBe(true);
+		expect(seen.get('overcast')! > 50).toBe(true);
+	});
+});

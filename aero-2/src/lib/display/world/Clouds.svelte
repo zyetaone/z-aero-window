@@ -59,7 +59,7 @@
 	 * is lit. A storm cloud is not a fair-weather cumulus with more of it; it
 	 * is the same shape with a much darker base.
 	 */
-	const overcast = $derived(weatherLightLoss(display.config.weather));
+	const overcast = $derived(weatherLightLoss(display.weather));
 
 	/**
 	 * How much sky the weather actually fills.
@@ -94,7 +94,7 @@
 		overcast: 1.5,
 		storm: 1.65
 	};
-	const coverageScale = $derived(WEATHER_COVERAGE[display.config.weather] ?? 1);
+	const coverageScale = $derived(WEATHER_COVERAGE[display.weather] ?? 1);
 
 	/**
 	 * The deck is the biggest GPU cost in the window, and it was the one thing

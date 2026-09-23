@@ -24,7 +24,7 @@
 	 * How much light the weather has taken out. Shared with Ground, Terrain and
 	 * Clouds so the sky cannot disagree with the ground about the weather.
 	 */
-	const overcast = $derived(weatherLightLoss(display.config.weather));
+	const overcast = $derived(weatherLightLoss(display.weather));
 	const sunElev = $derived(display.sun.elevationDeg);
 	const sunAzimuth = $derived(display.sun.azimuthDeg);
 	const bank = $derived(display.view.bankDeg);

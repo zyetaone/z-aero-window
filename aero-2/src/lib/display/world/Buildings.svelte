@@ -39,7 +39,7 @@
 		for (let i = 0; i < data.length; i += 4) data.set([16, 18, 28, 255], i);
 		let seed = 0x9e3779b9;
 		const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-		for (let n = 0; n < 90; n++) {
+		for (let n = 0; n < 130; n++) {
 			const x = Math.floor(rand() * WINDOWS_PX);
 			const y = Math.floor(rand() * WINDOWS_PX);
 			const warm = rand() < 0.8;
@@ -63,7 +63,7 @@
 	const flicker = $derived(0.8 + 0.2 * slowBeat(display.view.wallSec, 2.1, 3.3));
 	const nightOpacity = $derived(quantize(0.95 * altitudeFade * lit * flicker));
 	// The footprint itself glows: forecourts, car parks and lobbies light the block.
-	const footprintOpacity = $derived(quantize(0.45 * altitudeFade * lit));
+	const footprintOpacity = $derived(quantize(0.6 * altitudeFade * lit));
 </script>
 
 <!-- Gated on the place only. Mounting on altitude re-fetched and re-parsed the
@@ -84,6 +84,8 @@
 		<FillExtrusionLayer
 			paint={{
 				'fill-extrusion-pattern': 'lit-windows',
+				// No shading gradient at night: the lower floors are the brightest ones.
+				'fill-extrusion-vertical-gradient': false,
 				'fill-extrusion-height': ['coalesce', ['get', 'height'], 20],
 				'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
 				'fill-extrusion-opacity': nightOpacity

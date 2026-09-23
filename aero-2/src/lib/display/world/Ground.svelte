@@ -32,7 +32,7 @@
 	 * Same scalar the sky, the hillshade and the cloud deck read, so the four
 	 * cannot drift apart. See `weatherLightLoss`.
 	 */
-	const overcast = $derived(weatherLightLoss(display.config.weather));
+	const overcast = $derived(weatherLightLoss(display.weather));
 
 	/**
 	 * Only mount the sharp layer where it is packed.

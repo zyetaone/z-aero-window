@@ -27,6 +27,7 @@ import {
  */
 const CRUISE_BLEND_SEC = 3.5;
 
+import { scheduledWeather, type Weather } from './flight/view.js';
 import { blindClosedAt, phaseFor } from './flight/flight-path.js';
 import { DWELL_SEC, FlightDirector } from './flight/director.svelte.js';
 import { resolveAtmosphere, type AtmosphereState } from './world/atmosphere.js';
@@ -155,6 +156,19 @@ export class AeroDisplay {
 	 * so there is one phase and nothing to keep in step.
 	 */
 	phase: number = $derived.by(() => phaseFor(this.config.place, this.view.wallSec));
+
+	/**
+	 * The sky the panes actually fly. A pinned (`?weather=`) or pushed
+	 * non-clear weather wins; an unpinned clear sky becomes the slot schedule,
+	 * so cloud decks come and go over the day (see scheduledWeather).
+	 */
+	weather: Weather = $derived.by(() => this.weatherAt(this.view.wallSec));
+
+	private weatherAt(wallSec: number): Weather {
+		return this.config.weather !== 'clear' || !this.config.liveWeather
+			? this.config.weather
+			: scheduledWeather(wallSec);
+	}
 
 	/** Cached for the same reason as `sun`: five readers, four of them in Sky. */
 	atmosphere: AtmosphereState = $derived.by(() => resolveAtmosphere(this.view.aglM));
@@ -320,7 +334,13 @@ export class AeroDisplay {
 		// second, so every pane lands on the same place without being told.
 		this.director.tick(wallSec);
 
-		let next = calculateCameraView(wallSec, this.config);
+		let next = calculateCameraView(wallSec, {
+			...this.viewParams(wallSec),
+			place: this.config.place,
+			floorM: this.config.floorM,
+			ceilingM: this.config.ceilingM,
+			direction: this.config.direction
+		});
 		// Carry the Stage-sampled datum across the fresh object so the Hud's
 		// GND number does not blink on frames the Stage loop has not rerun.
 		next.groundM = this.view.groundM;
@@ -352,6 +372,26 @@ export class AeroDisplay {
 	 * the previous params. Floor/ceiling knob drags do NOT blend: they
 	 * change every frame while dragged and would chase forever.
 	 */
+	/**
+	 * The camera params that are not the destination. Explicit fields, never
+	 * `{ ...this.config }`: a runes class has no own enumerable state, so a
+	 * spread yields nothing (see tests/hop-blend.test.svelte.ts). Weather is
+	 * the effective sky, so scheduled cloud decks also shake the aircraft.
+	 */
+	private viewParams(wallSec: number) {
+		const c = this.config;
+		return {
+			azimuthDeg: c.azimuthDeg,
+			pitchDeg: c.pitchDeg,
+			speed: c.speed,
+			clockOffsetH: c.clockOffsetH,
+			fleetRole: c.fleetRole,
+			// From the second being computed, not from `view`, which is the LAST
+			// frame: a fresh pane's first frame must equal a running pane's.
+			weather: this.weatherAt(wallSec)
+		};
+	}
+
 	private applyCruiseBlend(wallSec: number, next: CameraView): CameraView {
 		const key = `${this.config.place.id}|${this.config.direction}`;
 		if (this.#lastPlaceKey !== null && key !== this.#lastPlaceKey && this.#lastParams) {
@@ -377,18 +417,12 @@ export class AeroDisplay {
 		// NaN, and MapLibre threw on the first frame of every rotation hop.
 		// Pinned captures (`?place=`) never cross a boundary, which is how the
 		// crash survived every visual A/B until the blind-drop hop was filmed.
-		const c = this.config;
 		const old = calculateCameraView(wallSec, {
+			...this.viewParams(wallSec),
 			place: from.place,
 			floorM: from.floorM,
 			ceilingM: from.ceilingM,
-			direction: from.direction,
-			azimuthDeg: c.azimuthDeg,
-			pitchDeg: c.pitchDeg,
-			speed: c.speed,
-			clockOffsetH: c.clockOffsetH,
-			fleetRole: c.fleetRole,
-			weather: c.weather
+			direction: from.direction
 		});
 		old.groundM = next.groundM;
 		return blendViews(old, next, t);

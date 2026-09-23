@@ -8,8 +8,8 @@
 
 	const display = useDisplay();
 
-	const active = $derived(display.config.weather === 'rain' || display.config.weather === 'storm');
-	const intensity = $derived(display.config.weather === 'storm' ? 1 : 0.72);
+	const active = $derived(display.weather === 'rain' || display.weather === 'storm');
+	const intensity = $derived(display.weather === 'storm' ? 1 : 0.72);
 	const isPerf = $derived(display.config.qualityMode === 'performance');
 	const beadCount = $derived(isPerf ? 7 : 14);
 
@@ -63,7 +63,7 @@
 	 * either side of the 0.12 s strike window the pose used.
 	 */
 	const lightning = $derived.by(() => {
-		if (display.config.weather !== 'storm') return false;
+		if (display.weather !== 'storm') return false;
 		const now = display.view.wallSec;
 		const slot = Math.floor(now / FLASH_PERIOD_SEC);
 		// Strike somewhere in the first 9 s of the slot, deterministically.

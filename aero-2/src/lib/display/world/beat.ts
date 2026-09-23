@@ -18,3 +18,26 @@ export function slowBeat(wallSec: number, p1: number, p2: number): number {
 export function quantize(value: number, step = 0.01): number {
 	return Math.round(value / step) * step;
 }
+
+/**
+ * Rotate a dash pattern by `offset` line-widths, so a fixed set of shifted
+ * patterns played in order reads as dashes travelling along the line
+ * (MapLibre's animate-a-line recipe, for any pattern). The result starts with
+ * a dash as MapLibre requires: a cut inside a gap opens with a zero dash.
+ */
+export function shiftDash(pattern: readonly number[], offset: number): number[] {
+	const period = pattern.reduce((a, b) => a + b, 0);
+	let o = ((offset % period) + period) % period;
+	let i = 0;
+	while (o >= pattern[i] && o > 0) {
+		o -= pattern[i];
+		i = (i + 1) % pattern.length;
+	}
+	const tail = [pattern[i] - o, ...pattern.slice(i + 1), ...pattern.slice(0, i)];
+	if (o > 0) tail.push(o);
+	// Odd index = we cut inside a gap: lead with a zero-length dash.
+	const out = i % 2 === 1 ? [0, ...tail] : tail;
+	// Keep dash/gap parity across repeats: an odd array flips on the next period.
+	if (out.length % 2 === 1) out.push(0);
+	return out;
+}
