@@ -157,9 +157,9 @@
 	const FOG_MIN_DENSITY = 0.8e-4;
 	const FOG_MAX_DENSITY = 4.0e-4;
 	const groundBlend = $derived.by(() => {
-		const t =
+		const density =
 			(display.atmosphere.fogDensity - FOG_MIN_DENSITY) / (FOG_MAX_DENSITY - FOG_MIN_DENSITY);
-		const byAltitude = 0.18 + 0.68 * Math.max(0, Math.min(1, t));
+		const byAltitude = 0.18 + 0.68 * Math.max(0, Math.min(1, density));
 		/**
 		 * Weather thickens the air on top of altitude.
 		 *
@@ -168,7 +168,17 @@
 		 * ceiling rather than added, so it cannot exceed the range MapLibre
 		 * accepts however the band table is later tuned.
 		 */
-		return byAltitude + (0.97 - byAltitude) * overcast * 0.75;
+		const weathered = byAltitude + (0.97 - byAltitude) * overcast * 0.75;
+		/**
+		 * Haze comes and goes. Two slow beats (97 s and 151 s, coprime so the
+		 * product wanders for hours) swing the ground blend ±0.06 around the
+		 * band's value, so the far ridge softens and clears the way real air
+		 * does. Pure in wallSec: three panes thicken together. 0.01 steps so
+		 * fog-ground-blend is written a few times a minute, not every frame.
+		 */
+		const t = display.view.wallSec;
+		const drift = Math.sin((t * 2 * Math.PI) / 97) * Math.sin((t * 2 * Math.PI) / 151);
+		return Math.round(Math.max(0.05, Math.min(0.97, weathered + 0.06 * drift)) * 100) / 100;
 	});
 
 	// ── 2. Celestial Starfield & Solar Radiance ──────────────────────────────
