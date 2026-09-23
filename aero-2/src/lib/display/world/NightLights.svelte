@@ -40,6 +40,7 @@
 	import { useDisplay } from '../display.svelte.js';
 	import { NIGHT_VECTOR_TOP_M } from './sun.js';
 	import { weatherLightLoss } from './atmosphere.js';
+	import { Location } from '#lib/settings/locations.js';
 
 	const display = useDisplay();
 	/** Metres above the road-lamp handover over which the cruise exposure ramps in. */
@@ -84,9 +85,11 @@
 	);
 	// The regional glow dims under a cloud deck too (Roads.svelte, `deck`). 0.01 steps.
 	const deck = $derived(weatherLightLoss(display.weather));
+	// Showcase cities glow harder, sleeping places less (Location.moodFor).
+	const glowGain = $derived(Location.moodFor(display.config.place.id).nightGlow);
 	const viirsOpacity = $derived(
 		Math.round(
-			100 * Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise) * (0.25 + 0.75 * lowPass) * (1 - 0.8 * deck)
+			100 * Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise) * (0.25 + 0.75 * lowPass) * (1 - 0.8 * deck) * glowGain
 		) / 100
 	);
 	const viirsContrast = $derived(0.55 * cruise);

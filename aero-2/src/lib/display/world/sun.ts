@@ -349,3 +349,46 @@ export function lampFlicker(tSec: number): number {
 export function lampGlimmer(tSec: number): number {
 	return 0.7 + 0.3 * Math.sin(tSec * 4.7 + 1.3) * Math.sin(tSec * 1.9 + 0.4);
 }
+
+export interface MoonPosition extends SunPosition {
+	/** Lit fraction of the disc, 0 new to 1 full. */
+	illumination: number;
+}
+
+/**
+ * Where the moon is, and how full. Low-precision lunar theory (a degree or
+ * two), which is a painter's accuracy: the disc lands in the right part of
+ * the sky on the right side of the wing and waxes on the right week. Pure in
+ * `wallSec`, so three panes hang the same moon. Azimuth from north, clockwise.
+ */
+export function moonPosition(wallSec: number, lat: number, lon: number): MoonPosition {
+	// Days since J2000.0 (2000-01-01 12:00 UTC).
+	const d = wallSec / 86_400 - 10_957.5;
+	const L = (218.316 + 13.176396 * d) * DEG2RAD; // mean longitude
+	const M = (134.963 + 13.064993 * d) * DEG2RAD; // mean anomaly
+	const F = (93.272 + 13.22935 * d) * DEG2RAD; // argument of latitude
+	const lambda = L + 6.289 * DEG2RAD * Math.sin(M);
+	const beta = 5.128 * DEG2RAD * Math.sin(F);
+	const eps = 23.439 * DEG2RAD;
+
+	const sinDec = Math.sin(beta) * Math.cos(eps) + Math.cos(beta) * Math.sin(eps) * Math.sin(lambda);
+	const dec = Math.asin(Math.max(-1, Math.min(1, sinDec)));
+	const ra = Math.atan2(
+		Math.sin(lambda) * Math.cos(eps) - Math.tan(beta) * Math.sin(eps),
+		Math.cos(lambda)
+	);
+	const lst = (280.16 + 360.9856235 * d) * DEG2RAD + lon * DEG2RAD;
+	const ha = lst - ra;
+	const latR = lat * DEG2RAD;
+	const sinAlt = Math.sin(latR) * Math.sin(dec) + Math.cos(latR) * Math.cos(dec) * Math.cos(ha);
+	const alt = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
+	// atan2 form measured from south, westward; +180 turns it into a compass bearing.
+	const az = Math.atan2(Math.sin(ha), Math.cos(ha) * Math.sin(latR) - Math.tan(dec) * Math.cos(latR));
+	const azimuthDeg = (((az * RAD2DEG + 180) % 360) + 360) % 360;
+
+	const sunM = (357.528 + 0.9856003 * d) * DEG2RAD;
+	const sunLambda = (280.46 + 0.9856474 * d) * DEG2RAD + (1.915 * Math.sin(sunM) + 0.02 * Math.sin(2 * sunM)) * DEG2RAD;
+	const illumination = (1 - Math.cos(lambda - sunLambda)) / 2;
+
+	return { azimuthDeg, elevationDeg: alt * RAD2DEG, illumination };
+}

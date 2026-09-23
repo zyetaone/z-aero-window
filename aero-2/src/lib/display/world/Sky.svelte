@@ -236,6 +236,7 @@
 	})();
 
 	const duskFactor = $derived(Math.max(0, Math.min(1, (12 - Math.abs(sunElev)) / 12)));
+
 	const sunScreenX = $derived(50 + (sunHeadingDelta / 180) * 50);
 
 	/**
@@ -285,6 +286,21 @@
 	const horizonPct = $derived(
 		Math.max(0, Math.min(100, HORIZON_AT_LEVEL + depressionDeg * PER_DEGREE))
 	);
+	/**
+	 * The moon: a disc where the sky says it is, phase as a shadow disc
+	 * sliding off it. Composition over ephemeris: a degree or two of error
+	 * is invisible, a missing moon is not. Fades in through nautical dusk and
+	 * out under a deck; hidden when it is behind the cabin (more than 100
+	 * degrees off the sightline).
+	 */
+	const moon = $derived(display.moon);
+	const moonHeadingDelta = $derived(signedDelta(display.view.cameraBearingDeg, moon.azimuthDeg));
+	const moonX = $derived(quantize(50 + (moonHeadingDelta / 180) * 50, 0.1));
+	const moonY = $derived(quantize(horizonPct - moon.elevationDeg * PER_DEGREE, 0.1));
+	const moonOpacity = $derived(
+		quantize(night * (1 - overcast) * Math.max(0, Math.min(1, (moon.elevationDeg + 1) / 5)))
+	);
+	const moonVisible = $derived(moonOpacity > 0.02 && Math.abs(moonHeadingDelta) < 100);
 </script>
 
 <!-- MapLibre 3D Sky Dome, Rayleigh Haze & Horizon Mist -->
@@ -320,6 +336,16 @@
 			style:--horizon="{horizonPct}%"
 			style:--deck={deckRgb}
 			style:opacity={deckAmount}
+		></div>
+	{/if}
+
+	{#if moonVisible}
+		<div
+			class="moon"
+			style:left="{moonX}%"
+			style:top="{moonY}%"
+			style:opacity={moonOpacity}
+			style:--lit={moon.illumination}
 		></div>
 	{/if}
 
@@ -377,6 +403,26 @@
 		);
 		filter: blur(24px);
 		pointer-events: none;
+	}
+
+	.moon {
+		position: absolute;
+		width: 2.4vh;
+		height: 2.4vh;
+		translate: -50% -50%;
+		border-radius: 50%;
+		overflow: hidden;
+		background: radial-gradient(circle at 42% 38%, #fffdf3 0%, #ece6d3 50%, #bdb7a6 100%);
+		box-shadow: 0 0 22px 6px rgba(255, 246, 222, 0.28);
+	}
+	/* Phase: the dark disc slides off the lit one as --lit goes 0 -> 1. */
+	.moon::after {
+		content: '';
+		position: absolute;
+		inset: -8%;
+		border-radius: 50%;
+		background: rgb(9, 11, 20);
+		translate: calc(var(--lit, 0) * 118%) 0;
 	}
 
 	.haze-deck {

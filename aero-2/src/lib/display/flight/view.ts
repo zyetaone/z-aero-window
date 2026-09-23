@@ -10,7 +10,8 @@ import {
 	FlightTrack,
 	type OrbitPose,
 	DWELL_SEC,
-	slotNoise
+	slotNoise,
+	M_PER_DEG_LAT
 } from './flight-path.js';
 import {
 	DOWNTOWN_GATE_PHASE_SEC,
@@ -21,10 +22,12 @@ import {
 } from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
 import { signedDelta } from '#lib/angles.js';
+import { Location } from '#lib/settings/locations.js';
 import { resolveLocalHours } from '../world/sun.js';
 
 export interface CameraParams {
 	place: {
+		id?: string;
 		lat: number;
 		lon: number;
 		utcOffset: number;
@@ -90,7 +93,6 @@ export const DEFAULT_PITCH_DEG = -10;
 export const LOOKAT_MAX_GROUND_DIST_M = 70_000;
 
 import { DEG2RAD } from '#lib/angles.js';
-const M_PER_DEG_LAT = 111_320;
 
 /** Written out in five places before this existed. */
 export const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
@@ -400,6 +402,7 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	 * argument is about the floor), so one visit tops out near 13 km and the
 	 * next holds 10. Same slot, same number, on every pane.
 	 */
+	const look = Location.moodFor(params.place.id ?? '');
 	const slot = Math.floor(wallSec / DWELL_SEC);
 	const band = params.ceilingM - params.floorM;
 	const ceilingM = Math.max(
@@ -411,7 +414,7 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 		params.place.lon,
 		params.floorM,
 		ceilingM,
-		params.direction ?? 1,
+		((params.direction ?? 1) * look.direction) as 1 | -1,
 		// Derived here, from the same second as the pose. See `phaseFor`.
 		phaseFor(params.place, wallSec)
 	);
@@ -437,9 +440,10 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	// is a transit with a fixed off-nose aim (pinned by display.test.ts),
 	// and there is no framed subject for the pan to walk across.
 	const sweep = params.place.isFeature ? 0 : azimuthSweepAt(wallSec);
+	// The place's composition: its own downward bias on the operator's pitch.
 	const camera = new FlightCamera(
 		params.azimuthDeg + roleOffset + sweep,
-		params.pitchDeg
+		params.pitchDeg + look.pitchBiasDeg
 	);
 
 	/**

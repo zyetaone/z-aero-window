@@ -40,16 +40,18 @@
 		Vector3,
 		WebGLRenderer
 	} from 'three';
-	import { mulberry32 } from '../flight/flight-path.js';
+	import { M_PER_DEG_LAT, mulberry32 } from '../flight/flight-path.js';
+	import { Location } from '#lib/settings/locations.js';
 	import { weatherLightLoss } from './atmosphere.js';
 
 	const display = useDisplay();
 
-	const M_PER_DEG_LAT = 111_320;
 	const isVisible = $derived(display.config.clouds);
 	const density = $derived(display.config.cloudDensity);
 	const driftSpeed = $derived(display.config.cloudSpeed);
-	const cloudAltM = $derived(display.config.cloudAltitudeM);
+	// The place's composition (Location.moodFor): deck height and how much cloud it carries.
+	const look = $derived(Location.moodFor(display.config.place.id));
+	const cloudAltM = $derived(display.config.cloudAltitudeM + look.deckOffsetM);
 	const opacityScale = $derived(display.config.cloudOpacity);
 
 	/**
@@ -95,7 +97,7 @@
 		overcast: 1.9,
 		storm: 2.1
 	};
-	const coverageScale = $derived(WEATHER_COVERAGE[display.weather] ?? 1);
+	const coverageScale = $derived((WEATHER_COVERAGE[display.weather] ?? 1) * look.coverageBias);
 
 	/**
 	 * The deck is the biggest GPU cost in the window, and it was the one thing

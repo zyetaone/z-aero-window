@@ -31,7 +31,7 @@ import { scheduledWeather, type Weather } from './flight/view.js';
 import { blindClosedAt, phaseFor } from './flight/flight-path.js';
 import { DWELL_SEC, FlightDirector } from './flight/director.svelte.js';
 import { resolveAtmosphere, type AtmosphereState } from './world/atmosphere.js';
-import { nightAmount, sunPosition, type SunPosition } from './world/sun.js';
+import { moonPosition, nightAmount, sunPosition, type MoonPosition, type SunPosition } from './world/sun.js';
 import { createSettings, type PaneSettings } from '#lib/settings/settings.svelte.js';
 import { WallSync } from '#lib/settings/wall.svelte.js';
 import { PUBLIC_WALL_ORIGIN } from '$app/env/public';
@@ -237,6 +237,23 @@ export class AeroDisplay {
 		return (this.#sunLast = { azimuthDeg, elevationDeg });
 	});
 	#sunLast: SunPosition = { azimuthDeg: 0, elevationDeg: -90 };
+
+	/** The moon, quantised and identity-stable like `sun`. */
+	moon: MoonPosition = $derived.by(() => {
+		const m = moonPosition(this.view.wallSec, this.config.place.lat, this.config.place.lon);
+		const azimuthDeg = Math.round(m.azimuthDeg * 10) / 10;
+		const elevationDeg = Math.round(m.elevationDeg * 10) / 10;
+		const illumination = Math.round(m.illumination * 100) / 100;
+		const last = this.#moonLast;
+		if (
+			last.azimuthDeg === azimuthDeg &&
+			last.elevationDeg === elevationDeg &&
+			last.illumination === illumination
+		)
+			return last;
+		return (this.#moonLast = { azimuthDeg, elevationDeg, illumination });
+	});
+	#moonLast: MoonPosition = { azimuthDeg: 0, elevationDeg: -90, illumination: 0 };
 
 	/**
 	 * The wall clock the SCENE is composed at, not the one the room is in.

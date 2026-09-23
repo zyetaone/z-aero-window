@@ -250,6 +250,34 @@ Two lessons from getting it wrong first:
   "no effect". And without freezing `Date.now`, the sun moves between samples,
   so the measurement is of sunset rather than of weather.
 
+## 4d. Time, weather and the pass: everything is a function of the wall second
+
+- **Rotation.** `DWELL_SEC` (600 s) slots; the day's order of `ROTATION` is a
+  seeded shuffle (`director.svelte.ts: orderFor`), so the sequence differs by
+  day and agrees across panes. The blind closes at every slot boundary
+  (`blindClosedAt`), and every boundary is a new place.
+- **Weather.** A pinned `?weather=` or a pushed non-clear weather wins;
+  otherwise `scheduledWeather(wallSec)` (`flight/view.ts`) gives one slot in
+  six overcast and one in six broken cloud. Consumers read `display.weather`,
+  never `config.weather`. Camera params take the frame's weather from the
+  second being computed (`weatherAt`), so a fresh pane equals a running one.
+- **Downtown pass.** One pose whose loop scale, altitude and clock warp follow
+  the blend (`downtown.ts`): spiral in 30-120 s, downtown 120-180 s, out
+  180-270 s. The altitude gate is read once per slot at the pass midpoint;
+  the thread clock is the closed-form integral of the ramp and the big loop
+  flies the same clock, so nothing jumps when the pass lets go.
+- **Composition per place.** `Location.moodFor(id)` is the painter's table:
+  pitch bias, deck offset, coverage bias, loop direction, dust, night glow.
+  Render-path biases, never config writes.
+- **Motion.** Turbulence is two slow octaves plus three slot-seeded bumps on a
+  20 Hz grid (exact across panes). Clouds are fixed to the ground and stream
+  past (displacement from `view.lat/lon`, per-sprite wrap with an edge fade);
+  the deck seen from above is a CSS band in `Sky.svelte`; the celestial
+  overlay (stars, moon, haze band) rolls with the world by `WORLD_ROLL_GAIN`.
+- **Gestures.** `cabin/glass-gestures.ts`: drag nudges azimuth/pitch (pane
+  knobs, this pane only), double-tap toggles `GlassClock`. Chrome excluded by
+  selector.
+
 ## 5. Known-sharp edges
 
 - **Bank sign is not self-evident; check it geometrically.** `bankAt` negated
