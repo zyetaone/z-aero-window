@@ -162,6 +162,12 @@
 						onchange={(val) => (config.blindOpen = val)}
 					/>
 					<Toggle
+						checked={config.miniMapVisible}
+						label="Route Map"
+						description="The inset showing the orbit, the aircraft and the terrain strip"
+						onchange={(val) => (config.miniMapVisible = val)}
+					/>
+					<Toggle
 						checked={config.audioEnabled}
 						label="Cabin Audio Soundscape"
 						description="Jet engine turbine drone and atmospheric airflow"

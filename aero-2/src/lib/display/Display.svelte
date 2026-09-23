@@ -21,6 +21,8 @@
 	import RainGlass from './cabin/RainGlass.svelte';
 	import Hud from './cabin/Hud.svelte';
 	import MiniMap from './flight/MiniMap.svelte';
+	import GlassClock from './cabin/GlassClock.svelte';
+	import { glassGestures } from './cabin/glass-gestures.js';
 	import MediaStage from './media/MediaStage.svelte';
 	import AudioHost from './media/AudioHost.svelte';
 	import { useDisplay } from './display.svelte.js';
@@ -49,6 +51,17 @@
 	let { hud = true, children }: Props = $props();
 
 	const display = useDisplay();
+
+	/** Double-tap on the glass shows the wall clock; mounted only while shown. */
+	let clockVisible = $state(false);
+	const gestures = glassGestures({
+		onDoubleTap: () => (clockVisible = !clockVisible),
+		onLook: (az, pitch) => {
+			display.config.nudge('azimuthDeg', az);
+			display.config.nudge('pitchDeg', pitch);
+		},
+		ignoreClosest: 'aside, nav, button, .blind-grab, .blind-slats, .qr-backdrop, .look-controls, .minimap'
+	});
 	// DEV harness handle (the branch's headless capture scripts poke knobs through it).
 	if (import.meta.env.DEV) (globalThis as unknown as { __display?: unknown }).__display = display;
 
@@ -343,7 +356,7 @@
 	});
 </script>
 
-<div class="aero-display">
+<div class="aero-display" {@attach gestures}>
 	<!-- 3D World protected by Svelte 5 Error Boundary -->
 	<svelte:boundary onerror={onStageError}>
 		<!-- Sized explicitly: a non-none filter makes this the containing block for
@@ -392,7 +405,12 @@
 	<RainGlass />
 	<Frame />
 	<Blind />
-	<MiniMap />
+	{#if display.config.miniMapVisible}
+		<MiniMap />
+	{/if}
+	{#if clockVisible}
+		<GlassClock />
+	{/if}
 	<!-- `visible`, not `{#if}`: Hud owns the `--hud-height` CSS variable the
 	     rest of the cabin lays out against, and unmounting it left that variable
 	     stale at the ribbon height with no ribbon under it. -->
