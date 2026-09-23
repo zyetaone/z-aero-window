@@ -36,6 +36,7 @@
 	import { GeoJSONSource, LineLayer } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
 	import { quantize, shiftDash, slowBeat } from './beat.js';
+	import { weatherLightLoss } from './atmosphere.js';
 
 	const display = useDisplay();
 
@@ -93,7 +94,10 @@
 	// 0.01 steps: a raw float per frame is a setPaintProperty per frame.
 	const altitudeFade = $derived(Math.round(Math.max(0, Math.min(1, (9000 - aglM) / 5000)) * 100) / 100);
 
-	const glow = $derived(lightUp * altitudeFade);
+	// A cloud deck sits between the window and the lamps: the same light loss
+	// Ground/Sky take, so the city dims WITH the deck instead of burning through it.
+	const deck = $derived(weatherLightLoss(display.weather));
+	const glow = $derived(quantize(lightUp * altitudeFade * (1 - 0.8 * deck)));
 
 	/**
 	 * Feature locations have no roads and never will.

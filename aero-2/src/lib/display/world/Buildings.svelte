@@ -8,6 +8,7 @@
 	import { GeoJSONSource, FillExtrusionLayer, FillLayer, Image } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
 	import { quantize, slowBeat } from './beat.js';
+	import { weatherLightLoss } from './atmosphere.js';
 
 	const display = useDisplay();
 
@@ -61,9 +62,11 @@
 	const dayOpacity = $derived(Math.round(0.85 * altitudeFade * (1 - lit) * 100) / 100);
 	// Windows flicker on their own beats, out of step with the road lamps.
 	const flicker = $derived(0.8 + 0.2 * slowBeat(display.view.wallSec, 2.1, 3.3));
-	const nightOpacity = $derived(quantize(0.95 * altitudeFade * lit * flicker));
+	// Under a cloud deck the windows dim with the roads (Roads.svelte, `deck`).
+	const deck = $derived(weatherLightLoss(display.weather));
+	const nightOpacity = $derived(quantize(0.95 * altitudeFade * lit * flicker * (1 - 0.8 * deck)));
 	// The footprint itself glows: forecourts, car parks and lobbies light the block.
-	const footprintOpacity = $derived(quantize(0.6 * altitudeFade * lit));
+	const footprintOpacity = $derived(quantize(0.6 * altitudeFade * lit * (1 - 0.8 * deck)));
 </script>
 
 <!-- Gated on the place only. Mounting on altitude re-fetched and re-parsed the

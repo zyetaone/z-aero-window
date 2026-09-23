@@ -39,6 +39,7 @@
 	import { PUBLIC_TILE_SERVER_URL } from '$app/env/public';
 	import { useDisplay } from '../display.svelte.js';
 	import { NIGHT_VECTOR_TOP_M } from './sun.js';
+	import { weatherLightLoss } from './atmosphere.js';
 
 	const display = useDisplay();
 	/** Metres above the road-lamp handover over which the cruise exposure ramps in. */
@@ -81,8 +82,12 @@
 	const lowPass = $derived(
 		Math.round(Math.max(0, Math.min(1, (display.view.aglM - 1000) / 1500)) * 100) / 100
 	);
+	// The regional glow dims under a cloud deck too (Roads.svelte, `deck`). 0.01 steps.
+	const deck = $derived(weatherLightLoss(display.weather));
 	const viirsOpacity = $derived(
-		Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise) * (0.25 + 0.75 * lowPass)
+		Math.round(
+			100 * Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise) * (0.25 + 0.75 * lowPass) * (1 - 0.8 * deck)
+		) / 100
 	);
 	const viirsContrast = $derived(0.55 * cruise);
 	const viirsBrightnessMax = $derived(1 - 0.3 * cruise);
