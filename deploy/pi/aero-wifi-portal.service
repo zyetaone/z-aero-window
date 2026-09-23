@@ -8,7 +8,9 @@ After=NetworkManager.service
 [Service]
 Type=oneshot
 RemainAfterExit=no
-ExecStart=/home/pi/aero-window/deploy/aero-wifi-portal.sh
+# Under /usr/local/lib/aero like health-check.sh: ProtectHome=true below makes
+# /home unreadable to this unit, so a script kept there fails on every boot.
+ExecStart=/usr/local/lib/aero/aero-wifi-portal.sh
 # wifi-connect needs root for hostapd/dnsmasq/nmcli operations.
 User=root
 TimeoutStartSec=10min

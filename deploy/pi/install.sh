@@ -442,7 +442,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # build in step 4 and the units here cannot disagree about which app this is.
 echo "  app directory: ${APP_DIR}"
 
-for unit in aero-xserver.service aero-app.service aero-kiosk.service aero-updater.service; do
+for unit in aero-xserver.service aero-app.service aero-kiosk.service aero-updater.service aero-wifi-portal.service; do
 	sed \
 		-e "s|__AERO_USER__|${PI_USER}|g" \
 		-e "s|__AERO_INSTALL_DIR__|${INSTALL_DIR}|g" \
@@ -484,6 +484,39 @@ done
 install -d -m 755 /usr/local/lib/aero
 install -m 755 "${SCRIPT_DIR}/health-check.sh"        /usr/local/lib/aero/health-check.sh
 install -m 755 "${SCRIPT_DIR}/display-dim-schedule.sh" /usr/local/lib/aero/display-dim-schedule.sh
+install -m 755 "${SCRIPT_DIR}/aero-wifi-portal.sh"     /usr/local/lib/aero/aero-wifi-portal.sh
+
+# Captive Wi-Fi setup portal (balena wifi-connect). Until this block existed
+# the unit was never installed and the binary never downloaded, so
+# POST /api/wifi/reset answered 503 on every fielded Pi (see lib/server/wifi.ts).
+# Pinned release; skipped once present; and `|| WARN` because this runs under
+# `set -e` on the --units-only OTA path — a venue that blocks GitHub must not
+# abort the rest of the unit install. The endpoint keeps refusing the reset
+# while the binary is missing, so a failed download degrades to "no portal",
+# never to "portal assumed".
+WIFI_CONNECT_VERSION="v4.11.84"
+if [[ ! -x /usr/local/bin/wifi-connect || ! -d /usr/local/share/wifi-portal ]]; then
+	case "$(dpkg --print-architecture 2>/dev/null || echo unknown)" in
+		arm64) WC_ARCH="aarch64-unknown-linux-gnu" ;;
+		armhf) WC_ARCH="armv7-unknown-linux-gnueabihf" ;;
+		amd64) WC_ARCH="x86_64-unknown-linux-gnu" ;;
+		*)     WC_ARCH="" ;;
+	esac
+	WC_BASE="https://github.com/balena-os/wifi-connect/releases/download/${WIFI_CONNECT_VERSION}"
+	WC_TMP="$(mktemp -d)"
+	if [[ -n "${WC_ARCH}" ]] \
+		&& curl -fsSL "${WC_BASE}/wifi-connect-${WC_ARCH}.tar.gz" -o "${WC_TMP}/bin.tar.gz" \
+		&& curl -fsSL "${WC_BASE}/wifi-connect-ui.tar.gz" -o "${WC_TMP}/ui.tar.gz" \
+		&& tar -xzf "${WC_TMP}/bin.tar.gz" -C "${WC_TMP}" \
+		&& install -m 755 "$(/usr/bin/find "${WC_TMP}" -type f -name wifi-connect | head -n 1)" /usr/local/bin/wifi-connect \
+		&& rm -rf /usr/local/share/wifi-portal && install -d -m 755 /usr/local/share/wifi-portal \
+		&& tar -xzf "${WC_TMP}/ui.tar.gz" -C /usr/local/share/wifi-portal --strip-components=1; then
+		echo "  installed wifi-connect ${WIFI_CONNECT_VERSION} (${WC_ARCH}) + portal UI"
+	else
+		echo "  WARN: wifi-connect download/install failed — /api/wifi/reset will keep refusing (no portal to come back to)"
+	fi
+	rm -rf "${WC_TMP}"
+fi
 
 # Cron entries — written to /etc/cron.d so they're package-level, not user-level.
 install -m 644 "${SCRIPT_DIR}/nightly-reboot.cron"       /etc/cron.d/aero-nightly-reboot
@@ -576,7 +609,9 @@ fi
 
 echo "[7/7] Enabling services..."
 systemctl daemon-reload
-systemctl enable aero-xserver.service aero-app.service aero-kiosk.service
+# aero-wifi-portal is enable-only: it decides at boot whether a portal is
+# needed and exits 0 when a network is up, so --now here would be a no-op.
+systemctl enable aero-xserver.service aero-app.service aero-kiosk.service aero-wifi-portal.service
 systemctl enable --now aero-updater.timer
 
 # WiFi power-save off (idempotent write).
