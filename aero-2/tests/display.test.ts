@@ -838,7 +838,9 @@ describe('MiniMap track', () => {
 		const flown = new FlightTrack(...args, phase);
 
 		expect(worstGapM(flown, flown.groundTrack())).toBeLessThan(500);
-		expect(worstGapM(flown, new FlightTrack(...args).groundTrack())).toBeGreaterThan(2_000);
+		// A rounder ellipse (aspect 1.35) separates the two rings by less than the
+		// 1.7 one did; the property is still "kilometres off", not metres.
+		expect(worstGapM(flown, new FlightTrack(...args).groundTrack())).toBeGreaterThan(1_500);
 	});
 });
 
