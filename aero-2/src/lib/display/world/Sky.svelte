@@ -305,6 +305,7 @@
 	style:--dusk={duskFactor}
 	style:--sun-x="{sunScreenX}%"
 	style:--roll="{quantize(-bank * WORLD_ROLL_GAIN, 0.1)}deg"
+	style:--horizon="{horizonPct}%"
 	aria-hidden="true"
 >
 	<!-- Golden Hour Solar Flare Radiance -->
@@ -313,7 +314,7 @@
 	{/if}
 
 	<!-- Cloud deck seen from above: a horizon-aligned band, CSS only -->
-	{#if deckAmount > 0.01}
+	{#if display.config.clouds && deckAmount > 0.01}
 		<div
 			class="haze-deck"
 			style:--horizon="{horizonPct}%"
@@ -350,7 +351,9 @@
 	   0.1 degrees so the style is not rewritten every frame. */
 	.sky-celestial-overlay {
 		position: absolute;
-		inset: 0;
+		/* Oversized: a full-frame rectangle rotated by the roll leaves bare
+		   triangles at the corners; 15% of slack covers a 10-degree bank. */
+		inset: -15%;
 		transform: rotate(var(--roll, 0deg));
 		transform-origin: 50% var(--horizon, 40%);
 		overflow: hidden;
