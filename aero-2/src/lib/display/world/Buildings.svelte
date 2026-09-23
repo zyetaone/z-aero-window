@@ -7,6 +7,7 @@
 	 */
 	import { GeoJSONSource, FillExtrusionLayer, Image } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
+	import { quantize, slowBeat } from './beat.js';
 
 	const display = useDisplay();
 
@@ -58,7 +59,9 @@
 	 */
 	const lit = $derived(Math.round(Math.max(0, Math.min(1, (night - 0.5) / 0.3)) * 100) / 100);
 	const dayOpacity = $derived(Math.round(0.85 * altitudeFade * (1 - lit) * 100) / 100);
-	const nightOpacity = $derived(Math.round(0.85 * altitudeFade * lit * 100) / 100);
+	// Windows flicker on their own beats, out of step with the road lamps.
+	const flicker = $derived(0.8 + 0.2 * slowBeat(display.view.wallSec, 2.1, 3.3));
+	const nightOpacity = $derived(quantize(0.95 * altitudeFade * lit * flicker));
 </script>
 
 <!-- Gated on the place only. Mounting on altitude re-fetched and re-parsed the

@@ -55,10 +55,10 @@
 	/**
 	 * Lamps shimmer. Sodium and LED strings seen through 3-6 km of air never
 	 * hold one brightness: heat and haze make them swim. Two quick beats swing
-	 * the cores between 0.7 and 1.0 together (dasharray cannot blink per lamp;
+	 * the cores between 0.5 and 1.0 together (dasharray cannot blink per lamp;
 	 * the eye reads a whole string breathing as scintillation). 0.01 steps.
 	 */
-	const shimmer = $derived(quantize(0.85 + 0.15 * slowBeat(display.view.wallSec, 2.3, 3.7)));
+	const shimmer = $derived(quantize(0.75 + 0.25 * slowBeat(display.view.wallSec, 1.7, 2.9)));
 
 	/**
 	 * Fades OUT with altitude, which is the opposite of what a detail layer
@@ -207,8 +207,8 @@
 			paint={{
 				'line-color': color,
 				'line-width': bloomWidth,
-				'line-blur': 3,
-				'line-opacity': 0.3 * glow
+				'line-blur': 4,
+				'line-opacity': 0.55 * glow
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>
