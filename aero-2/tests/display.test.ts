@@ -15,6 +15,7 @@ import {
 	WORLD_ROLL_GAIN
 } from '#lib/display/flight/view.js';
 import { resolveAtmosphere, weatherLightLoss, cloudedRgb } from '#lib/display/world/atmosphere.js';
+import { DOWNTOWN_MIN_AGL_M } from '#lib/display/flight/downtown.js';
 import { slotNoise, phaseFor } from '#lib/display/flight/flight-path.js';
 import {
 	resolveLocalHours,
@@ -163,12 +164,14 @@ describe('readSettings', () => {
 
 describe('Flight Pose', () => {
 	it('produces finite, in-range numbers', () => {
-		const v = calculateCameraView(1_787_650_000, paramsFor());
+		const p = paramsFor();
+		const v = calculateCameraView(1_787_650_000, p);
 		expect(Number.isFinite(v.lat)).toBe(true);
 		expect(Number.isFinite(v.lon)).toBe(true);
 		expect(Number.isFinite(v.aglM)).toBe(true);
-		expect(v.aglM).toBeGreaterThanOrEqual(ALTITUDE_FLOOR_M);
-		expect(v.aglM).toBeLessThanOrEqual(ALTITUDE_CEILING_M);
+		// The downtown pass may thread below the climb floor, never below its own.
+		expect(v.aglM).toBeGreaterThanOrEqual(Math.min(p.floorM, DOWNTOWN_MIN_AGL_M));
+		expect(v.aglM).toBeLessThanOrEqual(p.ceilingM);
 	});
 
 	it('is deterministic across repeat calls with identical wall-clock time', () => {
@@ -217,8 +220,8 @@ describe('Flight Pose', () => {
 		const p = paramsFor('?weather=storm');
 		for (let s = 0; s < CLIMB_PERIOD_SEC; s += 97) {
 			const v = calculateCameraView(s, p);
-			expect(v.aglM).toBeGreaterThan(ALTITUDE_FLOOR_M * 0.9);
-			expect(v.aglM).toBeLessThan(ALTITUDE_CEILING_M * 1.1);
+			expect(v.aglM).toBeGreaterThan(Math.min(p.floorM, DOWNTOWN_MIN_AGL_M) * 0.9);
+			expect(v.aglM).toBeLessThan(p.ceilingM * 1.1);
 		}
 	});
 
@@ -243,7 +246,8 @@ describe('Flight Pose', () => {
 			const atmo = resolveAtmosphere(v.aglM);
 			visitedBands.add(atmo.bandId);
 		}
-		expect(visitedBands.size).toBe(ATMOSPHERE_BANDS.length);
+		// Bands that top out below the climb floor are never flown through.
+		expect(visitedBands.size).toBe(ATMOSPHERE_BANDS.filter((b) => b.topM > p.floorM).length);
 	});
 });
 
@@ -768,8 +772,9 @@ describe('elevation strip normalisation', () => {
 	});
 
 	it('would drift if normalised against the global constants', () => {
-		// Guards the fix by demonstrating the bug it replaced.
-		const place = Location.denver();
+		// Guards the fix by demonstrating the bug it replaced. The Himalayas,
+		// because Denver's floor now equals the global default and would not drift.
+		const place = Location.byId('himalayas');
 		const track = new FlightTrack(place.lat, place.lon, place.climbFloorM, place.climbCeilingM);
 		const agl = track.altitudeAt(0);
 		const wrong = (agl - ALTITUDE_FLOOR_M) / (ALTITUDE_CEILING_M - ALTITUDE_FLOOR_M);
@@ -1055,8 +1060,11 @@ describe('mean ground elevation is not a terrain clearance', () => {
 	 * engine that does — the deleted Cesium bridge did — the reason is on record
 	 * rather than rediscovered from a screenshot of a hillside.
 	 */
-	it('records the locations where mean + floor is below real terrain', () => {
+	it('records the measured peaks against mean + floor', () => {
 		// Peaks measured from the DEM, not looked up — see the commit for method.
+		// Until 2026-09-23 mean + floor sat BELOW every one of these (the floors
+		// were 300-900 m); the floor lift put them all above. The renderer
+		// clearance stays the safety mechanism; this is the record of the margin.
 		const measuredPeakM: Record<string, number> = {
 			mumbai: 1500,
 			dubai: 1724,
@@ -1068,7 +1076,7 @@ describe('mean ground elevation is not a terrain clearance', () => {
 		for (const [id, peak] of Object.entries(measuredPeakM)) {
 			const place = Location.byId(id);
 			const meanBased = place.groundElevationM + place.climbFloorM;
-			expect(meanBased, `${id}: mean+floor should be known-unsafe`).toBeLessThan(peak);
+			expect(meanBased, `${id}: mean+floor clears the measured peak`).toBeGreaterThan(peak);
 		}
 	});
 
@@ -1389,24 +1397,19 @@ describe('the wing is attached to the aircraft', () => {
 	});
 
 	/**
-	 * ONE home for the gain. Two renderers read it — the MapLibre camera rolls
-	 * the world, the Three wing counter-rotates to stay fixed to the airframe —
-	 * and a copy in each drifts the moment someone tunes one. The symptom, a
-	 * wing sliding against its own horizon through a turn, is subtle enough to
-	 * survive review, which is exactly why this is asserted rather than trusted.
+	 * ONE home for the gain, ONE reader. The MapLibre camera rolls the world;
+	 * the wing and the window bezel are both fixed to the airframe the camera
+	 * sits in, so in cabin space neither moves under bank. The wing used to
+	 * counter-rotate by the world's roll and slid against its own bezel through
+	 * every turn (2026-09-23). Asserted, because the symptom survives review.
 	 */
-	it('both renderers read the gain from flight/view, not their own copy', () => {
-		for (const file of [
-			'src/lib/display/world/Stage.svelte',
-			'src/lib/display/cabin/Wing.svelte'
-		]) {
-			const src = readFileSync(file, 'utf8');
-			expect(src, `${file} must import WORLD_ROLL_GAIN`).toMatch(/import\s*\{[^}]*WORLD_ROLL_GAIN/);
-			expect(
-				src.replace(/\/\*[\s\S]*?\*\//g, ''),
-				`${file} declares its own WORLD_ROLL_GAIN`
-			).not.toMatch(/const\s+WORLD_ROLL_GAIN\s*=/);
-		}
+	it('the world rolls from flight/view and the wing does not roll at all', () => {
+		const stage = readFileSync('src/lib/display/world/Stage.svelte', 'utf8');
+		expect(stage, 'Stage.svelte must import WORLD_ROLL_GAIN').toMatch(/import\s*\{[^}]*WORLD_ROLL_GAIN/);
+		const code = (f: string) => readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+		expect(code('src/lib/display/world/Stage.svelte')).not.toMatch(/const\s+WORLD_ROLL_GAIN\s*=/);
+		expect(code('src/lib/display/cabin/Wing.svelte'), 'the wing is airframe-fixed').not.toMatch(/ROLL_GAIN/);
+		expect(code('src/lib/display/cabin/Wing.svelte')).not.toMatch(/worldRoll/);
 	});
 
 	/**

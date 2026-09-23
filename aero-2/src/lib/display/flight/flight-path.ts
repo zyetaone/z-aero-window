@@ -96,7 +96,12 @@ import {
 	wrapSigned as normalizeSigned
 } from '#lib/angles.js';
 
-export const ALTITUDE_FLOOR_M = 400;
+/**
+ * 400 m read as a low approach for most of every climb cycle (2026-09-23,
+ * "sometimes it seems too low"). 3,000 m is a real climb-out height: roads
+ * and towers still resolve, and the cosine curve spends its trough there.
+ */
+export const ALTITUDE_FLOOR_M = 3000;
 export const ALTITUDE_CEILING_M = 13_000;
 export const CLIMB_PERIOD_SEC = 900;
 

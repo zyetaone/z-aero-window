@@ -8,6 +8,7 @@ import {
 	DOWNTOWN_THREAD_MAX_AGL_M,
 	DOWNTOWN_GATE_FADE_M,
 	DOWNTOWN_TIME_WARP,
+	DOWNTOWN_MIN_AGL_M,
 	downtownAltM,
 	downtownBlendAt,
 	downtownPose,
@@ -137,7 +138,7 @@ describe('downtownPose', () => {
 		expect(kmBetween(p.lat, p.lon, 17.4435, 78.3772)).toBeLessThan(
 			kmBetween(18.0, 79.0, 17.4435, 78.3772) * 0.1
 		);
-		expect(p.aglM).toBe(1200);
+		expect(p.aglM).toBe(DOWNTOWN_MIN_AGL_M);
 		expect(p.headingDeg).toBe(90);
 		expect(p.bankDeg).toBe(10);
 	});
@@ -151,7 +152,7 @@ describe('downtownPose', () => {
 		for (const place of Location.cities())
 			expect(downtownAltM(place.climbFloorM)).toBeLessThanOrEqual(5500);
 		// A zeroed floor knob still threads at a sane altitude, not the runway.
-		expect(downtownAltM(0)).toBe(1200);
+		expect(downtownAltM(0)).toBe(DOWNTOWN_MIN_AGL_M);
 	});
 });
 
@@ -159,14 +160,15 @@ describe('downtown thread in the view', () => {
 	it('brings a city visit within the building packs mid-pass', () => {
 		const place = Location.byId('hyderabad');
 		// speed=1 so the wall second maps 1:1 onto the climb: at 100 s the
-		// climb is low (~1,800 m, gate open) and the slot phase is mid-pass.
+		// climb is low (near the floor, gate open) and the slot phase is mid-pass.
 		// At the default 4x the same second is high climb and the pass
 		// correctly stands down — that is the gate test above, not this one.
 		const v = calculateCameraView(100, paramsFor('?place=hyderabad&speed=1'));
 		// The packs span ~5 km; the thread must get inside them, from 25+ km out.
 		expect(kmBetween(v.lat, v.lon, place.lat, place.lon)).toBeLessThan(6);
-		expect(v.aglM).toBeGreaterThan(1190);
-		expect(v.aglM).toBeLessThan(1210);
+		const thread = downtownAltM(place.climbFloorM);
+		expect(v.aglM).toBeGreaterThan(thread - 10);
+		expect(v.aglM).toBeLessThan(thread + 10);
 	});
 
 	it('is still on the big loop outside the pass', () => {
@@ -243,7 +245,7 @@ describe('downtown thread in production config', () => {
 		const low = calculateCameraView(100, paramsFor('?place=hyderabad&speed=1'));
 		const high = calculateCameraView(340, paramsFor('?place=hyderabad&speed=1'));
 		expect(kmBetween(low.lat, low.lon, place.lat, place.lon)).toBeLessThan(6);
-		expect(low.aglM).toBeLessThan(1300);
+		expect(low.aglM).toBeLessThan(downtownAltM(place.climbFloorM) + 100);
 		expect(kmBetween(high.lat, high.lon, place.lat, place.lon)).toBeGreaterThan(20);
 		expect(high.aglM).toBeGreaterThan(9000);
 	});

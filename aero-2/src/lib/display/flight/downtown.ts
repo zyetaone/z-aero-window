@@ -70,7 +70,7 @@ export function downtownWarpSec(effectiveSec: number): number {
 /** Thread altitude floor. Clears the tallest stamped tower (Dubai, 225 m) by
  * 5x, stays in the buildings' full-render band (under ~5,500 m), and never
  * undercuts a place's own climb floor — Denver threads at its 3,000 m. */
-export const DOWNTOWN_MIN_AGL_M = 1200;
+export const DOWNTOWN_MIN_AGL_M = 1800;
 /**
  * Climb altitude above which the pass stands down.
  *

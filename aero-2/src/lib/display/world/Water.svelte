@@ -73,7 +73,19 @@
 	 * shape stamped over the lake, which is worse than the flatness it set out
 	 * to fix.
 	 */
-	const opacity = $derived(Math.min(0.34, glint * 0.34));
+	/**
+	 * Breathing, not ripples. A photograph cannot be made to flow, but a glint
+	 * on real water is never steady: two slow beats (7 s and 11 s, so the
+	 * product never repeats inside a minute) swing the sheen between 70% and
+	 * 100%. Pure in wallSec, so three panes breathe together; 0.01 steps, so
+	 * the paint write lands a few times a second, not every frame.
+	 */
+	const breathe = $derived.by(() => {
+		const t = display.view.wallSec;
+		const w = 0.5 + 0.5 * Math.sin((t * 2 * Math.PI) / 7) * Math.sin((t * 2 * Math.PI) / 11);
+		return Math.round((0.7 + 0.3 * w) * 100) / 100;
+	});
+	const opacity = $derived(Math.round(Math.min(0.34, glint * 0.34) * breathe * 100) / 100);
 </script>
 
 {#if hasMask && opacity > 0.01}

@@ -109,6 +109,10 @@ export class Location {
 	 * for the Front Range and the Himalayas 3,500 for the obvious reason; a
 	 * coastal city does not.
 	 *
+	 * Floors were lifted 2026-09-23 (400-900 m read as a low approach for most
+	 * of every climb cycle): cities now trough at 2,500-3,300 m, ocean at 2,000,
+	 * and the spread between them is kept.
+	 *
 	 * The envelopes are deliberately NOT uniform. Identical 400..13,000 for
 	 * every place made every location fly the same profile and read as the same
 	 * flight over different wallpaper. Ocean sits low and stays low, Denver and
@@ -127,12 +131,12 @@ export class Location {
 			78.3772,
 			'Asia/Kolkata',
 			500,
-			400,
+			2_500,
 			12_500
 		),
-		new Location('mumbai', 'Mumbai, India', 19.076, 72.8777, 'Asia/Kolkata', 10, 500, 12_000),
-		new Location('dubai', 'Dubai, UAE', 25.2048, 55.2708, 'Asia/Dubai', 5, 600, 13_000),
-		new Location('dallas', 'Dallas, Texas', 32.7767, -96.797, 'America/Chicago', 150, 700, 12_000),
+		new Location('mumbai', 'Mumbai, India', 19.076, 72.8777, 'Asia/Kolkata', 10, 2_600, 12_000),
+		new Location('dubai', 'Dubai, UAE', 25.2048, 55.2708, 'Asia/Dubai', 5, 2_800, 13_000),
+		new Location('dallas', 'Dallas, Texas', 32.7767, -96.797, 'America/Chicago', 150, 3_000, 12_000),
 		new Location(
 			'phoenix',
 			'Phoenix, Arizona',
@@ -140,7 +144,7 @@ export class Location {
 			-112.0101,
 			'America/Phoenix',
 			340,
-			800,
+			3_200,
 			12_500
 		),
 		new Location(
@@ -150,7 +154,7 @@ export class Location {
 			-115.1398,
 			'America/Los_Angeles',
 			620,
-			900,
+			3_300,
 			12_800
 		),
 		new Location(
@@ -170,7 +174,7 @@ export class Location {
 			-87.7522,
 			'America/Chicago',
 			190,
-			650,
+			2_700,
 			11_500
 		),
 		/**
@@ -201,7 +205,7 @@ export class Location {
 			-157.8583,
 			'Pacific/Honolulu',
 			0,
-			300,
+			2_000,
 			11_000,
 			'feature'
 		),
@@ -212,7 +216,7 @@ export class Location {
 			25.6628,
 			'Africa/Cairo',
 			500,
-			700,
+			2_800,
 			12_500,
 			'feature'
 		)
