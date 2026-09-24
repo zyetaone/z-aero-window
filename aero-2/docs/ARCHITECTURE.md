@@ -278,7 +278,7 @@ Two lessons from getting it wrong first:
   the deck seen from above is a CSS band in `Sky.svelte`; the celestial
   overlay (stars, moon, haze band) rolls with the world by `WORLD_ROLL_GAIN`.
 - **Gestures.** `cabin/glass-gestures.ts`: drag nudges azimuth/pitch (pane
-  knobs, this pane only), double-tap toggles `GlassClock`. Chrome excluded by
+  knobs, this pane only), double-tap reveals `DestinationCard` (place, its local time, the room's time, weather with its source named); a second double-tap or a 12 s timeout dismisses it. Chrome excluded by
   selector.
 
 ## 5. Known-sharp edges

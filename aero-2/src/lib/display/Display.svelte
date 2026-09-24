@@ -21,7 +21,7 @@
 	import RainGlass from './cabin/RainGlass.svelte';
 	import Hud from './cabin/Hud.svelte';
 	import MiniMap from './flight/MiniMap.svelte';
-	import GlassClock from './cabin/GlassClock.svelte';
+	import DestinationCard from './cabin/DestinationCard.svelte';
 	import { glassGestures } from './cabin/glass-gestures.js';
 	import MediaStage from './media/MediaStage.svelte';
 	import AudioHost from './media/AudioHost.svelte';
@@ -51,10 +51,10 @@
 
 	const display = useDisplay();
 
-	/** Double-tap on the glass shows the wall clock; mounted only while shown. */
-	let clockVisible = $state(false);
+	/** Double-tap on the glass reveals the destination card; a second one, or its own timeout, dismisses it. */
+	let cardVisible = $state(false);
 	const gestures = glassGestures({
-		onDoubleTap: () => (clockVisible = !clockVisible),
+		onDoubleTap: () => (cardVisible = !cardVisible),
 		onLook: (az, pitch) => {
 			display.config.nudge('azimuthDeg', az);
 			display.config.nudge('pitchDeg', pitch);
@@ -284,8 +284,8 @@
 	{#if display.config.miniMapVisible}
 		<MiniMap />
 	{/if}
-	{#if clockVisible}
-		<GlassClock />
+	{#if cardVisible}
+		<DestinationCard ondismiss={() => (cardVisible = false)} />
 	{/if}
 	<!-- `visible`, not `{#if}`: Hud owns the `--hud-height` CSS variable the
 	     rest of the cabin lays out against, and unmounting it left that variable
