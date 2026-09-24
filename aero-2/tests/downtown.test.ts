@@ -213,22 +213,22 @@ describe('downtown thread in the view', () => {
 
 describe('downtown thread in production config', () => {
 	/**
-	 * The thread tests above pin `?speed=1` so the wall second maps 1:1 onto
-	 * the climb. The kiosk flies at 4x, where the pass window (240 s slots)
-	 * and the climb (900/4 = 225 s) beat against each other — so this asserts
-	 * the beat actually lands: at wallSec 675 the slot phase is 75 (mid-pass,
-	 * DWELL_SEC = 600) and the climb is at its floor (gate open).
+	 * The thread tests above pin `?speed=1`. The kiosk flies at 4x; altitude
+	 * keys on the wall second regardless, and the climb cycle is two dwells
+	 * with its trough at the pass midpoint of the EVEN slot — so this asserts
+	 * the pass lands there at production speed.
 	 */
 	it('threads at default speed, not just at speed=1', () => {
 		for (const id of ['hyderabad', 'denver']) {
 			const place = Location.byId(id);
-			const v = calculateCameraView(1350, paramsFor(`?place=${id}`));
+			// 2550: slot 4 (even), 150 s in — mid-pass and the climb's trough.
+			const v = calculateCameraView(2550, paramsFor(`?place=${id}`));
 			expect(kmBetween(v.lat, v.lon, place.lat, place.lon), `${id} off-thread`).toBeLessThan(
 				6
 			);
-			// Climb is at its floor (9000 % 900 == 0 kills the wander taper
-			// too), so the thread bottoms out at the thread altitude: 1,200
-			// over Hyderabad, Denver's own 3,000 m floor.
+			// The climb is at its trough (the wander taper is zero there too), so
+			// the thread bottoms out at the thread altitude: Denver's own 3,000 m
+			// floor, Hyderabad's DOWNTOWN_MIN_AGL_M.
 			const want = downtownAltM(place.climbFloorM);
 			expect(v.aglM, `${id} altitude ${v.aglM.toFixed(0)}m`).toBeGreaterThan(want - 50);
 			expect(v.aglM, `${id} altitude ${v.aglM.toFixed(0)}m`).toBeLessThan(want + 500);
@@ -236,16 +236,16 @@ describe('downtown thread in production config', () => {
 	});
 
 	/**
-	 * The gate modulates the view, not just the unit: seconds 100 and 340
-	 * share slot phase 100 (time fully in) but sit at opposite ends of the
-	 * climb, so the same phase threads at one and flies the big loop at the
-	 * other. Same time axis, different altitude axis — the two knobs the
+	 * The gate modulates the view, not just the unit: seconds 150 and 750
+	 * share slot phase 150 (mid-pass) but sit at opposite ends of the two-dwell
+	 * climb — trough in the even slot, peak in the odd — so the same phase
+	 * threads at one and flies the big loop at the other. Same time axis, different altitude axis — the two knobs the
 	 * gate multiplies.
 	 */
 	it('gates the same phase open and shut by climb alone', () => {
 		const place = Location.byId('hyderabad');
 		const low = calculateCameraView(150, paramsFor('?place=hyderabad&speed=1'));
-		const high = calculateCameraView(1350, paramsFor('?place=hyderabad&speed=1'));
+		const high = calculateCameraView(750, paramsFor('?place=hyderabad&speed=1'));
 		expect(kmBetween(low.lat, low.lon, place.lat, place.lon)).toBeLessThan(6);
 		expect(low.aglM).toBeLessThan(downtownAltM(place.climbFloorM) + 100);
 		expect(kmBetween(high.lat, high.lon, place.lat, place.lon)).toBeGreaterThan(15);

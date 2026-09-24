@@ -96,9 +96,10 @@
 		return Math.min(1, Math.max(0, (aglM - lo) / (hi - lo)));
 	});
 
-	const effectiveSec = $derived(wallSec * display.config.speed);
+	// Wall seconds, not wallSec * speed: the flown altitude keys on the wall
+	// clock (view.ts), and the strip must draw the same curve the dot flies.
 	const climbPhase = $derived(
-		(((effectiveSec % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC
+		(((wallSec % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC
 	);
 
 	/**
@@ -149,7 +150,7 @@
 		const lo = display.config.floorM;
 		const hi = display.config.ceilingM;
 		const points: string[] = [];
-		const periodStart = Math.floor(effectiveSec / CLIMB_PERIOD_SEC) * CLIMB_PERIOD_SEC;
+		const periodStart = Math.floor(wallSec / CLIMB_PERIOD_SEC) * CLIMB_PERIOD_SEC;
 		for (let x = 0; x <= ELEV_WIDTH; x += 2) {
 			const t = periodStart + (x / ELEV_WIDTH) * CLIMB_PERIOD_SEC;
 			const agl = track.altitudeAt(t);

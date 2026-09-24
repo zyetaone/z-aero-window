@@ -106,7 +106,6 @@ import {
  */
 export const ALTITUDE_FLOOR_M = 3000;
 export const ALTITUDE_CEILING_M = 13_000;
-export const CLIMB_PERIOD_SEC = 900;
 
 /**
  * How long the window holds one destination.
@@ -126,6 +125,19 @@ export const CLIMB_PERIOD_SEC = 900;
  * churn.
  */
 export const DWELL_SEC = 600;
+
+/**
+ * The climb cycle is TWO dwells, low at the pass. Measured 2026-09-24: a
+ * 900 s cosine against 600 s slots never kept the climb under the thread
+ * ceiling across the whole pass window, so the pass could not engage without
+ * pulling a 9 km climb down in 90 s (106 m/s). Two slots per cycle, trough
+ * centred on `CLIMB_LOW_PHASE_SEC` of the even slot: alternate visits get the
+ * low city pass, the others cruise high, and the curve is continuous across
+ * every hop. Peak rate pi * band / period ~ 26 m/s for a 10 km band.
+ */
+export const CLIMB_PERIOD_SEC = 2 * DWELL_SEC;
+/** Slot second at which the climb bottoms out — the downtown pass midpoint. */
+export const CLIMB_LOW_PHASE_SEC = 150;
 
 /**
  * The blind comes down for the hop, the way aero-1 staged every location
@@ -418,7 +430,8 @@ export class FlightTrack {
 	 * Compute altitude at wall-clock second `wallSec` along the climb/descent cosine curve.
 	 */
 	altitudeAt(wallSec: number): number {
-		const phase = (wallSec % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC;
+		const rel = wallSec - CLIMB_LOW_PHASE_SEC;
+		const phase = (((rel % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC;
 		const smooth = (1 - Math.cos(phase * TWO_PI)) * 0.5;
 		const band = this.ceilingM - this.floorM;
 		const base = this.floorM + band * smooth;

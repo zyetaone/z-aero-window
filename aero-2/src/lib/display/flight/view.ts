@@ -17,7 +17,10 @@ import {
 	downtownGateAt,
 	downtownPose,
 	downtownTimeAt,
-	downtownWarpSec
+	downtownWarpSec,
+	DOWNTOWN_PASS_START_SEC,
+	DOWNTOWN_PASS_END_SEC,
+	DOWNTOWN_HANDOFF_SEC
 } from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
 import { Location } from '#lib/locations.js';
@@ -418,9 +421,26 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	const slotStart = Math.floor(wallSec / DWELL_SEC) * DWELL_SEC;
 	const gate = params.place.isFeature
 		? 0
-		: downtownGateAt(track.poseAt((slotStart + DOWNTOWN_GATE_PHASE_SEC) * speed).aglM);
+		: downtownGateAt(
+				// The HIGHEST climb across the whole pass window, not the midpoint
+				// alone: the ramp pulls the aircraft from the climb to the thread
+				// altitude in 90 s, and a midpoint read let a 9 km climb at the
+				// ramp's start through the gate — 106 m/s down, measured.
+				Math.max(
+					track.altitudeAt(slotStart + DOWNTOWN_PASS_START_SEC - DOWNTOWN_HANDOFF_SEC),
+					track.altitudeAt(slotStart + DOWNTOWN_GATE_PHASE_SEC),
+					track.altitudeAt(slotStart + DOWNTOWN_PASS_END_SEC + DOWNTOWN_HANDOFF_SEC)
+				)
+			);
 	const flightSec = downtownWarpSec(effectiveSec, wallSec, speed, gate);
-	const plane = track.poseAt(flightSec);
+	/**
+	 * Altitude keys on the WALL second, unscaled and unwarped. The speed knob
+	 * (default 4x) and the pass warp scale the loop clock, and the climb rode
+	 * along: a 900 s cosine ran in 225 s of wall time, 2.7 cycles a slot, and
+	 * measured 140 m/s (28,000 ft/min) descents. Speed means "flies the loop
+	 * faster", not "climbs faster"; the minimap strip keys the same way.
+	 */
+	const plane = { ...track.poseAt(flightSec), aglM: track.altitudeAt(wallSec) };
 	const roleOffset = roleYawOffsetDeg(params.fleetRole ?? 'solo');
 	// The operator's aim, the fleet parallax, and the slow look-around —
 	// three independent offsets, one bearing. The sweep keys off wallSec,

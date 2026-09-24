@@ -263,7 +263,10 @@ Two lessons from getting it wrong first:
   second being computed (`weatherAt`), so a fresh pane equals a running one.
 - **Downtown pass.** One pose whose loop scale, altitude and clock warp follow
   the blend (`downtown.ts`): spiral in 30-120 s, downtown 120-180 s, out
-  180-270 s. The altitude gate is read once per slot at the pass midpoint;
+  180-270 s. Altitude keys on the wall second (never the speed-scaled or
+  warped loop clock) on a two-dwell cosine whose trough is the pass midpoint,
+  so alternate visits pass low and the others cruise. The altitude gate is
+  read once per slot as the highest climb across the pass window;
   the thread clock is the closed-form integral of the ramp and the big loop
   flies the same clock, so nothing jumps when the pass lets go.
 - **Composition per place.** `Location.moodFor(id)` is the painter's table:

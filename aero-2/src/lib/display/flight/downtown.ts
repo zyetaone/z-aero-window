@@ -29,13 +29,15 @@
  */
 
 import type { OrbitPose } from './flight-path.js';
-import { DWELL_SEC } from './flight-path.js';
+import { CLIMB_LOW_PHASE_SEC, DWELL_SEC } from './flight-path.js';
 
 /** Seconds into each dwell the pass starts and ends. Inside the slot with
  * margin both sides: the 3.5 s arrival glide is long over by 37 s, and 67 s
  * of big loop remain after the 173 s handoff before the next rotation. */
-export const DOWNTOWN_PASS_START_SEC = 75;
-export const DOWNTOWN_PASS_END_SEC = 225;
+// Centred on the climb's trough (flight-path.ts), so the gate opens on the
+// slots the climb is already low in and the pull down to the thread is small.
+export const DOWNTOWN_PASS_START_SEC = CLIMB_LOW_PHASE_SEC - 75;
+export const DOWNTOWN_PASS_END_SEC = CLIMB_LOW_PHASE_SEC + 75;
 /** Ease each side of the pass. A cut would teleport ~25 km; 8 s reads as the
  * descent toward the city / climb back out to the loop. */
 /**

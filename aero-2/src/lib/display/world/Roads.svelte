@@ -116,9 +116,9 @@
 	 * the same knob and they are not, because the two change on wildly
 	 * different timescales.
 	 *
-	 * `CLIMB_PERIOD_SEC` is 900, and the climb curve spends ~62% of each cycle
-	 * below 9,000 m — so an altitude-gated `{#if}` mounts and unmounts this
-	 * source FOUR TIMES AN HOUR, every hour, forever. Each mount re-fetches and
+	 * `CLIMB_PERIOD_SEC` is two dwells (1,200 s), and the climb curve spends
+	 * ~62% of each cycle below 9,000 m — so an altitude-gated `{#if}` mounts and
+	 * unmounts this source THREE TIMES AN HOUR, every hour, forever. Each mount re-fetches and
 	 * re-parses the city's GeoJSON: Denver is 4.4 MB and 19,838 features, which
 	 * measures 29 ms of `JSON.parse` on an M-series Mac and is roughly 160 ms on
 	 * a Pi 5, on the main thread, in a window whose entire job is to move
