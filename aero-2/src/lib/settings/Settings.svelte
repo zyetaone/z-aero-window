@@ -4,7 +4,7 @@
 	 * Categorized into 3 operator tabs (flight, cabin, wall) with dual range/number inputs and toggle switches.
 	 */
 	import { useDisplay } from '../display/display.svelte.js';
-	import { Location, LOCATIONS } from '../locations.js';
+	import { LOCATIONS } from '../locations.js';
 		import { FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
 	import { DWELL_SEC } from '../display/flight/flight-path.js';
 
@@ -24,8 +24,6 @@
 
 	const display = useDisplay();
 	const config = display.config;
-	const cities = Location.cities();
-	const features = Location.features();
 
 	type TabId = 'flight' | 'cabin' | 'wall';
 	let activeTab = $state<TabId>('flight');
@@ -107,32 +105,9 @@
 
 		<div class="content">
 			{#if activeTab === 'flight'}
-				<section class="section">
-					<h4>Destination Selector</h4>
-					<div class="location-select-wrap">
-						<select
-							class="glass-select"
-							value={config.place.id}
-							onchange={(e) => {
-								const loc = Location.byId(e.currentTarget.value);
-								if (loc) config.setPlace(loc);
-							}}
-							aria-label="Select destination"
-						>
-							<optgroup label="Cities (Orbital Tour)">
-								{#each cities as city}
-									<option value={city.id}>{city.name} ({city.groundElevationM}m MSL)</option>
-								{/each}
-							</optgroup>
-							<optgroup label="Natural Features (Cross-Country)">
-								{#each features as feat}
-									<option value={feat.id}>{feat.name} ({feat.groundElevationM}m MSL)</option>
-								{/each}
-							</optgroup>
-						</select>
-					</div>
-
-				</section>
+				<!-- Destination is a wall key (placeId): it is set from the Wall tab so
+				     all three panes move together (ADR-007). A local selector lived
+				     here and split the wall exactly as the local weather control did. -->
 
 				<section class="section">
 					<h4>Conditions</h4>
@@ -486,26 +461,6 @@
 		padding-bottom: 0.4rem;
 	}
 
-
-	.glass-select {
-		width: 100%;
-		padding: 8px 12px;
-		background: rgba(0, 0, 0, 0.45);
-		border: 1px solid rgba(255, 255, 255, 0.18);
-		border-radius: 6px;
-		color: #ffffff;
-		font-size: 0.85rem;
-		cursor: pointer;
-	}
-	.glass-select:focus {
-		outline: none;
-		border-color: var(--accent-cyan, #38bdf8);
-	}
-	.glass-select option,
-	.glass-select optgroup {
-		background: #0f172a;
-		color: #ffffff;
-	}
 
 	.diag-list {
 		display: flex;

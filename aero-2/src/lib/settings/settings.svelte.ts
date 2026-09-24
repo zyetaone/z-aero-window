@@ -540,8 +540,12 @@ export class PaneSettings {
 			this.clockOffsetH = Math.round(rawDelta * 4) / 4;
 		}
 
+		// Numeric knobs go through `set`, so a preset cannot author a value the
+		// URL and the drawer are refused: KNOB_RANGE clamps every write path.
 		for (const [key, value] of Object.entries(rest)) {
-			if (value !== undefined) (this as Record<string, unknown>)[key] = value;
+			if (value === undefined) continue;
+			if (key in KNOB_RANGE && typeof value === 'number') this.set(key as NumericKnob, value);
+			else (this as Record<string, unknown>)[key] = value;
 		}
 		if (wingVisible !== undefined) this.wing = wingVisible;
 	}
