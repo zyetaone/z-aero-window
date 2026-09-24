@@ -34,5 +34,8 @@ describe('destination card', () => {
 	it('reads destination time from the flown pose, never a second clock', () => {
 		expect(card).toMatch(/display\.view\.timeOfDay/);
 		expect(card).not.toMatch(/timeZone/);
+		// zone label composes the same offset as the clock beside it (Hud parity)
+		expect(card).toMatch(/place\.utcOffset \+ display\.config\.clockOffsetH/);
+		expect(card).not.toMatch(/utcOffsetAt/);
 	});
 });

@@ -1,3 +1,8 @@
+<script module lang="ts">
+	/** Auto-dismiss, so the window is never left wearing a dashboard. */
+	export const CARD_TIMEOUT_MS = 12_000;
+</script>
+
 <script lang="ts">
 	/**
 	 * DestinationCard — what a curious visitor gets for a deliberate double-tap.
@@ -18,7 +23,6 @@
 	import { useDisplay } from '../display.svelte.js';
 	import { formatClock, formatUtcOffset } from '#lib/format.js';
 
-	export const CARD_TIMEOUT_MS = 12_000;
 
 	const { ondismiss }: { ondismiss: () => void } = $props();
 	const display = useDisplay();
@@ -36,7 +40,11 @@
 
 	const place = $derived(display.config.place);
 	const thereTime = $derived(formatClock(display.view.timeOfDay));
-	const thereZone = $derived(formatUtcOffset(place.utcOffsetAt(display.view.wallSec)));
+	// Same composition as the clock beside it: `view.timeOfDay` is
+	// `place.utcOffset + clockOffsetH`, so the zone label folds the preset offset
+	// in too. Hud.svelte documents the mismatch this avoids ("21:00 UTC-6" for a
+	// moment that is not 21:00 in UTC-6).
+	const thereZone = $derived(formatUtcOffset(place.utcOffset + display.config.clockOffsetH));
 	const hereTime = $derived(formatClock(now.getHours() + now.getMinutes() / 60));
 	const hereZone = $derived(formatUtcOffset(-now.getTimezoneOffset() / 60));
 	const altitudeM = $derived(Math.round(display.view.aglM / 100) * 100);
