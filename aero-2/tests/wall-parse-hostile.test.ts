@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WEATHERS } from '#lib/display/flight/view.js';
+import { WEATHERS } from '#lib/wall.js';
 import {
 	MAX_ID_CHARS,
 	MAX_WALL_BYTES,

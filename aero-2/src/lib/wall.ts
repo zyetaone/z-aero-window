@@ -30,9 +30,9 @@ export const WALL_KEYS = [
 export interface WallState {
 	placeId: string;
 	presetId: string;
-	weather: string;
+	weather: Weather;
 	clockOffsetH: number;
-	displayMode: string;
+	displayMode: DisplayMode;
 	blindOpen: boolean;
 	rotate: boolean;
 	/**
@@ -79,9 +79,12 @@ export interface WallSnapshot {
 }
 
 /** Closed sets the server is allowed to know. See `parseWallState`. */
-const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
+export const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
+export type Weather = (typeof WEATHERS)[number];
 export const DISPLAY_MODES = ['flight', 'video', 'screensaver', 'standby'] as const;
-const CLOCK_OFFSET_RANGE: readonly [number, number] = [-12, 12];
+export type DisplayMode = (typeof DISPLAY_MODES)[number];
+/** One range: the schema rejects outside it and the drawer's knob stops at it. */
+export const CLOCK_OFFSET_RANGE: readonly [number, number] = [-12, 12];
 
 /**
  * A bounded list of same-origin-or-http(s) media paths.

@@ -7,19 +7,14 @@ import { LOCATIONS, Location } from '../locations.js';
 import { SCENE_PRESETS, type ScenePreset } from './presets.js';
 import { HILLSHADE_DEFAULT, TERRAIN_EXAGGERATION } from './tiles.js';
 import { ALTITUDE_FLOOR_M, ALTITUDE_CEILING_M } from '../display/flight/flight-path.js';
-import {
-	DEFAULT_WINDOW_AZIMUTH_DEG,
-	DEFAULT_PITCH_DEG,
-	WEATHERS,
-	type Weather
-} from '../display/flight/view.js';
+import { DEFAULT_WINDOW_AZIMUTH_DEG, DEFAULT_PITCH_DEG } from '../display/flight/view.js';
+import { CLOCK_OFFSET_RANGE, WEATHERS, type DisplayMode, type Weather } from '#lib/wall.js';
 import { FLEET_ROLES, type FleetRole } from '../display/flight/parallax.js';
 import { localHourAtSunElevation, resolveLocalHours } from '../display/world/sun.js';
 import { wrapSigned } from '#lib/angles.js';
 
 export { Location } from '../locations.js';
 export { FLEET_ROLES, type FleetRole } from '../display/flight/parallax.js';
-export { WEATHERS, type Weather } from '../display/flight/view.js';
 
 /**
  * Where cabin sound comes from. Declared here rather than in a leaf because,
@@ -79,7 +74,7 @@ export const KNOB_RANGE = {
 	speed: [0.1, 25.0],
 	floorM: [0, 20_000],
 	ceilingM: [0, 20_000],
-	clockOffsetH: [-12, 12],
+	clockOffsetH: CLOCK_OFFSET_RANGE,
 	shade: [0, 1],
 	exaggeration: [0.1, 6.0],
 	wingScale: [0.3, 3.0],
@@ -188,7 +183,7 @@ export class PaneSettings {
 	qualityMode = $state<'ultra' | 'balanced' | 'performance'>('balanced');
 
 	/** Display Modes (flight, video, screensaver, standby) */
-	displayMode = $state<'flight' | 'video' | 'screensaver' | 'standby'>('flight');
+	displayMode = $state<DisplayMode>('flight');
 
 	/**
 	 * Media playlists ship EMPTY, and the emptiness is the honest state.

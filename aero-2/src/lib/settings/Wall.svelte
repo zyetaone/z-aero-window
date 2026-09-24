@@ -19,7 +19,8 @@
 	import Toggle from './Toggle.svelte';
 	import { LOCATIONS, type Location } from '../locations.js';
 	import { SCENE_PRESETS } from './presets.js';
-	import { KNOB_RANGE, WEATHERS, type PaneSettings } from './settings.svelte.js';
+	import { KNOB_RANGE, type PaneSettings } from './settings.svelte.js';
+	import { DISPLAY_MODES, WEATHERS, type DisplayMode, type Weather } from '#lib/wall.js';
 	import type { WallSync } from './wall.svelte.js';
 	import { seedMediaDraft, type WallState } from '#lib/wall.js';
 	import { mediaLibrary } from './media-library.svelte.js';
@@ -126,15 +127,15 @@
 	<Segmented
 		label="Weather"
 		options={WEATHERS}
-		isActive={(w: string) => w === draft.weather}
-		onselect={(w: string) => (draft.weather = w)}
+		isActive={(w: Weather) => w === draft.weather}
+		onselect={(w: Weather) => (draft.weather = w)}
 	/>
 
 	<Segmented
 		label="Mode"
-		options={['flight', 'video', 'screensaver', 'standby'] as const}
-		isActive={(m: string) => m === draft.displayMode}
-		onselect={(m: string) => (draft.displayMode = m)}
+		options={DISPLAY_MODES}
+		isActive={(m: DisplayMode) => m === draft.displayMode}
+		onselect={(m: DisplayMode) => (draft.displayMode = m)}
 	/>
 
 	<!--

@@ -28,7 +28,7 @@
  * `Weather` is the existing const-array union from `flight/view.js`
  * (type-only import: erased, no runtime edge into the flight model).
  */
-import type { Weather } from '../flight/view.js';
+import type { Weather } from '#lib/wall.js';
 
 /** Tier geometry shared by the builder and the mapper. `as const` objects
  * widened to this so tiers stay interchangeable (distant/near/cirrus differ

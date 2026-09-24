@@ -91,10 +91,9 @@ export const DEFAULT_PITCH_DEG = -10;
 const LOOKAT_MAX_GROUND_DIST_M = 70_000;
 
 import { DEG2RAD, signedDelta, wrapSigned } from '#lib/angles.js';
+import type { Weather } from '#lib/wall.js';
 
 /** Written out in five places before this existed. */
-export const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
-export type Weather = (typeof WEATHERS)[number];
 
 /**
  * Cloud periods: which weather a slot flies through when nothing pinned one.

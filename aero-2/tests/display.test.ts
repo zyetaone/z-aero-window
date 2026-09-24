@@ -1,3 +1,4 @@
+import { WEATHERS } from '#lib/wall.js';
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
@@ -11,7 +12,6 @@ import {
 import {
 	calculateCameraView,
 	FlightCamera,
-	WEATHERS,
 	WORLD_ROLL_GAIN
 } from '#lib/display/flight/view.js';
 import { resolveAtmosphere, weatherLightLoss, cloudedRgb } from '#lib/display/world/atmosphere.js';

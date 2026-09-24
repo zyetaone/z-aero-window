@@ -27,7 +27,8 @@ import {
  */
 const CRUISE_BLEND_SEC = 3.5;
 
-import { scheduledWeather, type Weather } from './flight/view.js';
+import { scheduledWeather } from './flight/view.js';
+import type { Weather } from '#lib/wall.js';
 import { blindClosedAt, phaseFor } from './flight/flight-path.js';
 import { DWELL_SEC, FlightDirector } from './flight/director.svelte.js';
 import { resolveAtmosphere, type AtmosphereState } from './world/atmosphere.js';
