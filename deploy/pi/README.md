@@ -156,6 +156,10 @@ Then copy to each Pi and let it pick them up:
 ```sh
 rsync -av --progress ./data/tiles/ kiosk@<pi>:/opt/aero-window/data/tiles/
 ssh kiosk@<pi> 'sudo systemctl restart aero-app aero-kiosk'
+
+# Read-only inventory of a fielded Pi: layout, commit, units, timers, and
+# leftovers from superseded installs (changes nothing):
+ssh kiosk@<pi> 'sudo bash -s' < deploy/pi/audit.sh
 ```
 
 ### Verifying

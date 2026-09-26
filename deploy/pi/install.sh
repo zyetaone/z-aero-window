@@ -471,7 +471,12 @@ rm -f /etc/sudoers.d/aero.tmp
 # still ships, so a unit that was dropped from the project survives a re-provision
 # and keeps auto-starting forever. aero-fleet ran the standalone WebSocket broker
 # deleted in Phase 9 (replaced by REST + SSE inside the app itself).
-DEAD_UNITS=(aero-fleet.service)
+# aero-watchdog came from provision-pi.sh (removed 2026-07-28): a 5-minute timer
+# that restarted aero-kiosk whenever it was inactive, duplicating the in-app
+# liveness watchdog and racing it on a restart. aero-gpio-reset came from the
+# pre-git layout and points at a script under /home/pi that no longer exists,
+# so it fails on every boot and shows in `systemctl --failed`.
+DEAD_UNITS=(aero-fleet.service aero-watchdog.timer aero-watchdog.service aero-gpio-reset.service)
 for dead_unit in "${DEAD_UNITS[@]}"; do
 	if [[ -f "/etc/systemd/system/${dead_unit}" ]]; then
 		systemctl disable --now "${dead_unit}" >/dev/null 2>&1 || true
