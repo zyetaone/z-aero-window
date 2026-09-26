@@ -97,7 +97,7 @@ function* runtimeImports(src) {
 	// `export type ... from 'x'` re-exports are erased; value re-exports stay.
 	for (const m of src.matchAll(/\bexport\b(\s+type\b)?\s*([^;]*?)\bfrom\s*['"]([^'"]+)['"]/g)) {
 		if (m[1]) continue;
-		yield m[2];
+		yield m[3];
 	}
 	// Side-effect imports and dynamic imports always execute.
 	for (const m of src.matchAll(/\bimport\s*['"]([^'"]+)['"]/g)) yield m[1];
