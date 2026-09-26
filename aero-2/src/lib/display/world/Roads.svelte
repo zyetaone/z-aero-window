@@ -188,23 +188,14 @@
 	/**
 	 * Lamp shimmer, sampled at 5 Hz from the wall clock.
 	 *
-	 * A per-frame derivation would mint a new paint object 60×/s and push a
-	 * style update each frame; 5 Hz rides the map's existing RAF renders for
-	 * free. The VALUE is a pure function of wall seconds (`lampFlicker`), so
-	 * all panes agree — only the sampling instant differs, which is invisible
-	 * at these frequencies. Interval-owned, not tick-owned: this component has
-	 * no RAF of its own and must not start one for a ±10% shimmer.
+	 * Quantised off `display.view.wallSec` to 0.2 s, the same shape as the
+	 * traffic dash above and `coverSlot` in Clouds: the derived only changes
+	 * value 5×/s, so MapLibre sees one paint update per step, not per frame,
+	 * and the VALUE is a pure function of wall seconds (`lampFlicker`), so
+	 * all panes agree. No private `Date.now()` clock (ADR-007) — the old
+	 * interval sampled each pane's own clock at its own mount phase.
 	 */
-	let wallT = $state(Date.now() / 1000);
-	$effect(() => {
-		// Timer only while the source is mounted (night); by day there is
-		// nothing shimmering and no reason to wake up 5×/s.
-		if (!mounted) return;
-		const id = setInterval(() => {
-			wallT = Date.now() / 1000;
-		}, 200);
-		return () => clearInterval(id);
-	});
+	const wallT = $derived(mounted ? Math.floor(display.view.wallSec * 5) / 5 : 0);
 	const flicker = $derived(lampFlicker(wallT));
 	/**
 	 * The glimmer envelope, sampled on the same 5 Hz wall clock as the
