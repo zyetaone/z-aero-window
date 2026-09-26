@@ -98,7 +98,7 @@
 		 * Himalayan mean 5,000 m against 8,000 m+ sampled ridges.
 		 */
 		let smoothGround: number | null = null;
-		let lastMs = 0;
+		let lastWallSec = 0;
 
 		let raf: number;
 		let loopErrors = 0;
@@ -123,10 +123,12 @@
 			}
 		};
 		const frame = () => {
-			const nowMs = performance.now();
-			const dtSec = lastMs === 0 ? 0 : Math.min(0.5, (nowMs - lastMs) / 1000);
-			lastMs = nowMs;
 			const v = display.advanceTo(Date.now() / 1000);
+			// Wall-clock frame delta (ADR-007): the glide rate is then the same
+			// number of metres per wall second on every pane, and a pane that
+			// dropped frames catches up instead of gliding slower.
+			const dtSec = lastWallSec === 0 ? 0 : Math.min(0.5, v.wallSec - lastWallSec);
+			lastWallSec = v.wallSec;
 			const planeAt = new LngLat(v.lon, v.lat);
 			const targetAt = new LngLat(v.targetLon, v.targetLat);
 

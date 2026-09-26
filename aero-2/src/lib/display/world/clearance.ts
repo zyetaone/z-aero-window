@@ -88,8 +88,10 @@ export const DATUM_FALL_PER_SEC = 2.5;
  * climbed INSTANTLY (the result equals the margined goal whenever the goal
  * is above the previous datum), a falling datum approaches from above and
  * never crosses below the goal, and the margin holds in both directions.
- * Frame-timed blending means panes can disagree by a frame during the glide
- * — invisible, and both ends are the shared sampled values.
+ * `dtSec` is a WALL-clock delta (Stage derives it from `view.wallSec`, not
+ * `performance.now()`), so the glide covers the same metres per second on
+ * every pane; they can still disagree by a frame mid-glide — invisible, and
+ * both ends are the shared sampled values.
  */
 export function smoothDatum(prev: number | null, target: number, dtSec: number): number {
 	const goal = target + DATUM_MARGIN_M;
