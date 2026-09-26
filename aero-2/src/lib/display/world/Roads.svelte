@@ -441,7 +441,9 @@
 		     sparser train so that at cruise zooms each dash is one lamp,
 		     not a segment. Steady opacity (no flicker — see above),
 		     VIIRS-weighted like everything else on this source.
-		     Zoom-stepped, because dash lengths multiply by line width and
+		     Zoom-STEPPED (`step`, never `interpolate`: line-dasharray is not
+		     interpolatable and MapLibre rejects the whole style at init, which
+		     took the kiosk route down in CI), because dash lengths multiply by line width and
 		     the cruise width is ~1 px: a fixed [0.6, 7] draws 0.66 px dots
 		     up high, which alias into shimmer under motion on a window that
 		     never stops moving. Integer-zoom steps only (the spec evaluates
@@ -456,11 +458,11 @@
 				'line-blur': 1,
 				'line-opacity': farOpacity,
 				'line-dasharray': [
-					'interpolate',
-					['linear'],
+					'step',
 					['zoom'],
-					8,
 					['literal', [2, 9]],
+					10,
+					['literal', [1.2, 8]],
 					11,
 					['literal', [0.6, 7]]
 				] as never
