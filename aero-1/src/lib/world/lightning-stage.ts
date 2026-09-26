@@ -58,14 +58,25 @@ let _viewer: CesiumType.Viewer | null = null;
 let _stage: CesiumType.PostProcessStage | null = null;
 let _composition: LightningComposition | null = null;
 let _prevHasLightning = false;
-let _timer = 0;
 let _nextStrike = 10;
+/**
+ * Wall-clock second the next strike lands on. The schedule is absolute —
+ * storm start plus cumulative intervals — never accumulated from frame
+ * deltas (see tickLightning). Reset with everything else in destroy.
+ */
+let _nextStrikeWallSec = 0;
 
-// Deterministic strike sequence (invariant #4). Lightning is a FULL-SCREEN
-// flash, so if each Pi rolled its own timings the panorama would flash
-// out of sync — the most visible seam of any effect. All three Pis share
-// daySeed() and receive the same broadcast weather, so seeding the storm
-// from (daySeed ^ stormIndex) makes them agree with no extra messaging.
+// Deterministic strike sequence AND schedule (invariant #4). Lightning is
+// a FULL-SCREEN flash, so if each Pi rolled its own timings the panorama
+// would flash out of sync — the most visible seam of any effect. All three
+// Pis share daySeed() and receive the same broadcast weather, so seeding
+// the storm from (daySeed ^ stormIndex) makes the SEQUENCES agree with no
+// extra messaging. The seed alone never agreed the TIMING: the old
+// `_timer += delta` accumulation crossed each interval at whatever wall
+// moment each Pi's frame rate happened to reach, so identical sequences
+// fired out of sync. The schedule is therefore absolute — storm start
+// plus cumulative intervals against the shared wall clock — while the
+// draws stay exactly as seeded.
 //
 // `_stormIndex` counts hasLightning false→true transitions. It stays in
 // step across Pis because `hasLightning` is derived from the leader's
@@ -81,11 +92,13 @@ const STORM_SALT = 0x5c07;
 
 let _rng: () => number = createSeededRng(STORM_SALT);
 
-/** Reset the strike sequence for a new storm. */
+/** Reset the strike sequence for a new storm. Draw order is the determinism
+ * contract (see lightning-determinism.test.ts): composition, first
+ * interval, then per strike intensity, x, y, next interval. tickLightning
+ * preserves it exactly — only the trigger changes. */
 function beginStorm(index: number = _stormIndex): void {
 	_rng = createSeededRng((daySeed() ^ (index * STORM_SALT)) >>> 0);
 	_composition = pickLightningComposition(_rng);
-	_timer = 0;
 	_flash = 0;
 	_nextStrike = randomBetween(
 		_composition.intervalRange[0],
@@ -132,15 +145,30 @@ export function mountLightning(C: typeof CesiumType, viewer: CesiumType.Viewer):
 }
 
 /**
- * Per-frame strike timing + flash decay. Imperative because it's
- * time-driven simulation, not state sync.
+ * Per-frame strike timing + flash decay.
+ *
+ * `wallSec` is the shared wall clock (seconds, Date.now()/1000 at the call
+ * site — the same doctrine as flight.svelte.ts: identical across Pis
+ * within NTP drift). The strike SCHEDULE derives from it absolutely:
+ * storm start plus cumulative composition intervals. It used to accumulate
+ * `_timer += delta` per frame, which reads the same on paper and splits
+ * the wall in practice — two Pis at different frame rates cross each
+ * interval at different wall moments, so the panorama flashed out of sync
+ * while holding an identical RNG sequence. Same draws, wall-derived
+ * trigger: every pane fires the same strikes at the same seconds.
+ *
+ * Flash DECAY stays delta-driven: it shapes a sub-second fade whose exact
+ * curve is invisible across panes, and only the strike instants read as
+ * sync. A non-finite wallSec fires nothing (all comparisons fail false)
+ * while decay continues — a paused clock dims the storm, never breaks it.
  */
-export function tickLightning(delta: number, weather: WeatherSlice): void {
+export function tickLightning(delta: number, weather: WeatherSlice, wallSec: number): void {
 	if (!_stage) return;
 
 	if (weather.hasLightning && !_prevHasLightning) {
 		beginStorm(_stormIndex);
 		_stormIndex++;
+		_nextStrikeWallSec = wallSec + _nextStrike;
 	} else if (!weather.hasLightning && _prevHasLightning) {
 		_composition = null;
 	}
@@ -157,11 +185,14 @@ export function tickLightning(delta: number, weather: WeatherSlice): void {
 	const c = _composition;
 	const decayRate = c?.decayRate ?? weather.lightningDecayRate;
 
-	_timer += delta;
 	if (_flash > 0) {
 		_flash = clamp(_flash - delta * decayRate, 0, 1);
 	}
-	if (_flash < 0.01 && _timer > _nextStrike) {
+	// Every due strike fires, in order — including a backlog after a
+	// suspended tab. Skipping backlog draws would desync the RNG against a
+	// pane that drew them live; firing them keeps every pane's draw count
+	// identical, and the visible end state is simply the latest strike.
+	while (wallSec >= _nextStrikeWallSec) {
 		if (c) {
 			_flash = randomBetween(c.intensityRange[0], c.intensityRange[1], _rng);
 			// Recipes are in percent (0..100); shader wants 0..1.
@@ -182,7 +213,7 @@ export function tickLightning(delta: number, weather: WeatherSlice): void {
 				_rng,
 			);
 		}
-		_timer = 0;
+		_nextStrikeWallSec += _nextStrike;
 	}
 }
 
@@ -194,8 +225,8 @@ export function destroyLightning(): void {
 	}
 	_stage = null;
 	_viewer = null;
-	_timer = 0;
 	_nextStrike = 10;
+	_nextStrikeWallSec = 0;
 	_flash = 0;
 	_composition = null;
 	_prevHasLightning = false;

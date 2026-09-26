@@ -140,53 +140,6 @@ export const SCENE_PRESETS: readonly ScenePreset[] = [
 		}
 	},
 	{
-		id: 'pacific-glide',
-		name: 'Pacific Noon Glide',
-		description:
-			'Open Pacific under a direct midday sun. No coastline, no skyline — water and light.',
-		icon: '🏝️',
-		badge: 'Vibrant',
-		config: {
-			placeId: 'ocean',
-			localHour: 12.0, // direct overhead sun on open water
-			cloudDensity: 0.4,
-			cloudOpacity: 0.6,
-			cloudSpeed: 1.0,
-			cloudAltitudeM: 3500,
-			exaggeration: 1.5,
-			shade: 0.5,
-			weather: 'clear',
-			pitchDeg: -15,
-			azimuthDeg: 15,
-			speed: 4.5,
-			audioEnabled: true,
-			audioVolume: 0.5
-		}
-	},
-	{
-		id: 'jetstream-cruising',
-		name: 'Front Range Cruise',
-		description: 'High afternoon above the Front Range, riding the top of an 8,500 m cloud deck.',
-		icon: '✈️',
-		badge: 'Cruising',
-		config: {
-			placeId: 'denver',
-			localHour: 15.0, // high afternoon above the cloud deck
-			cloudDensity: 0.6,
-			cloudOpacity: 0.8,
-			cloudSpeed: 2.0,
-			cloudAltitudeM: 8500,
-			exaggeration: 1.3,
-			shade: 0.6,
-			weather: 'cloudy',
-			pitchDeg: -10,
-			azimuthDeg: 0,
-			speed: 6.0,
-			audioEnabled: true,
-			audioVolume: 0.6
-		}
-	},
-	{
 		id: 'storm-transit',
 		name: 'Stormy Overcast Transit',
 		description: 'Heavy atmospheric overcast with turbulent cloud density and rain condensation.',

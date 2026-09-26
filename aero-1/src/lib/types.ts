@@ -32,6 +32,19 @@ export const DEVICE_ROLES = ['left', 'center', 'right', 'solo'] as const;
 export type DeviceRole = typeof DEVICE_ROLES[number];
 export function isValidDeviceRole(v: unknown): v is DeviceRole { return validateConst(DEVICE_ROLES, v); }
 
+/**
+ * Display-mode labels, both lengths, one home.
+ *
+ * Buttons want the long form ("Flight Sim"), device cards the short form
+ * ("Flight"). Two sibling maps drifted apart before; `Record` keeps a mode
+ * added here failing loudly in both surfaces instead.
+ */
+export const DISPLAY_MODE_LABELS: Record<DisplayMode, { short: string; long: string }> = {
+	flight: { short: 'Flight', long: 'Flight Sim' },
+	screensaver: { short: 'Slideshow', long: 'Slideshow' },
+	video: { short: 'Video', long: 'Video' },
+};
+
 /** Generic const-array validator — shared by all isValid* type guards. */
 function validateConst<T extends string>(arr: readonly T[], v: unknown): v is T {
 	return typeof v === 'string' && (arr as readonly string[]).includes(v);

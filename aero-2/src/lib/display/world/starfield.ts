@@ -105,7 +105,7 @@ export function bvToTemp(bv: number): number {
  * Shared by the star builder above and the sun/moon disc layer.
  */
 export function lngLatToMercator01(lng: number, lat: number): [number, number] {
-	const x = (((lng + 180) / 360) % 1 + 1) % 1;
+	const x = ((((lng + 180) / 360) % 1) + 1) % 1;
 	const clampedLat = Math.max(-85.0511, Math.min(85.0511, lat));
 	const rad = (clampedLat * Math.PI) / 180;
 	const y = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2;

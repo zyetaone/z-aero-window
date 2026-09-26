@@ -13,6 +13,7 @@ import {
 	DISPLAY_MODES,
 	DEVICE_ROLES,
 	QUALITY_MODES,
+	DISPLAY_MODE_LABELS,
 	isValidWeather,
 	isValidDisplayMode,
 	isValidDeviceRole,
@@ -55,5 +56,15 @@ describe('const-array SSOTs', () => {
 		expect(isValidDeviceRole('centre')).toBe(false);    // British spelling
 		expect(isValidDisplayMode('photo')).toBe(false);
 		expect(isValidQualityMode('high')).toBe(false);     // not our vocabulary
+	});
+
+	// DISPLAY_MODE_LABELS must cover every mode with both lengths — the admin
+	// used to carry two sibling maps (buttons vs cards) that drifted apart.
+	it('DISPLAY_MODE_LABELS covers every mode, short and long', () => {
+		for (const mode of DISPLAY_MODES) {
+			expect(DISPLAY_MODE_LABELS[mode].short.length).toBeGreaterThan(0);
+			expect(DISPLAY_MODE_LABELS[mode].long.length).toBeGreaterThan(0);
+		}
+		expect(Object.keys(DISPLAY_MODE_LABELS).sort()).toEqual([...DISPLAY_MODES].sort());
 	});
 });

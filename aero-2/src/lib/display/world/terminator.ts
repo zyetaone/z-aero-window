@@ -64,8 +64,7 @@ export function destPoint(from: GeoPoint, bearingDeg: number, angularDeg: number
 	const sinP1 = Math.sin(p1);
 	const cosP1 = Math.cos(p1);
 	const p2 = Math.asin(sinP1 * Math.cos(d) + cosP1 * Math.sin(d) * Math.cos(t));
-	const l2 =
-		l1 + Math.atan2(Math.sin(t) * Math.sin(d) * cosP1, Math.cos(d) - sinP1 * Math.sin(p2));
+	const l2 = l1 + Math.atan2(Math.sin(t) * Math.sin(d) * cosP1, Math.cos(d) - sinP1 * Math.sin(p2));
 	return { lat: p2 * RAD2DEG, lng: l2 * RAD2DEG };
 }
 
@@ -213,9 +212,7 @@ export function coversBothPoles(center: GeoPoint, radiusDeg: number): boolean {
  * Using each end's own latitude instead leaves a jag of up to one step there.
  */
 function poleCapRing(curve: GeoPoint[], pole: 1 | -1): GeoPoint[] {
-	const pts = curve
-		.map((p) => ({ lat: p.lat, lng: normLng(p.lng) }))
-		.sort((a, b) => a.lng - b.lng);
+	const pts = curve.map((p) => ({ lat: p.lat, lng: normLng(p.lng) })).sort((a, b) => a.lng - b.lng);
 	const first = pts[0];
 	const last = pts[pts.length - 1];
 	const span = first.lng + 360 - last.lng;
@@ -232,8 +229,7 @@ function poleCapRing(curve: GeoPoint[], pole: 1 | -1): GeoPoint[] {
 	];
 }
 
-const meanLat = (pts: GeoPoint[]): number =>
-	pts.reduce((a, p) => a + p.lat, 0) / pts.length;
+const meanLat = (pts: GeoPoint[]): number => pts.reduce((a, p) => a + p.lat, 0) / pts.length;
 
 /**
  * A cap that contains BOTH poles, as two pole-winding pieces that tile it.

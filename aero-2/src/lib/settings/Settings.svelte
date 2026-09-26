@@ -4,7 +4,7 @@
 	 * Categorized into 6 logical operator tabs with dual range/number inputs and toggle switches.
 	 */
 	import { useDisplay } from '../display/display.svelte.js';
-	import { Location, LOCATIONS } from './locations.js';
+	import { Location } from './locations.js';
 	import { SCENE_PRESETS } from './presets.js';
 	import { WEATHERS, FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
 	import { fetchStatus, type KioskStatus } from '#lib/status.js';
@@ -172,15 +172,10 @@
 							</optgroup>
 						</select>
 					</div>
-
-					<Segmented
-						label="Jump To"
-						options={LOCATIONS}
-						isActive={(loc) => config.place.id === loc.id}
-						onselect={(loc) => config.setPlace(loc)}
-						format={(loc) => loc.name}
-						key={(loc) => loc.id}
-					/>
+					<!-- No second picker here: the grouped select above IS the
+					     destination control. A "Jump To" Segmented with all 11
+					     locations used to sit here doing the same job with
+					     eleven buttons. -->
 				</section>
 			{:else if activeTab === 'camera'}
 				<section class="section">
@@ -365,6 +360,12 @@
 						onchange={(val) => (config.blindOpen = val)}
 					/>
 					<Toggle
+						checked={config.miniMapVisible}
+						label="Flight Minimap"
+						description="Orbit inset with track ring and elevation strip"
+						onchange={(val) => (config.miniMapVisible = val)}
+					/>
+					<Toggle
 						checked={config.audioEnabled}
 						label="Cabin Audio Soundscape"
 						description="Jet engine turbine drone and atmospheric airflow"
@@ -400,6 +401,30 @@
 				<Wall {config} wall={display.wall} nowSec={() => display.view.wallSec} />
 			{/if}
 		</div>
+
+		<!--
+			Live telemetry strip, always visible regardless of tab. The full
+			System Telemetry section lives in the admin drawer; the operator
+			should not have to open diagnostics to see whether the pane is
+			keeping up — fps, frame time and terrain sampling are the three
+			numbers that answer that at a glance.
+		-->
+		<footer class="tele-strip" aria-label="Live telemetry">
+			<span class="tele-cell" title="Frames per second, measured by this pane">
+				<strong>{Math.round(display.fps)}</strong> fps
+			</span>
+			<span class="tele-cell" title="Mean frame time">
+				<strong>{display.frameTimeMs.toFixed(1)}</strong> ms
+			</span>
+			<span
+				class="tele-cell"
+				class:warn={display.terrain.sampled + display.terrain.fallback > 60 &&
+					display.terrainSampledPct < 50}
+				title="Terrain tiles decoded from DEM vs regional-mean fallback"
+			>
+				<strong>{display.terrainSampledPct.toFixed(0)}%</strong> terrain
+			</span>
+		</footer>
 	</aside>
 {/snippet}
 
@@ -751,6 +776,24 @@
 		color: #ffffff;
 	}
 
+	.tele-strip {
+		display: flex;
+		gap: 12px;
+		align-items: center;
+		justify-content: space-around;
+		padding: 8px 12px;
+		border-top: 1px solid var(--glass-border-subtle);
+		background: rgba(0, 0, 0, 0.3);
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+	.tele-cell strong {
+		color: #fff;
+		font-variant-numeric: tabular-nums;
+	}
+	.tele-cell.warn strong {
+		color: #fbbf24;
+	}
 	.diag-list {
 		display: flex;
 		flex-direction: column;

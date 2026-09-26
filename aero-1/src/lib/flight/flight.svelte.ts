@@ -363,6 +363,11 @@ export class FlightSimEngine {
 			this.#orbitEpochWallT = wallT;
 			this.#orbitEpochAngle = this.orbitAngle;
 		}
+		// NORMALISE THE SPEED KNOB — same contract as #tickScenario.
+		// Authored rates are seconds at the default knob position; passing the
+		// raw knob (default 6.0) multiplies every rate by 6. The scenario path
+		// learned this the hard way (legs ran 4x fast); the orbit never did,
+		// so it lapped a 20 km ellipse in ~11 s (~8 km/s, Mach 23).
 		this.orbitAngle = integrateOrbitAngle({
 			angle0: this.#orbitEpochAngle,
 			wallT0: this.#orbitEpochWallT,
@@ -371,7 +376,7 @@ export class FlightSimEngine {
 			b,
 			direction: this.orbitDirection,
 			driftRate: orbit.driftRate,
-			flightSpeed: this.flightSpeed,
+			flightSpeed: this.flightSpeed / DEFAULT_FLIGHT_SPEED,
 		});
 
 		const tx = a * Math.cos(this.orbitAngle);

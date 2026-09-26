@@ -116,6 +116,26 @@ export const SENTINEL2_PLACES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Places whose pack holds z14 (9.5 m/px), per `data/tiles/sentinel2/source-*.json`.
+ *
+ * The global cap stays 13 because the other seven packs stop there — asking
+ * z14 over them is a 404 storm, not sharper ground. But Dubai and Mumbai were
+ * packed to 14 (110 MB) and capping them at 13 throws away the sharpest tiles
+ * exactly where the window flies lowest over the densest ground. So the cap
+ * is per place, not global: 14 where the manifest says 14, 13 everywhere else.
+ *
+ * Keep in step with the manifests; a name here with no z14 behind it is the
+ * same request storm SENTINEL2_PLACES exists to prevent.
+ */
+export const SENTINEL2_Z14_PLACES: ReadonlySet<string> = new Set(['dubai', 'mumbai']);
+
+/** Sharpest Sentinel-2 zoom packed for this place. 13 unless manifested at 14. */
+export function sentinel2MaxZoom(placeId: string | null | undefined): number {
+	if (placeId && SENTINEL2_Z14_PLACES.has(placeId)) return 14;
+	return TILE_MAXZOOM.sentinel2;
+}
+
+/**
  * Both sources are credited because both are drawn: Sentinel-2 over the nine
  * packed locations, MODIS everywhere else and under the gaps.
  *

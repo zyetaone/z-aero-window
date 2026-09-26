@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SCENE_PRESETS } from '#lib/settings/presets.js';
+import { TERRAIN_EXAGGERATION } from '#lib/settings/tiles.js';
 import { PaneSettings } from '#lib/settings/settings.svelte.js';
 import { localHourAtSunElevation, resolveLocalHours, sunPosition } from '#lib/display/world/sun.js';
 import { Location } from '#lib/settings/locations.js';
@@ -75,6 +76,20 @@ describe('Scene Composition Presets', () => {
 		const s = new PaneSettings();
 		s.applyPreset('storm-transit', 0);
 		expect(s.weather).toBe('storm');
+	});
+
+	/**
+	 * `applyPreset('alpine-ridge')` leaves exaggeration at 2.4, and `setPlace`
+	 * used to leave it there — so moving on to Mumbai kept Himalayan relief
+	 * on a coastal plain. The datum restores on every place change.
+	 */
+	it('does not carry preset relief into the next place', () => {
+		const s = new PaneSettings();
+		s.applyPreset('alpine-ridge', 0);
+		expect(s.exaggeration).toBeGreaterThan(1);
+		s.setPlace(Location.byId('mumbai'));
+		expect(s.place.id).toBe('mumbai');
+		expect(s.exaggeration).toBe(TERRAIN_EXAGGERATION);
 	});
 
 	it('names a place the card would recognise', () => {

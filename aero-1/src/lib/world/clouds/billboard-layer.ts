@@ -142,7 +142,7 @@ export function updateCesiumClouds(
 			const { ox, oy, oz } = spriteOffset(i, cx, ch, cz, baseScale, rng);
 
 			const brightness = isAnchor ? 0.74 : 0.62 + (rng() - 0.5) * 0.12;
-			const opacity = isAnchor ? 0.35 : 0.18 + rng() * 0.24;
+			const opacity = isAnchor ? 0.48 : 0.32 + rng() * 0.28;
 			const sprScale = spriteScale(i, baseScale, rng);
 			const img = textures[Math.floor(rng() * textures.length)];
 
@@ -192,7 +192,7 @@ export function updateCesiumClouds(
 			const { ox, oy, oz } = spriteOffset(i, cx, ch, cz, baseScale, rng);
 
 			const brightness = isAnchor ? 0.78 : 0.65 + (rng() - 0.5) * 0.10;
-			const opacity = isAnchor ? 0.42 : 0.22 + rng() * 0.22;
+			const opacity = isAnchor ? 0.55 : 0.36 + rng() * 0.24;
 			const sprScale = spriteScale(i, baseScale, rng);
 			const img = textures[Math.floor(rng() * textures.length)];
 

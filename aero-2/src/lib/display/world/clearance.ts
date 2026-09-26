@@ -58,3 +58,42 @@ export function resolveClearance(
 	}
 	return { groundM: Math.max(meanGroundM, sampledM), sampled: true };
 }
+
+/**
+ * Standing clearance carried above the resolved datum, metres.
+ *
+ * The climb floor clears the regional MEAN, but terrain varies around it: at
+ * 400 m AGL over ground that runs 150 m above its mean, the margin is 250 m
+ * on paper and zero wherever the DEM has not decoded yet (the query falls
+ * back to the mean while the mesh draws the peak). A camera inside the mesh
+ * fills the frame with dark unlit hillside — the blur-and-black reports.
+ * The floor stays where the operator put it; this margin rides above whatever
+ * the datum resolves to, so low flight stays low and stops clipping.
+ */
+export const DATUM_MARGIN_M = 120;
+
+/**
+ * How fast the smoothed datum falls toward a lower target, per second.
+ *
+ * Rises are instant (never ease into a ridge); falls glide so the camera
+ * does not step off cliff edges. 2.5 halves the burial window of the old
+ * 1.5 without reintroducing the stepping the glide exists to prevent.
+ */
+export const DATUM_FALL_PER_SEC = 2.5;
+
+/**
+ * One frame of the smoothed clearance datum.
+ *
+ * Pure so the burial contract is unit-testable: a newly sampled ridge is
+ * climbed INSTANTLY (the result equals the margined goal whenever the goal
+ * is above the previous datum), a falling datum approaches from above and
+ * never crosses below the goal, and the margin holds in both directions.
+ * Frame-timed blending means panes can disagree by a frame during the glide
+ * — invisible, and both ends are the shared sampled values.
+ */
+export function smoothDatum(prev: number | null, target: number, dtSec: number): number {
+	const goal = target + DATUM_MARGIN_M;
+	if (prev === null || goal >= prev) return goal;
+	const step = Math.min(1, Math.max(0, dtSec) * DATUM_FALL_PER_SEC);
+	return prev + (goal - prev) * step;
+}

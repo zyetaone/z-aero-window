@@ -38,6 +38,15 @@
 	import { IMAGERY_GRADE, TILE_MAXZOOM, TILE_SIZE, tileTemplates } from '#lib/settings/tiles.js';
 	import { PUBLIC_TILE_SERVER_URL } from '$app/env/public';
 	import { useDisplay } from '../display.svelte.js';
+	import {
+		hysteresisGate,
+		NIGHT_LIGHT_RAMP,
+		NIGHT_MOUNT_OFF,
+		NIGHT_MOUNT_ON,
+		NIGHT_VECTOR_SPAN_M,
+		NIGHT_VECTOR_TOP_M
+	} from './sun.js';
+	import { Location } from '#lib/settings/locations.js';
 
 	const display = useDisplay();
 	// PUBLIC_TILE_SERVER_URL, so a pane can read tiles from a peer on the wall.
@@ -46,22 +55,57 @@
 	const night = $derived(display.night);
 
 	/**
-	 * How strongly the city-lights raster shows. Ramped on night^1.5 so it stays
-	 * out of dusk — a linear fade puts lights on a sky that is still blue.
-	 *
-	 * `Roads.svelte` uses the same curve deliberately: the vector layer sharpens
-	 * this raster once VIIRS runs out of resolution at z8, and two lighting
-	 * layers arriving on different ramps would read as one of them lagging.
+	 * How strongly the city-lights raster shows. Ramped on the shared
+	 * NIGHT_LIGHT_RAMP so it stays out of dusk — a linear fade puts lights
+	 * on a sky that is still blue. `Roads.svelte` uses the same constant
+	 * deliberately: the vector layer sharpens this raster once VIIRS runs
+	 * out of resolution at z8, and two lighting layers arriving on
+	 * different ramps would read as one of them lagging.
 	 */
-	const nightLightOpacity = $derived(Math.min(0.9, night ** 1.5));
+	// Showcase cities burn brighter, sleeping desert dimmer — same ramp,
+	// per-place gain. Applied here AND in Roads so the vector still arrives
+	// with its raster.
+	//
+	// Altitude crossfade with the vectors, and that direction matters. The
+	// raster is a 468 m/px smudge: perfect at cruise, a blanket pasted over
+	// whole towns on approach. Roads does the opposite — it fades IN from 9
+	// down to 4 km — so the raster fades OUT across the same window and the
+	// street grid takes over exactly where the photograph runs out of pixels.
+	// Where there are no vectors (features: ocean, desert, Himalayas) there
+	// is nothing to hand over to, so the raster stays.
+	const hasVectors = $derived(!display.config.place.isFeature);
+	const vectorShare = $derived(
+		Math.max(0, Math.min(1, (NIGHT_VECTOR_TOP_M - display.view.aglM) / NIGHT_VECTOR_SPAN_M))
+	);
+	// Capped at 0.8, not 0.95: the z8 raster is blocky up close and at full
+	// weight it reads as grey pixels, not city glow. The vectors carry the
+	// street-level truth now; this stays a halo.
+	const nightLightOpacity = $derived(
+		Math.min(
+			0.8,
+			night ** NIGHT_LIGHT_RAMP *
+				Location.moodFor(display.config.place.id).nightGlow *
+				(hasVectors ? 1 - vectorShare : 1)
+		)
+	);
+
+	// Latched against twilight dither, but TRACKED: `untrack` here evaluated
+	// the gate once at mount and froze it, so a dusk boot never mounted the
+	// layer no matter how dark it got. The hysteresis thresholds (not the
+	// untrack) are what stop the blinking; same-value writes don't notify.
+	let latched = $state(false);
+	$effect(() => {
+		latched = hysteresisGate(nightLightOpacity, latched, NIGHT_MOUNT_ON, NIGHT_MOUNT_OFF);
+	});
 </script>
 
-<!-- VIIRS is a black frame with bright cities, so over ground the grade has
-     already crushed toward black: the dark parts change nothing and the lit
-     parts read as towns. It carries no grade of its own — it is emitted light,
+<!-- VIIRS arrives already masked: the tile route bakes luminance into an
+     amber ramp with transparent blacks (server/viirs-tint.ts) plus baked
+     grain tooth, so dark pixels show the ground beneath instead of a white
+     sheet. It carries no client grade of its own — it is emitted light,
      not a photograph of a lit surface, which is also why it is mounted here
      rather than beneath the hillshade. -->
-{#if nightLightOpacity > 0.01}
+{#if latched}
 	<RasterTileSource
 		id="viirs"
 		tiles={tiles.viirs}

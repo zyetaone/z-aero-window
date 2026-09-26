@@ -45,6 +45,9 @@
 	const coords = $derived(formatCoord(display.view.lat, display.view.lon));
 	const aglM = $derived(Math.round(display.view.aglM));
 	const aglFt = $derived(Math.round(aglM * 3.28084));
+	const gndM = $derived(
+		display.view.groundM === undefined ? null : Math.round(display.view.groundM)
+	);
 	const heading = $derived(Math.round(display.view.planeHeadingDeg));
 	const bank = $derived(display.view.bankDeg.toFixed(1));
 	const localTime = $derived(formatClock(display.view.timeOfDay ?? 12));
@@ -105,7 +108,10 @@
 			<div class="hud-segment">
 				<span class="seg-label">ALT</span>
 				<strong class="seg-val">{aglM} m</strong>
-				<span class="seg-sub">({aglFt.toLocaleString()} ft)</span>
+				<span class="seg-sub"
+					>({aglFt.toLocaleString()} ft{#if gndM !== null}
+						· GND {gndM.toLocaleString()} m{/if})</span
+				>
 			</div>
 
 			<div class="divider"></div>

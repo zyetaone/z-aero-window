@@ -257,6 +257,20 @@ export function formatUptime(seconds: number): string {
 }
 
 /**
+ * Format an age ("Last seen") from two wall-clock timestamps.
+ * `formatAge(t - 5_000, t)` → `"just now"`, `t - 90_000` → `"1m ago"`.
+ * The reader passes its clock explicitly, so shared-scene paths use the
+ * wall clock and local paths `Date.now()` — one shape, no drift.
+ */
+export function formatAge(atMs: number, nowMs: number): string {
+	const diff = (nowMs - atMs) / 1000;
+	if (diff < 10) return 'just now';
+	if (diff < 60) return `${Math.floor(diff)}s ago`;
+	if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+	return `${Math.floor(diff / 3600)}h ago`;
+}
+
+/**
  * Format feet as thousands-of-feet: `35000` → `"35.0k ft"`.
  */
 export function formatAltitudeFt(ft: number, decimals = 1): string {

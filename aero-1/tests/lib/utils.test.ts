@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clamp, lerp, normalizeHeading, randomBetween, pickRandom, shortestAngleDelta, getSkyState, nightFactor, dawnDuskFactor, formatTime, readByPath, setByPath, T } from '$lib/utils';
+import { clamp, lerp, normalizeHeading, randomBetween, pickRandom, shortestAngleDelta, getSkyState, nightFactor, dawnDuskFactor, formatTime, readByPath, setByPath, T, formatAge } from '$lib/utils';
 
 describe('clamp', () => {
 	it('returns value within range', () => {
@@ -248,5 +248,18 @@ describe('setByPath', () => {
 		const obj = { pool: Object.freeze(['clear', 'rain']) };
 		expect(setByPath(obj as unknown as Record<string, unknown>, 'pool.0', 'storm')).toBe(false);
 		expect(obj.pool[0]).toBe('clear');
+	});
+});
+
+describe('formatAge', () => {
+	it('says just now under ten seconds', () => {
+		expect(formatAge(9_500, 10_000)).toBe('just now');
+	});
+	it('counts seconds and minutes with ago', () => {
+		expect(formatAge(0, 45_000)).toBe('45s ago');
+		expect(formatAge(0, 90_000)).toBe('1m ago');
+	});
+	it('counts hours', () => {
+		expect(formatAge(0, 7_200_000)).toBe('2h ago');
 	});
 });

@@ -4,17 +4,37 @@
 	 */
 	import { useDisplay } from '../display.svelte.js';
 	import { useBlind } from './use-blind.svelte.js';
+	import { useMediaClock } from '../media/use-media-clock.svelte.js';
 	import BlindInfoCard from './BlindInfoCard.svelte';
 
 	const display = useDisplay();
 	const blind = useBlind(display);
 
 	const showDiscoverable = $derived(!display.config.blindOpen && !blind.hasAnimated);
+
+	/**
+	 * Video behind the blind: when the shade is down and the pane has media
+	 * URLs (same `?media=` playlist MediaStage uses), the window becomes a
+	 * screen — the video plays under the white shade, which goes translucent
+	 * so the picture glows through. No URLs, no video: the classic shade,
+	 * byte for byte as before. Decoder only runs while closed.
+	 */
+	const blindVideo = useMediaClock(
+		() =>
+			display.config.videoPlaylist.length > 0
+				? display.config.videoPlaylist
+				: display.config.videoUrl
+					? [display.config.videoUrl]
+					: [],
+		() => display.view.wallSec
+	);
+	const blindVideoUrl = $derived(blindVideo.url);
+	const blindVideoOn = $derived(!display.config.blindOpen && blindVideoUrl !== '');
 </script>
 
 <div class="blind-clip" {@attach blind.attach}>
 	<div
-		class={['blind-overlay', showDiscoverable && 'discoverable']}
+		class={['blind-overlay', showDiscoverable && 'discoverable', blindVideoOn && 'video-on']}
 		onpointerdown={blind.onPointerDown}
 		onpointermove={blind.onPointerMove}
 		onpointerup={blind.onPointerUp}
@@ -31,6 +51,20 @@
 		style:transition={blind.transition}
 		style:pointer-events={display.config.blindOpen ? 'none' : 'auto'}
 	>
+		{#if blindVideoOn}
+			{#key blindVideoUrl}
+				<video
+					class="blind-video"
+					src={blindVideoUrl}
+					autoplay
+					muted
+					loop={display.config.videoPlaylist.length <= 1}
+					playsinline
+					aria-hidden="true"
+					{@attach blindVideo.attach}
+				></video>
+			{/key}
+		{/if}
 		<div class="blind-slats"></div>
 		<BlindInfoCard />
 		{#if showDiscoverable}
@@ -66,11 +100,31 @@
 		pointer-events: none;
 	}
 
+	.blind-video {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		border-radius: inherit;
+		pointer-events: none;
+	}
 	.blind-overlay {
 		position: absolute;
 		inset: 0;
 		border-radius: var(--inner-radius, 140px);
 		background: linear-gradient(180deg, #efece6 0%, #e8e4dd 35%, #e1ddd5 65%, #d6d1c8 100%);
+		&.video-on {
+			/* The white shade goes translucent so the video glows through it:
+			   slats and sheen stay above as texture, picture below as light. */
+			background: linear-gradient(
+				180deg,
+				rgba(239, 236, 230, 0.68) 0%,
+				rgba(232, 228, 221, 0.68) 35%,
+				rgba(225, 221, 213, 0.68) 65%,
+				rgba(214, 209, 200, 0.68) 100%
+			);
+		}
 		cursor: pointer;
 		display: flex;
 		align-items: center;

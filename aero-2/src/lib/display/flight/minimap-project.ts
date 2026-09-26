@@ -9,6 +9,15 @@
  * aero-2 frame dips. Rune-free and renderer-free, so it is unit-testable
  * and either app can use it.
  */
+import { FlightTrack } from './flight-path.js';
+import {
+	DOWNTOWN_HANDOFF_SEC,
+	DOWNTOWN_PASS_END_SEC,
+	DOWNTOWN_PASS_START_SEC,
+	downtownBlendAt,
+	downtownPose,
+	downtownWarpSec
+} from './downtown.js';
 
 export const MINIMAP_SIZE_PX = 190;
 /**
@@ -18,6 +27,57 @@ export const MINIMAP_SIZE_PX = 190;
  * overlay.
  */
 export const MINIMAP_TILE_ZOOM = 8;
+
+/**
+ * The downtown thread as minimap geometry: [lon, lat] samples across the
+ * pass window, or null when the gate never opens.
+ *
+ * The marker reads the blended view position (thread included) while the
+ * ring is the big loop only, so mid-pass the marker walks off the ring —
+ * the off-ring wart. This draws the missing piece: the same blend the
+ * view computes (big pose at effective seconds, thread pose at warped
+ * seconds, downtown gate, smoothstep ease identical to blendViews), so the
+ * marker rides ON a drawn path instead of leaving it.
+ *
+ * Pure in (track, place, speed): the pass window is fixed in wall seconds
+ * and the climb it gates on is a pure function of effective seconds, so
+ * the arc is identical every visit. Null when the gate stays shut through
+ * the whole window (high-floor cities, features) — the caller draws
+ * nothing instead of a dot at downtown.
+ */
+export function threadArc(
+	track: FlightTrack,
+	placeLat: number,
+	placeLon: number,
+	floorM: number,
+	speed: number,
+	samples = 48
+): Array<[number, number]> | null {
+	const start = DOWNTOWN_PASS_START_SEC - DOWNTOWN_HANDOFF_SEC;
+	const end = DOWNTOWN_PASS_END_SEC + DOWNTOWN_HANDOFF_SEC;
+	const pts: Array<[number, number]> = [];
+	let engaged = false;
+	for (let i = 0; i < samples; i++) {
+		const s = start + ((end - start) * i) / (samples - 1);
+		const eff = s * speed;
+		const plane = track.poseAt(eff);
+		const t = downtownBlendAt(s, plane.aglM);
+		let lat = plane.lat;
+		let lon = plane.lon;
+		if (t > 0) {
+			engaged = true;
+			const small = downtownPose(track.poseAt(downtownWarpSec(eff)), placeLat, placeLon, floorM);
+			// Smoothstep — the same ease blendViews applies, so the arc
+			// meets the ring exactly where the marker leaves it.
+			const e = t * t * (3 - 2 * t);
+			lat = plane.lat + (small.lat - plane.lat) * e;
+			const dLon = ((small.lon - plane.lon + 540) % 360) - 180;
+			lon = plane.lon + dLon * e;
+		}
+		pts.push([lon, lat]);
+	}
+	return engaged ? pts : null;
+}
 
 const TILE_PX = 256;
 

@@ -134,18 +134,31 @@ describe('nightOverlay', () => {
 	 * degenerate polygon.
 	 */
 	it('builds every band all year, in all three shapes', () => {
+		// Aggregate, then assert: per-vertex expects here cost ~3M
+		// assertions and timed the worker out under load. Same properties.
+		let days = 0;
+		let minBands = Infinity;
+		let minRing = Infinity;
+		let allFinite = true;
 		for (let day = 0; day < 365; day += 1) {
 			const t = Date.UTC(2026, 0, 1) / 1000 + day * 86_400 + 41_000;
-			for (const f of nightOverlay(t).features) {
-				expect(f.geometry.coordinates.length).toBeGreaterThan(0);
+			const features = nightOverlay(t).features;
+			if (features.length < minBands) minBands = features.length;
+			for (const f of features) {
+				if (f.geometry.coordinates.length < 1) minBands = -1;
 				for (const poly of f.geometry.coordinates) {
-					expect(poly[0].length).toBeGreaterThanOrEqual(4);
+					if (poly[0].length < minRing) minRing = poly[0].length;
 					for (const [lng, lat] of poly[0]) {
-						expect(Number.isFinite(lng) && Number.isFinite(lat)).toBe(true);
+						if (!Number.isFinite(lng) || !Number.isFinite(lat)) allFinite = false;
 					}
 				}
 			}
+			days++;
 		}
+		expect(days).toBe(365);
+		expect(minBands).toBeGreaterThan(0);
+		expect(minRing).toBeGreaterThanOrEqual(4);
+		expect(allFinite).toBe(true);
 	});
 });
 
@@ -186,9 +199,12 @@ describe('the bands cover what the band table says', () => {
 	};
 
 	/** What the whole stack paints at a point, composited as the layer would. */
-	const drawn = (pt: [number, number], wallSec: number): number => {
+	const drawnWith = (
+		features: ReturnType<typeof nightOverlay>['features'],
+		pt: [number, number]
+	): number => {
 		let covered = 0;
-		for (const f of nightOverlay(wallSec).features) {
+		for (const f of features) {
 			let hit = false;
 			for (const poly of f.geometry.coordinates) {
 				for (const ring of poly) if (inRing(pt, ring)) hit = !hit;
@@ -197,6 +213,10 @@ describe('the bands cover what the band table says', () => {
 		}
 		return covered;
 	};
+
+	/** Single-point convenience: builds the overlay for one instant. */
+	const drawn = (pt: [number, number], wallSec: number): number =>
+		drawnWith(nightOverlay(wallSec).features, pt);
 
 	const angularDeg = (a: { lat: number; lng: number }, pt: [number, number]): number => {
 		const d = Math.PI / 180;
@@ -257,16 +277,20 @@ describe('the bands cover what the band table says', () => {
 			['himalayas', 27.99, 86.93],
 			['ocean', 21.31, -157.86]
 		];
-		for (const [name, lat, lng] of PLACES) {
-			for (let m = 0; m < 1440; m += 17) {
-				const t = 1_789_300_000 + m * 60;
-				const anti = antipodeOf(subSolarPoint(t));
+		// The overlay is built once per instant and shared across places:
+		// rebuilding it per (place, minute) cost 500 constructions and
+		// timed the worker out under load. Same instants, same points.
+		for (let m = 0; m < 1440; m += 17) {
+			const t = 1_789_300_000 + m * 60;
+			const features = nightOverlay(t).features;
+			const anti = antipodeOf(subSolarPoint(t));
+			for (const [name, lat, lng] of PLACES) {
 				const deg = angularDeg(anti, [lng, lat]);
 				// A 5 deg chord legitimately disagrees with an exact angular
 				// test within a degree or so of a band edge.
 				if (NIGHT_BANDS.some((b) => Math.abs(deg - b.outer) < 1.5)) continue;
 				expect(
-					drawn([lng, lat], t),
+					drawnWith(features, [lng, lat]),
 					`${name} +${m}min, ${deg.toFixed(1)}deg from antisolar`
 				).toBeCloseTo(expectedAt(deg), 9);
 			}
@@ -279,19 +303,32 @@ describe('the bands cover what the band table says', () => {
 	 * that week -- the bug this file exists for survived exactly that way.
 	 */
 	it('holds over a whole year, on a global grid', () => {
+		// One overlay per day shared across the grid: per-point rebuilds
+		// cost 5,500 constructions and timed the worker out under load.
+		// Same days, same points, same tolerance.
+		let worst = 0;
+		let worstAt = '';
+		let checked = 0;
 		for (let day = 0; day < 365; day += 11) {
 			const t = Date.UTC(2026, 0, 1) / 1000 + day * 86_400 + 37_000;
+			const features = nightOverlay(t).features;
 			const anti = antipodeOf(subSolarPoint(t));
 			for (let lat = -80; lat <= 80; lat += 20) {
 				for (let lng = -170; lng <= 170; lng += 20) {
 					const deg = angularDeg(anti, [lng, lat]);
 					if (NIGHT_BANDS.some((b) => Math.abs(deg - b.outer) < 1.5)) continue;
-					expect(
-						drawn([lng, lat], t),
-						`day ${day}, ${lat},${lng} (${deg.toFixed(1)}deg out)`
-					).toBeCloseTo(expectedAt(deg), 9);
+					const got = drawnWith(features, [lng, lat]);
+					const want = expectedAt(deg);
+					const err = Math.abs(got - want);
+					if (err > worst) {
+						worst = err;
+						worstAt = `day ${day}, ${lat},${lng} (${deg.toFixed(1)}deg out): got ${got}, want ${want}`;
+					}
+					checked++;
 				}
 			}
 		}
+		expect(checked).toBeGreaterThan(0);
+		expect(worst, worstAt).toBeLessThan(0.5e-9);
 	});
 });

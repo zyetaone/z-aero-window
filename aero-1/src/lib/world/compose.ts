@@ -326,12 +326,14 @@ export class CesiumManager {
 	}
 
 	#syncLightning(dt: number): void {
+		// Shared wall clock, not an accumulator: strike instants must agree
+		// across Pis within NTP drift (same doctrine as flight.svelte.ts).
 		tickLightning(dt, {
 			hasLightning: this.#model.config.atmosphere.weather.hasLightning,
 			lightningDecayRate: this.#model.config.atmosphere.weather.lightningDecayRate,
 			lightningMinInterval: this.#model.config.atmosphere.weather.lightningMinInterval,
 			lightningMaxInterval: this.#model.config.atmosphere.weather.lightningMaxInterval,
-		});
+		}, Date.now() / 1000);
 	}
 
 	// ── Camera ───────────────────────────────────────────────────────────────

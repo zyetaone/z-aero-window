@@ -5,8 +5,7 @@ import { readSettings } from '#lib/settings/settings.svelte.js';
 import { cruiseStartSec } from '#lib/display/display.svelte.js';
 
 const SEC = 1_788_940_000;
-const paramsFor = (search: string) =>
-	readSettings(new URL(`http://kiosk.local/${search}`));
+const paramsFor = (search: string) => readSettings(new URL(`http://kiosk.local/${search}`));
 
 describe('blendViews', () => {
 	const a = calculateCameraView(SEC, paramsFor('?place=dubai'));

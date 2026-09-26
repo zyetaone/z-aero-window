@@ -81,7 +81,7 @@ const graph = new Map();
 function* runtimeImports(src) {
 	// `import type ... from 'x'` — fully erased.
 	// `import ... from 'x'` — erased only when every specifier is `type`-led.
-	for (const m of src.matchAll(/import(\s+type\b)?([\s\S]*?)from\s*['"]([^'"]+)['"]/g)) {
+	for (const m of src.matchAll(/\bimport\b(\s+type\b)?\s*([^;'"]*?)\bfrom\s*['"]([^'"]+)['"]/g)) {
 		if (m[1]) continue;
 		const body = m[2].trim();
 		if (body.startsWith('{')) {
@@ -95,13 +95,13 @@ function* runtimeImports(src) {
 		yield m[3];
 	}
 	// `export type ... from 'x'` re-exports are erased; value re-exports stay.
-	for (const m of src.matchAll(/export(\s+type\b)?[\s\S]*?from\s*['"]([^'"]+)['"]/g)) {
+	for (const m of src.matchAll(/\bexport\b(\s+type\b)?\s*([^;]*?)\bfrom\s*['"]([^'"]+)['"]/g)) {
 		if (m[1]) continue;
 		yield m[2];
 	}
 	// Side-effect imports and dynamic imports always execute.
-	for (const m of src.matchAll(/import\s*['"]([^'"]+)['"]/g)) yield m[1];
-	for (const m of src.matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)) yield m[1];
+	for (const m of src.matchAll(/\bimport\s*['"]([^'"]+)['"]/g)) yield m[1];
+	for (const m of src.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)) yield m[1];
 }
 
 for (const file of files) {

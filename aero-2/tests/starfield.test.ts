@@ -44,19 +44,29 @@ describe('yaleCatalog', () => {
 
 	it('spans blue giants to red embers, all in physical ranges', () => {
 		const cat = yaleCatalog();
+		let minRa = Infinity;
+		let maxRa = -Infinity;
+		let minDec = Infinity;
+		let maxDec = -Infinity;
+		let maxVmag = -Infinity;
 		let minBv = Infinity;
 		let maxBv = -Infinity;
 		for (let i = 0; i < YALE_STAR_COUNT; i++) {
-			expect(cat.ra[i]).toBeGreaterThanOrEqual(0);
-			expect(cat.ra[i]).toBeLessThanOrEqual(360);
-			expect(cat.dec[i]).toBeGreaterThanOrEqual(-90);
-			expect(cat.dec[i]).toBeLessThanOrEqual(90);
-			expect(cat.vmag[i]).toBeLessThanOrEqual(6.5);
-			expect(cat.bv[i]).toBeGreaterThanOrEqual(-0.5);
-			expect(cat.bv[i]).toBeLessThanOrEqual(2.5);
-			minBv = Math.min(minBv, cat.bv[i]);
-			maxBv = Math.max(maxBv, cat.bv[i]);
+			if (cat.ra[i] < minRa) minRa = cat.ra[i];
+			if (cat.ra[i] > maxRa) maxRa = cat.ra[i];
+			if (cat.dec[i] < minDec) minDec = cat.dec[i];
+			if (cat.dec[i] > maxDec) maxDec = cat.dec[i];
+			if (cat.vmag[i] > maxVmag) maxVmag = cat.vmag[i];
+			if (cat.bv[i] < minBv) minBv = cat.bv[i];
+			if (cat.bv[i] > maxBv) maxBv = cat.bv[i];
 		}
+		expect(minRa).toBeGreaterThanOrEqual(0);
+		expect(maxRa).toBeLessThanOrEqual(360);
+		expect(minDec).toBeGreaterThanOrEqual(-90);
+		expect(maxDec).toBeLessThanOrEqual(90);
+		expect(maxVmag).toBeLessThanOrEqual(6.5);
+		expect(minBv).toBeGreaterThanOrEqual(-0.5);
+		expect(maxBv).toBeLessThanOrEqual(2.5);
 		expect(minBv).toBeLessThan(0);
 		expect(maxBv).toBeGreaterThan(1.5);
 	});
@@ -155,21 +165,49 @@ describe('buildStarField', () => {
 		expect(f.mag.length).toBe(STAR_COUNT);
 		expect(f.phase.length).toBe(STAR_COUNT);
 		expect(f.temp.length).toBe(STAR_COUNT);
+		// Aggregate, then assert: per-star expects here cost ~100k
+		// assertions and time out the worker under load. Same coverage.
+		let minX = 1;
+		let maxX = 0;
+		let minY = 1;
+		let maxY = 0;
+		let minSize = Infinity;
+		let maxSize = -Infinity;
+		let minMag = Infinity;
+		let maxMag = -Infinity;
+		let minPhase = Infinity;
+		let maxPhase = -Infinity;
+		let minTemp = Infinity;
+		let maxTemp = -Infinity;
 		for (let i = 0; i < STAR_COUNT; i++) {
-			expect(f.xy[i * 2]).toBeGreaterThanOrEqual(0);
-			expect(f.xy[i * 2]).toBeLessThanOrEqual(1);
-			expect(f.xy[i * 2 + 1]).toBeGreaterThanOrEqual(0);
-			expect(f.xy[i * 2 + 1]).toBeLessThanOrEqual(1);
-			// Float32-stored, so bounds carry an epsilon.
-			expect(f.size[i]).toBeGreaterThanOrEqual(0.9 - 1e-6);
-			expect(f.size[i]).toBeLessThanOrEqual(3.2 + 1e-6);
-			expect(f.mag[i]).toBeGreaterThanOrEqual(0.3 - 1e-6);
-			expect(f.mag[i]).toBeLessThanOrEqual(1 + 1e-6);
-			expect(f.phase[i]).toBeGreaterThanOrEqual(0);
-			expect(f.phase[i]).toBeLessThanOrEqual(Math.PI * 2);
-			expect(f.temp[i]).toBeGreaterThanOrEqual(2500);
-			expect(f.temp[i]).toBeLessThanOrEqual(30000);
+			const x = f.xy[i * 2];
+			const y = f.xy[i * 2 + 1];
+			if (x < minX) minX = x;
+			if (x > maxX) maxX = x;
+			if (y < minY) minY = y;
+			if (y > maxY) maxY = y;
+			if (f.size[i] < minSize) minSize = f.size[i];
+			if (f.size[i] > maxSize) maxSize = f.size[i];
+			if (f.mag[i] < minMag) minMag = f.mag[i];
+			if (f.mag[i] > maxMag) maxMag = f.mag[i];
+			if (f.phase[i] < minPhase) minPhase = f.phase[i];
+			if (f.phase[i] > maxPhase) maxPhase = f.phase[i];
+			if (f.temp[i] < minTemp) minTemp = f.temp[i];
+			if (f.temp[i] > maxTemp) maxTemp = f.temp[i];
 		}
+		expect(minX).toBeGreaterThanOrEqual(0);
+		expect(maxX).toBeLessThanOrEqual(1);
+		expect(minY).toBeGreaterThanOrEqual(0);
+		expect(maxY).toBeLessThanOrEqual(1);
+		// Float32-stored, so bounds carry an epsilon.
+		expect(minSize).toBeGreaterThanOrEqual(0.9 - 1e-6);
+		expect(maxSize).toBeLessThanOrEqual(3.2 + 1e-6);
+		expect(minMag).toBeGreaterThanOrEqual(0.3 - 1e-6);
+		expect(maxMag).toBeLessThanOrEqual(1 + 1e-6);
+		expect(minPhase).toBeGreaterThanOrEqual(0);
+		expect(maxPhase).toBeLessThanOrEqual(Math.PI * 2);
+		expect(minTemp).toBeGreaterThanOrEqual(2500);
+		expect(maxTemp).toBeLessThanOrEqual(30000);
 	});
 
 	it('is deterministic — same bytes, same sky on every pane', () => {

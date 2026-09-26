@@ -414,6 +414,43 @@ export class FlightTrack {
  * the same value for the same instant without exchanging anything, and a pane
  * that reboots rejoins mid-sequence instead of restarting it.
  */
+/**
+ * Storm lightning strike for a wall-clock second: where it lands, 0..1
+ * across and down the glass, or null when no strike is active.
+ *
+ * RainGlass scheduled strikes inline off the same slot math, but the flash
+ * was fullscreen-uniform: every strike looked like an exposure blink,
+ * never weather off to one side. The slot (13 s) and the strike offset
+ * inside it are unchanged, so the rhythm is preserved; this adds the
+ * strike POSITION as a pure function of the slot (two salted draws),
+ * which the flash renders as a radial falloff. Same wall-shared contract
+ * as everything scheduled: every pane strikes the same place at the same
+ * instant, and a rebooted pane rejoins mid-sequence. Weather-gating stays
+ * with the caller — this is clock-only, like slotNoise.
+ */
+export const FLASH_PERIOD_SEC = 13;
+/** Strike window inside the slot, seconds. */
+export const FLASH_STRIKE_SEC = 0.12;
+
+export interface StrikePoint {
+	/** Across the glass, 0 left … 1 right. */
+	x01: number;
+	/** Down the glass, biased to the sky half. */
+	y01: number;
+}
+
+export function strikeAt(wallSec: number): StrikePoint | null {
+	if (!Number.isFinite(wallSec)) return null;
+	const slot = Math.floor(wallSec / FLASH_PERIOD_SEC);
+	const since = wallSec - (slot * FLASH_PERIOD_SEC + slotNoise(slot) * 9);
+	if (since < 0 || since >= FLASH_STRIKE_SEC) return null;
+	return {
+		x01: slotNoise(slot, 11),
+		// Upper two-thirds: strikes live in the sky, not behind the HUD.
+		y01: slotNoise(slot, 77) * 0.66
+	};
+}
+
 export function slotNoise(slot: number, salt = 0): number {
 	let h = Math.imul(slot ^ 0x9e3779b9, 2246822507) ^ Math.imul(salt + 1, 3266489909);
 	h = Math.imul(h ^ (h >>> 15), 2246822507);

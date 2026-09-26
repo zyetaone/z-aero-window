@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { LOCATIONS } from '../src/lib/locations';
+import { LOCATIONS } from '../content/locations';
 import type { LocationId } from '../src/lib/types';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, dirname, relative } from 'path';

@@ -326,6 +326,7 @@ export class PaneSettings {
 		this.wingOffsetX = parseNum(url.searchParams, 'wingX', DEFAULT_WING_OFFSET_X, 'wingOffsetX');
 		this.wingOffsetY = parseNum(url.searchParams, 'wingY', DEFAULT_WING_OFFSET_Y, 'wingOffsetY');
 		this.wingPitchDeg = parseNum(url.searchParams, 'wingPitch', 0, 'wingPitchDeg');
+		this.wingYawDeg = parseNum(url.searchParams, 'wingYaw', 0, 'wingYawDeg');
 		this.wingRollFactor = parseNum(url.searchParams, 'wingRoll', 1.0, 'wingRollFactor');
 		const cloudsParam = url.searchParams.get('clouds');
 		if (cloudsParam !== null) this.clouds = cloudsParam !== '0' && cloudsParam !== 'false';

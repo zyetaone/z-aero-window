@@ -73,18 +73,47 @@ const STORM = {
 	lightningMaxInterval: 9,
 };
 
-/** Mount on a fresh viewer and record the flash sequence of one storm. */
-function stormFlashSequence(ticks = 120, delta = 5): number[] {
+/**
+ * Mount on a fresh viewer and record the flash sequence of one storm.
+ * Wall time is virtual and threaded explicitly: the schedule reads it,
+ * `delta` only shapes decay.
+ */
+function stormFlashSequence(ticks = 120, delta = 5, startWallSec = 1_000): number[] {
 	const v = fakeViewer();
 	mountLightning(fakeCesium(), v as unknown as CesiumType.Viewer);
+	let t = startWallSec;
 	// false→true transition on hasLightning → beginStorm(_stormIndex).
-	tickLightning(0.016, STORM);
+	tickLightning(0.016, STORM, t);
 	const out: number[] = [];
 	for (let i = 0; i < ticks; i++) {
-		tickLightning(delta, STORM);
+		t += delta;
+		tickLightning(delta, STORM, t);
 		out.push(v.stages[0].uniforms.u_flash());
 	}
 	return out;
+}
+
+/**
+ * Virtual wall seconds at which strikes ignite, sampled on a fine grid.
+ * Two panes at different frame rates must report the same onsets — this
+ * is the regression test for fps-accumulated strike timers, which fired
+ * identical sequences at different wall moments per pane.
+ */
+function strikeOnsets(frameDelta: number, spanSec = 120, step = 0.05): number[] {
+	const v = fakeViewer();
+	mountLightning(fakeCesium(), v as unknown as CesiumType.Viewer);
+	let t = 2_000;
+	tickLightning(frameDelta, STORM, t);
+	const onsets: number[] = [];
+	let prev = 0;
+	for (let s = 0; s < spanSec; s += step) {
+		t += step;
+		tickLightning(frameDelta, STORM, t);
+		const f = v.stages[0].uniforms.u_flash();
+		if (prev < 0.01 && f >= 0.01) onsets.push(Math.round(t * 20) / 20);
+		prev = f;
+	}
+	return onsets;
 }
 
 describe('mountLightning liveness', () => {
@@ -139,5 +168,14 @@ describe('destroyLightning', () => {
 		// A strike must actually have fired, or the comparison is vacuous.
 		expect(first.some((f) => f > 0)).toBe(true);
 		expect(second).toEqual(first);
+	});
+
+	it('fires the same strikes at 60fps and 20fps over the same wall window', () => {
+		const fast = strikeOnsets(0.016);
+		destroyLightning();
+		const slow = strikeOnsets(0.05);
+		// Strikes must actually have fired, or the comparison is vacuous.
+		expect(fast.length).toBeGreaterThan(0);
+		expect(slow).toEqual(fast);
 	});
 });

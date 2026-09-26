@@ -35,6 +35,18 @@
 	 */
 	import { GeoJSONSource, LineLayer } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
+	import {
+		hysteresisGate,
+		lampFlicker,
+		lampGlimmer,
+		NIGHT_LIGHT_RAMP,
+		NIGHT_MOUNT_OFF,
+		NIGHT_MOUNT_ON,
+		NIGHT_VECTOR_SPAN_M,
+		NIGHT_VECTOR_TOP_M,
+		farFieldShare
+	} from './sun.js';
+	import { Location } from '#lib/settings/locations.js';
 
 	const display = useDisplay();
 
@@ -43,14 +55,18 @@
 	const aglM = $derived(display.view.aglM);
 
 	/**
-	 * Ramped on night^1.5, matching the VIIRS ramp in `Ground.svelte`.
+	 * Ramped on NIGHT_LIGHT_RAMP, the same constant as the VIIRS ramp in
+	 * `NightLights.svelte` (the old comment said `Ground.svelte` — the ramp
+	 * moved with the layer and the comment did not).
 	 *
 	 * Not a stylistic echo — the two layers draw the same phenomenon and a
 	 * linear fade would put streetlights on a sky that is still blue, then
-	 * have them lead the raster they are supposed to be sharpening. One curve,
-	 * so the vector and the photograph arrive together.
+	 * have them lead the raster they are supposed to be sharpening. One
+	 * constant, so the vector and the photograph arrive together.
 	 */
-	const lightUp = $derived(Math.min(1, night ** 1.5));
+	const lightUp = $derived(
+		Math.min(1, night ** NIGHT_LIGHT_RAMP * Location.moodFor(display.config.place.id).nightGlow)
+	);
 
 	/**
 	 * Fades OUT with altitude, which is the opposite of what a detail layer
@@ -62,9 +78,38 @@
 	 * vectors earn their keep on the way DOWN, so they arrive as the raster
 	 * runs out of pixels. 9,000 m to 4,000 m is the descent window.
 	 */
-	const altitudeFade = $derived(Math.max(0, Math.min(1, (9000 - aglM) / 5000)));
+	const altitudeFade = $derived(
+		Math.max(0, Math.min(1, (NIGHT_VECTOR_TOP_M - aglM) / NIGHT_VECTOR_SPAN_M))
+	);
 
 	const glow = $derived(lightUp * altitudeFade);
+
+	/**
+	 * Far-field arterial dots: the city as seen from cruise.
+	 *
+	 * The near-field lamps below fade out by 9,000 m, so from the top of
+	 * the climb the night city was VIIRS alone — a 468 m/px smudge with
+	 * no structure. The arterial skeleton survives as sparse dots on long
+	 * gaps: motorway/trunk/primary only, the same continuous lamp-runs the
+	 * near layers draw, resolved into the individual heads a passenger
+	 * actually sees from altitude. Majors-only is also the performance
+	 * bargain: ~7,000 features instead of ~30,000, drawn where the raster
+	 * has nothing to say rather than where it is already saying it.
+	 *
+	 * Steady, not flickering: at these ranges shimmer is invisible, and a
+	 * second 5 Hz paint churn for nothing visible is pure Pi heat. It
+	 * hands over to the near layers exactly at NIGHT_VECTOR_TOP_M — the
+	 * windows share the seam by construction (sun.ts), so no altitude
+	 * double-draws or gaps.
+	 */
+	const far = $derived(lightUp * farFieldShare(aglM));
+
+	/**
+	 * Per-road VIIRS gain, stamped offline by tools/stamp-road-glow.mjs.
+	 * Lamp-runs through bright ground burn full; rural connectors dim
+	 * toward ember. Unstamped packs read 1 — the old flat look, not dark.
+	 */
+	const viirsGlow = ['coalesce', ['get', 'glow'], 1] as never;
 
 	/**
 	 * Feature locations have no roads and never will.
@@ -104,7 +149,89 @@
 	 * costs a re-parse. Same syntax, opposite economics — the question is always
 	 * whether the mounted-but-invisible thing is doing WORK.
 	 */
-	const mounted = $derived(hasRoads && lightUp > 0.01);
+	// Latched against twilight dither, but TRACKED: `untrack` here evaluated
+	// the gate once at mount and froze it, so a dusk boot never mounted the
+	// source no matter how dark it got. The hysteresis thresholds (not the
+	// untrack) are what stop the blinking; same-value writes don't notify.
+	let latched = $state(false);
+	$effect(() => {
+		latched = hysteresisGate(lightUp, latched, NIGHT_MOUNT_ON, NIGHT_MOUNT_OFF);
+	});
+	const mounted = $derived(hasRoads && latched);
+
+	/**
+	 * Lamp shimmer, sampled at 5 Hz from the wall clock.
+	 *
+	 * A per-frame derivation would mint a new paint object 60×/s and push a
+	 * style update each frame; 5 Hz rides the map's existing RAF renders for
+	 * free. The VALUE is a pure function of wall seconds (`lampFlicker`), so
+	 * all panes agree — only the sampling instant differs, which is invisible
+	 * at these frequencies. Interval-owned, not tick-owned: this component has
+	 * no RAF of its own and must not start one for a ±10% shimmer.
+	 */
+	let wallT = $state(Date.now() / 1000);
+	$effect(() => {
+		// Timer only while the source is mounted (night); by day there is
+		// nothing shimmering and no reason to wake up 5×/s.
+		if (!mounted) return;
+		const id = setInterval(() => {
+			wallT = Date.now() / 1000;
+		}, 200);
+		return () => clearInterval(id);
+	});
+	const flicker = $derived(lampFlicker(wallT));
+	/**
+	 * The glimmer envelope, sampled on the same 5 Hz wall clock as the
+	 * flicker above — one sampler, two pure functions, no extra timer.
+	 */
+	const glimmer = $derived(lampGlimmer(wallT));
+
+	/**
+	 * Opacity expressions: the altitude/night scalar and the 5 Hz shimmer
+	 * stay reactive numbers; the VIIRS gain is a per-feature expression.
+	 * MapLibre multiplies them per lamp-run, so a motorway through the
+	 * dark prairie draws dimmer than the same class downtown. Declared
+	 * after the shimmer sampler they read — declaration order is the
+	 * dependency order here.
+	 */
+	const bloomOpacity = $derived(['*', 0.22 * glow, viirsGlow] as never);
+	const casingOpacity = $derived(['*', 0.8 * glow, viirsGlow] as never);
+	const majorOpacity = $derived(['*', 0.55 * glow, flicker, viirsGlow] as never);
+	const glimmerOpacity = $derived(['*', 0.4 * glow, glimmer, viirsGlow] as never);
+	const minorOpacity = $derived(['*', 0.5 * glow, flicker, viirsGlow] as never);
+	const farOpacity = $derived(['*', 0.75 * far, viirsGlow] as never);
+
+	/**
+	 * Arterials vs the minor grid, as filters.
+	 *
+	 * The packed GeoJSON carries only `class`, so this is the finest split
+	 * the data supports — which is enough, because the night city really is
+	 * two phenomena: continuous lamp-runs along the arterials, and scattered
+	 * dots on the residential grid.
+	 */
+	// Flat label pairs: `match` takes one label per output, not an array.
+	const majorFilter = [
+		'match',
+		['get', 'class'],
+		'motorway',
+		true,
+		'trunk',
+		true,
+		'primary',
+		true,
+		false
+	] as never;
+	const minorFilter = [
+		'match',
+		['get', 'class'],
+		'motorway',
+		false,
+		'trunk',
+		false,
+		'primary',
+		false,
+		true
+	] as never;
 
 	/**
 	 * Width by class, in screen pixels, interpolated across zoom.
@@ -161,6 +288,17 @@
 
 	const width = $derived(widthAt(1));
 	const bloomWidth = $derived(widthAt(3));
+	/**
+	 * Dark roadbed casing, 1.7x the lamp width.
+	 *
+	 * The classic map casing pattern: a dark underlay wider than the bright
+	 * core, so each lamp-run reads as lights ON a road instead of a filament
+	 * floating over the photograph. It also contains the bloom — the halo's
+	 * mushy edge lands on dark asphalt rather than glowing ground. Steady
+	 * (no flicker): it is roadbed, not lamp.
+	 */
+	const casingWidth = $derived(widthAt(1.7));
+	const casingColor = '#17110b';
 
 	/**
 	 * Sodium amber for the big roads, cooler white for the small grid.
@@ -199,16 +337,94 @@
 				'line-color': color,
 				'line-width': bloomWidth,
 				'line-blur': 3,
-				'line-opacity': 0.3 * glow
+				'line-opacity': bloomOpacity
+			}}
+			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+		/>
+		<!-- Roadbed casing under the lamps: dark outline, solid, steady. -->
+		<LineLayer
+			id="city-roads-casing"
+			paint={{
+				'line-color': casingColor,
+				'line-width': casingWidth,
+				'line-blur': 0,
+				'line-opacity': casingOpacity
+			}}
+			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+		/>
+		<!-- Lamp runs, not paint runs. The old core was one solid filament at
+		     0.85 — a wire diagram — and the next iteration's [2.5, 1.2] dashes
+		     read as runway edge-lights: too long, too even, too coherent. Real
+		     arterials are individual lamp heads with dark gaps between them, so
+		     the majors are short dots on long gaps, and the GLIMMER pass runs a
+		     second, sparser dash train at an incommensurate period under a
+		     deeper envelope: where the trains cross, lamps flare and die one by
+		     one instead of the whole run breathing in unison. Both envelopes are
+		     pure wall-clock functions, so every pane shimmers identically. -->
+		<LineLayer
+			id="city-roads-lamps-major"
+			filter={majorFilter}
+			paint={{
+				'line-color': color,
+				'line-width': width,
+				'line-blur': 1,
+				'line-opacity': majorOpacity,
+				'line-dasharray': [1.5, 2.4]
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>
 		<LineLayer
-			id="city-roads-core"
+			id="city-roads-glimmer"
+			filter={majorFilter}
 			paint={{
 				'line-color': color,
 				'line-width': width,
-				'line-opacity': 0.85 * glow
+				'line-blur': 2,
+				'line-opacity': glimmerOpacity,
+				'line-dasharray': [0.9, 4.2]
+			}}
+			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+		/>
+		<LineLayer
+			id="city-roads-lamps-minor"
+			filter={minorFilter}
+			paint={{
+				'line-color': color,
+				'line-width': width,
+				'line-blur': 1,
+				'line-opacity': minorOpacity,
+				'line-dasharray': [0.4, 3]
+			}}
+			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+		/>
+		<!-- Far-field arterial dots: the lamp-runs above resolved into
+		     individual heads. Same majors filter as the near lamps, a much
+		     sparser train so that at cruise zooms each dash is one lamp,
+		     not a segment. Steady opacity (no flicker — see above),
+		     VIIRS-weighted like everything else on this source.
+		     Zoom-stepped, because dash lengths multiply by line width and
+		     the cruise width is ~1 px: a fixed [0.6, 7] draws 0.66 px dots
+		     up high, which alias into shimmer under motion on a window that
+		     never stops moving. Integer-zoom steps only (the spec evaluates
+		     dash zooms at integer levels) — dots stay ≥2 px at cruise and
+		     resolve fine on the way down. -->
+		<LineLayer
+			id="city-roads-far-dots"
+			filter={majorFilter}
+			paint={{
+				'line-color': color,
+				'line-width': width,
+				'line-blur': 1,
+				'line-opacity': farOpacity,
+				'line-dasharray': [
+					'interpolate',
+					['linear'],
+					['zoom'],
+					8,
+					['literal', [2, 9]],
+					11,
+					['literal', [0.6, 7]]
+				] as never
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>

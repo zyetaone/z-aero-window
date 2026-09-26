@@ -119,7 +119,7 @@ interface CameraShape {
 
 const _camera: CameraShape = {
 	orbit: {
-				driftRate: 0.018, // orbit lateral speed (deg/s at speed=1)
+				driftRate: 0.0011, // deg/s at speedNorm 1 ≈ 120 m/s: ~85 km loop in ~12 min. Was 0.018 with the raw ×6 knob: a lap every ~11 s.
 		majorMin: 0.08,
 		majorMax: 0.25,
 		breathePeriod: 180,

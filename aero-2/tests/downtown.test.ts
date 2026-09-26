@@ -182,6 +182,17 @@ describe('downtown thread in the view', () => {
 		expect(v.aglM).toBeGreaterThanOrEqual(5999);
 	});
 
+	it('never threads low features either — the gate alone only saves the Himalayas', () => {
+		// Ocean threads at speed=1, s=100 without the explicit gate: climb
+		// ~1,300 m opens the altitude gate mid-pass and the pin pulls. This
+		// pins the documented contract instead of the emergent floor.
+		for (const id of ['ocean', 'desert']) {
+			const place = Location.byId(id);
+			const v = calculateCameraView(100, paramsFor(`?place=${id}&speed=1`));
+			expect(kmBetween(v.lat, v.lon, place.lat, place.lon), id).toBeGreaterThan(20);
+		}
+	});
+
 	it('hands off continuously, never cutting', () => {
 		const params = paramsFor('?place=denver');
 		let prevLat = 0;

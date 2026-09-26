@@ -41,6 +41,16 @@ describe('clamping must not disturb legitimate values', () => {
 		expect(s.cloudDensity).toBe(0.8);
 	});
 
+	it('tunes wing yaw from the URL like its pitch sibling', () => {
+		const s = read('place=denver&wingYaw=-20');
+		expect(s.wingYawDeg).toBe(-20);
+	});
+
+	it('clamps wing yaw to its knob range', () => {
+		const s = read('place=denver&wingYaw=9999');
+		expect(s.wingYawDeg).toBeLessThanOrEqual(KNOB_RANGE.wingYawDeg[1]);
+	});
+
 	it('still falls back when a param is absent or unparseable', () => {
 		const s = read('place=denver&pitch=banana');
 		expect(Number.isFinite(s.pitchDeg)).toBe(true);

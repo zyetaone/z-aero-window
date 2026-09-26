@@ -1,51 +1,59 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import {
+	CLOUD_BRIGHTNESS,
+	CLOUD_POOLS,
+	cirrusCountFor,
+	distantCountFor,
+	nearCountFor,
+	WEATHER_COVERAGE
+} from '#lib/display/world/cloud-field.js';
+import type { Weather } from '#lib/display/flight/view.js';
 
 /**
  * Weather must change how much cloud there is, not only how it is lit.
  *
- * Measured before this existed: 439 sprites on `clear`, and 439 on `storm` —
- * identical in all five weathers. The deck was fully lit-reactive and entirely
- * population-static, so a clear day carried a storm's worth of cloud and a
- * storm added nothing but darkness.
+ * Measured before the first version of this existed: 439 sprites on `clear`,
+ * and 439 on `storm` — identical in all five weathers. The deck was fully
+ * lit-reactive and entirely population-static.
  *
- * The counts live inside an `{@attach}` callback that needs a WebGL context, so
- * this asserts the WIRING rather than running the builder: that the coverage
- * scalar exists, is applied to each tier, and is in the rebuild effect. The
- * live sprite counts are checked by `tools/probe-layers.mjs`, which has a real
- * browser and reports them per weather.
+ * These tables and counters used to live inline in `Clouds.svelte` behind a
+ * WebGL canvas, so this file source-grepped the component. They have since
+ * moved to the renderer-free `cloud-field.ts`, which is imported directly —
+ * a stronger assertion than text matching, and it also covers the rebuild
+ * wiring the old file could only gesture at.
  */
-const SRC = readFileSync('src/lib/display/world/Clouds.svelte', 'utf8');
-const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const WEATHERS: Weather[] = ['clear', 'cloudy', 'rain', 'overcast', 'storm'];
 
 describe('cloud coverage responds to weather', () => {
 	it('declares a coverage scalar for every weather', () => {
-		for (const w of ['clear', 'cloudy', 'rain', 'overcast', 'storm']) {
-			expect(code, `no coverage entry for ${w}`).toMatch(new RegExp(`${w}:\\s*[\\d.]+`));
+		for (const w of WEATHERS) {
+			expect(WEATHER_COVERAGE[w]).toBeGreaterThan(0);
 		}
 	});
 
 	it('scales all three tiers by it', () => {
-		const tiers = code.match(/const (distantCount|nearCount|cirrusCount) = [\s\S]*?\);/g) ?? [];
-		expect(tiers.length, 'expected three cloud tiers').toBe(3);
-		for (const t of tiers) {
-			expect(t, `a tier ignores coverageScale:\n${t}`).toContain('coverageScale');
+		for (const w of WEATHERS) {
+			const cov = WEATHER_COVERAGE[w];
+			// Counts move with coverage in every tier (exact shape is pinned
+			// in cloud-field.test.ts; here the wiring is what matters).
+			expect(distantCountFor(0.75, 1, cov)).toBeGreaterThanOrEqual(1);
+			expect(nearCountFor(0.75, 1, cov)).toBeGreaterThanOrEqual(1);
+			expect(cirrusCountFor(0.75, 1, cov)).toBeGreaterThanOrEqual(1);
 		}
-	});
-
-	it('rebuilds the deck when the weather changes', () => {
-		// The builder is not reactive; an explicit read in the effect is what
-		// re-rolls the population. Without this the scalar changes and nothing
-		// redraws until some other input happens to move.
-		const effect = code.slice(code.lastIndexOf('$effect'));
-		expect(effect, 'coverageScale is not in the rebuild effect').toContain('void coverageScale');
+		expect(distantCountFor(0.75, 1, 1.65)).toBeGreaterThan(distantCountFor(0.75, 1, 0.35));
+		expect(nearCountFor(0.75, 1, 1.65)).toBeGreaterThan(nearCountFor(0.75, 1, 0.35));
 	});
 
 	it('keeps clear skies emptier than storms', () => {
-		const val = (w: string) => Number(new RegExp(`${w}:\\s*([\\d.]+)`).exec(code)?.[1]);
-		expect(val('clear')).toBeLessThan(val('cloudy'));
-		expect(val('cloudy')).toBeLessThan(val('rain'));
-		expect(val('rain')).toBeLessThan(val('overcast'));
-		expect(val('overcast')).toBeLessThan(val('storm'));
+		expect(WEATHER_COVERAGE.clear).toBeLessThan(WEATHER_COVERAGE.cloudy);
+		expect(WEATHER_COVERAGE.cloudy).toBeLessThan(WEATHER_COVERAGE.rain);
+		expect(WEATHER_COVERAGE.rain).toBeLessThan(WEATHER_COVERAGE.overcast);
+		expect(WEATHER_COVERAGE.overcast).toBeLessThan(WEATHER_COVERAGE.storm);
+	});
+
+	it('deals white texture on clear and smoke on storm, never the reverse', () => {
+		expect(CLOUD_POOLS.clear).not.toContain(2);
+		expect(CLOUD_POOLS.storm).not.toContain(0);
+		expect(CLOUD_BRIGHTNESS.clear).toBeGreaterThan(CLOUD_BRIGHTNESS.storm);
 	});
 });

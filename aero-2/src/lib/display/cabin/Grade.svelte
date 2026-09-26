@@ -20,7 +20,14 @@
 	const night = $derived(display.night);
 	const sunElevation = $derived(display.sun.elevationDeg);
 	const wash = $derived(gradeWash(night, sunElevation));
-	const mounted = $derived(wash.warm > 0.001 || wash.cool > 0.001);
+	/**
+	 * Flight mode only: pushed media (video, slideshow) shows as authored.
+	 * A night cool-wash over an admin video is not atmosphere, it is a bug
+	 * tinting somebody else's content — same rule as MediaStage, mirrored.
+	 */
+	const mounted = $derived(
+		display.config.displayMode === 'flight' && (wash.warm > 0.001 || wash.cool > 0.001)
+	);
 </script>
 
 {#if mounted}

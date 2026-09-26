@@ -39,8 +39,22 @@
 		Vector3,
 		WebGLRenderer
 	} from 'three';
-	import { mulberry32 } from '../flight/flight-path.js';
+	import { mulberry32, slotNoise, windDriftAngle } from '../flight/flight-path.js';
 	import { weatherLightLoss } from './atmosphere.js';
+	// Field math (counts, pools, brightness, draw order) lives in
+	// cloud-field.ts — the tested merge of this deck's design with aero-1's
+	// pinned-contracts. This file maps descriptors onto Three.js objects.
+	import {
+		buildCloudField,
+		CLOUD_BRIGHTNESS,
+		CLOUD_POOLS,
+		CLOUD_PROXIMITY,
+		CIRRUS_POOLS,
+		cirrusCountFor,
+		distantCountFor,
+		nearCountFor,
+		WEATHER_COVERAGE
+	} from './cloud-field.js';
 
 	const display = useDisplay();
 
@@ -76,24 +90,24 @@
 	 *
 	 * Multiplies the count rather than replacing `cloudDensity`, so the operator
 	 * slider keeps meaning "how cloudy is this scene" and weather scales around
-	 * whatever they chose. Clear is deliberately well below 1: a flight-level
-	 * window on a clear day has scattered cloud below and a lot of empty sky,
-	 * and that emptiness is what makes the overcast state read as weather when
-	 * it arrives.
+	 * whatever they chose. Table lives in cloud-field.ts (tested there).
 	 *
 	 * Rebuild cost is the reason this is a coarse multiplier and not a live
 	 * knob: it joins `density` in the rebuild effect, so a weather change
 	 * re-rolls the deck ONCE. Reading it per frame would rebuild 400+ sprites
 	 * every frame.
+	 *
+	 * The sky breathes on a 15-minute slot: coverage drifts ±20% around the
+	 * weather base, so a clear day slowly gathers and sheds its scattered
+	 * layer instead of holding one frozen deck all afternoon. Quantized to
+	 * the slot (not the frame) so the rebuild effect below fires at most
+	 * four times an hour, and `slotNoise` is wall-shared — every pane
+	 * re-rolls the same deck for the same quarter hour.
 	 */
-	const WEATHER_COVERAGE: Record<string, number> = {
-		clear: 0.45,
-		cloudy: 1.0,
-		rain: 1.25,
-		overcast: 1.5,
-		storm: 1.65
-	};
-	const coverageScale = $derived(WEATHER_COVERAGE[display.config.weather] ?? 1);
+	const coverSlot = $derived(Math.floor(display.view.wallSec / 900));
+	const coverageScale = $derived(
+		(WEATHER_COVERAGE[display.config.weather] ?? 1) * (0.8 + 0.4 * slotNoise(coverSlot, 11))
+	);
 
 	/**
 	 * The deck is the biggest GPU cost in the window, and it was the one thing
@@ -232,166 +246,75 @@
 			const seed = Math.floor(display.phase * 1_000_003) + 1;
 			const rng = mulberry32(seed);
 
-			// ── 1. Distant Horizon Cloud Systems (40 km - 260 km) ──────────────────
-			/**
-			 * Counts raised from 8+16d / 5+10d / 4+6d.
-			 *
-			 * At the default density of 0.75 the old deck was 20 distant clusters,
-			 * 13 near cumulus and 9 cirrus — roughly 240 sprites spread over a
-			 * 260 km horizon, which reads as scattered puffs rather than weather.
-			 * The distant tier does most of the work for "there is a sky out
-			 * there" and is also the cheapest (high albedo, low overdraw, far
-			 * plane), so it gains the most.
-			 *
-			 * `qualityScale` halves everything when the Pi is throttling — see
-			 * above. Floors of 1 keep a deck present at any setting: an empty sky
-			 * where there should be cloud reads as broken, not as clear weather.
-			 *
-			 * `coverageScale` is the weather. The near tier takes the strongest
-			 * multiplier because it is the one a passenger reads as "we are IN
-			 * weather" — distant cloud is scenery, cloud at 2-30 km is the storm
-			 * you are flying through.
-			 */
-			const distantCount = Math.max(
-				1,
-				Math.round((12 + density * 26) * qualityScale * coverageScale)
-			);
-			for (let c = 0; c < distantCount; c++) {
-				emitCluster(textures, 40_000, 220_000, 8_000, 16_000, 6, 8, 0.05, rng, 0);
-			}
+			// Weather-dealt texture pools: composition (which texture each slot
+			// means) is the single-sourced CLOUD_POOLS table in cloud-field.ts;
+			// here each index resolves to its loaded Texture object.
+			const wkey = display.config.weather;
+			const white = textures[0];
+			const dark = textures[1] ?? textures[0];
+			const smoke = textures[2] ?? textures[0];
+			const triple = [white, dark, smoke];
+			const pool = (CLOUD_POOLS[wkey] ?? CLOUD_POOLS.clear).map((i) => triple[i]);
+			const cirrusObjects = (CIRRUS_POOLS[wkey] ?? CIRRUS_POOLS.clear).map((i) => triple[i]);
+			const brightBase = CLOUD_BRIGHTNESS[wkey] ?? 0.8;
+			// Near weather closes in physically too, not just optically.
+			const prox = CLOUD_PROXIMITY[wkey] ?? 0;
+			const nearRadius = 1 - 0.45 * prox;
 
-			// ── 2. Near & Mid-Deck Cumulus Puffs (2 km - 35 km) ─────────────────────
-			const nearCount = Math.max(
-				1,
-				Math.round((7 + density * 15) * qualityScale * (1 + (coverageScale - 1) * 1.25))
-			);
-			for (let c = 0; c < nearCount; c++) {
-				emitCluster(textures, 2_500, 32_000, 2_000, 4_500, 4, 6, 0.12, rng, 0);
-			}
+			// The population itself is built by cloud-field.ts on the shared
+			// stream (distant, then near, then cirrus) — this function only maps
+			// descriptors onto Three.js objects. Counts, pools, brightness and
+			// draw order are tested there; nothing here may consume `rng`.
+			const field = buildCloudField({
+				rand: rng,
+				weather: (CLOUD_POOLS[wkey] ? wkey : 'clear') as keyof typeof CLOUD_POOLS,
+				brightBase,
+				nearRadius,
+				distantCount: distantCountFor(density, qualityScale, coverageScale),
+				nearCount: nearCountFor(density, qualityScale, coverageScale),
+				cirrusCount: cirrusCountFor(density, qualityScale, coverageScale)
+			});
 
-			// ── 3. High-Altitude Cirrus Veil Bands (40 km - 180 km, +3500m) ─────────
-			/**
-			 * Cirrus goes the OTHER way in bad weather.
-			 *
-			 * Ice cloud at altitude is a fair-weather and frontal-approach signature;
-			 * under a storm you are below the deck and cannot see it at all. So this
-			 * tier thins as the others thicken, which is what makes an overcast sky
-			 * read as a lid rather than as more of everything.
-			 */
-			const cirrusCount = Math.max(
-				1,
-				Math.round((6 + density * 9) * qualityScale * (coverageScale > 1 ? 1 / coverageScale : 1))
-			);
-			for (let c = 0; c < cirrusCount; c++) {
-				emitCluster(
-					[textures[2] || textures[0]],
-					40_000,
-					140_000,
-					12_000,
-					22_000,
-					3,
-					5,
-					0.2,
-					rng,
-					3500
-				);
-			}
-		}
+			for (const cluster of field) {
+				const texList = cluster.tier === 2 ? cirrusObjects : pool;
+				for (const s of cluster.sprites) {
+					const tex = texList[s.texSlot] ?? texList[0];
+					const mat = new SpriteMaterial({
+						map: tex,
+						transparent: true,
+						opacity: s.opacity * opacityScale,
+						depthWrite: false,
+						color: new Color(s.brightness, s.brightness, s.brightness),
+						rotation: s.rotation
+					});
 
-		function emitCluster(
-			texList: Texture[],
-			radiusMin: number,
-			radiusSpan: number,
-			scaleMin: number,
-			scaleSpan: number,
-			spriteMin: number,
-			spriteSpan: number,
-			lonelyChance: number,
-			rand: () => number,
-			altOffset: number = 0
-		) {
-			const angle = rand() * Math.PI * 2;
-			const dist = radiusMin + Math.sqrt(rand()) * radiusSpan;
-			const cx = Math.cos(angle) * dist;
-			const cz = Math.sin(angle) * dist;
-			const ch = altOffset + (rand() - 0.5) * 800;
+					// Pseudo-normal for sun-side 3D shading, from the cluster
+					// centre the descriptor carries.
+					const dx = s.ox - cluster.cx;
+					const dy = s.oy - cluster.ch;
+					const dz = s.oz - cluster.cz;
+					const mag = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
 
-			const isLonely = rand() < lonelyChance;
-			const spriteCount = isLonely ? 1 : spriteMin + Math.floor(rand() * spriteSpan);
-			const baseScale = scaleMin + rand() * scaleSpan;
-			const clusterShear = (rand() - 0.5) * 0.25;
+					mat.userData = {
+						baseBrightness: s.brightness,
+						baseOpacity: s.opacity,
+						normX: dx / mag,
+						normY: dy / mag,
+						normZ: dz / mag
+					};
+					materials.push(mat);
 
-			for (let i = 0; i < spriteCount; i++) {
-				// Anchor sprite at cluster center; surrounding puffs spread radially
-				let ox = cx;
-				let oy = ch;
-				let oz = cz;
+					const sprite = new Sprite(mat);
+					sprite.position.set(s.ox, s.oy, s.oz);
+					sprite.scale.set(s.sprScale, s.sprScale, 1);
 
-				if (i > 0) {
-					const theta = rand() * Math.PI * 2;
-					const r = (0.2 + rand() * 0.8) * baseScale * 1.6;
-					ox += Math.cos(theta) * r;
-					oz += Math.sin(theta) * r;
-					oy += (rand() - 0.5) * (baseScale * 0.35);
+					cloudGroup.add(sprite);
+					sprites.push(sprite);
+					rotSpeeds.push(s.rotSpeed);
+					shearFactors.push(cluster.shear);
+					baseRot.push(s.rotation);
+					basePos.push(s.ox, s.oz);
 				}
-
-				const sprScale = baseScale * (i === 0 ? 1.25 : 0.85 + rand() * 0.55);
-				/**
-				 * Bounded, which it was not.
-				 *
-				 * `1 + floor(rand() * (len - 1))` is index 1 whenever the list has
-				 * ONE texture -- and the cirrus pass calls this with exactly one,
-				 * `[textures[2] || textures[0]]`. So roughly three in ten cirrus
-				 * sprites were built with `map: undefined`, which Three warns
-				 * about once per material and then draws as a flat untextured
-				 * card: the translucent grey quadrilateral sitting in the sky at
-				 * `?preset=golden-hour`.
-				 */
-				const texIdx =
-					texList.length < 2 ? 0 : rand() < 0.7 ? 0 : 1 + Math.floor(rand() * (texList.length - 1));
-				const tex = texList[texIdx];
-
-				// Vertical underside gradient shading
-				const yNorm = (oy - ch + baseScale * 0.1) / (baseScale * 0.2);
-				const yClamp = Math.max(0, Math.min(1, yNorm));
-				const ySoft = yClamp * yClamp * (3 - 2 * yClamp);
-				const baseBrightness = 0.65 + ySoft * 0.15;
-				const baseOpacity = 0.22 + rand() * 0.26;
-
-				const mat = new SpriteMaterial({
-					map: tex,
-					transparent: true,
-					opacity: baseOpacity * opacityScale,
-					depthWrite: false,
-					color: new Color(baseBrightness, baseBrightness, baseBrightness),
-					rotation: rand() * Math.PI * 2
-				});
-
-				// Store pseudo-normal for sun-side 3D shading
-				const dx = ox - cx;
-				const dy = oy - ch;
-				const dz = oz - cz;
-				const mag = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-
-				mat.userData = {
-					baseBrightness,
-					baseOpacity,
-					normX: dx / mag,
-					normY: dy / mag,
-					normZ: dz / mag
-				};
-				materials.push(mat);
-
-				const sprite = new Sprite(mat);
-				sprite.position.set(ox, oy, oz);
-				sprite.scale.set(sprScale, sprScale, 1);
-
-				cloudGroup.add(sprite);
-				sprites.push(sprite);
-				rotSpeeds.push((rand() - 0.5) * 0.05);
-				shearFactors.push(clusterShear);
-				baseRot.push(mat.rotation);
-				basePos.push(ox, oz);
 			}
 		}
 
@@ -411,9 +334,19 @@
 				}
 			}
 
-			// Synchronize relative camera altitude, pitch and banking tilt
+			// Synchronize relative camera altitude, pitch and banking tilt.
+			// The deck climbs toward the aircraft with the weather
+			// (CLOUD_PROXIMITY): read per frame so it glides, no rebuild.
 			const planeAgl = display.view.aglM;
-			const deltaAltM = planeAgl - cloudAltM;
+			const proxNow = CLOUD_PROXIMITY[display.config.weather] ?? 0;
+			// Slow altitude wander (±250 m over ~10 min, wall-shared phase):
+			// the deck lifts and settles instead of sitting on its knob value
+			// all day. Per-frame read, so it glides — never a rebuild.
+			const effAltM =
+				cloudAltM +
+				(planeAgl - cloudAltM) * proxNow +
+				Math.sin(display.view.wallSec / 600 + display.phase) * 250;
+			const deltaAltM = planeAgl - effAltM;
 			camera.position.set(
 				0,
 				Math.abs(deltaAltM) < 150 ? Math.sign(deltaAltM || 1) * 150 : deltaAltM,
@@ -456,7 +389,10 @@
 			 */
 			const gustPhase = wallSec + 3.6 * Math.sin(wallSec * 0.137) * Math.cos(wallSec * 0.273);
 			const driftPhase = gustPhase * driftSpeed * 0.008;
-			cloudGroup.rotation.y = bearingRad + wallSec * driftSpeed * 0.0006;
+			// Direction-signed: the wind follows the circuit, so a reversed
+			// loop reverses the drift instead of flying backwards through it.
+			cloudGroup.rotation.y =
+				bearingRad + windDriftAngle(wallSec, driftSpeed, display.config.direction ?? 1);
 
 			// ── Per-Sprite 3D Solar Lighting & Mie Forward-Scatter ─────────────────
 			const sunElev = display.sun.elevationDeg;
@@ -487,7 +423,7 @@
 				const s = sprites[i];
 				const mat = materials[i];
 				const baseB = (mat.userData.baseBrightness ?? 0.75) as number;
-				const baseO = (mat.userData.baseOpacity ?? 0.3) as number;
+				const baseO = (mat.userData.baseOpacity ?? 0.4) as number;
 
 				// Spin & shear, both SET from the clock rather than nudged.
 				mat.rotation = (baseRot[i] ?? 0) + rotSpeeds[i] * gustPhase;

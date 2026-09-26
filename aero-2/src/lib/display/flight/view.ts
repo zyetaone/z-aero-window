@@ -396,7 +396,14 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	 * unreachable and at 1 the big loop is, with the handoff eased both
 	 * sides in `downtownBlendAt`.
 	 */
-	const thread = downtownBlendAt(wallSec, plane.aglM);
+	/**
+	 * Features never thread, explicitly — not via the altitude gate. The
+	 * gate alone only saves the Himalayas (6,000 m floor); ocean and desert
+	 * fly low enough to open it, and the pass would detour a mid-transit
+	 * crossing into circles over open water. Crossing is the feature
+	 * experience; visits are for cities.
+	 */
+	const thread = params.place.isFeature ? 0 : downtownBlendAt(wallSec, plane.aglM);
 	if (thread <= 0) return big;
 	// The thread flies its own clock: position AND heading/bank come from
 	// the warped pose, so the aircraft circles downtown instead of

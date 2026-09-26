@@ -16,14 +16,20 @@
 	import 'svelte-maplibre-gl/vite';
 
 	import { useDisplay } from '../display.svelte.js';
-	import { resolveClearance } from './clearance.js';
+	import { resolveClearance, smoothDatum } from './clearance.js';
 	import { WORLD_ROLL_GAIN } from '../flight/view.js';
 	import Ground from './Ground.svelte';
+	import SkyBackdrop from './SkyBackdrop.svelte';
+	import Starfield from './Starfield.svelte';
+	import SunMoon from './SunMoon.svelte';
 	import Terrain from './Terrain.svelte';
 	import Buildings from './Buildings.svelte';
 	import Water from './Water.svelte';
 	import NightLights from './NightLights.svelte';
+	import LiveWeather from './LiveWeather.svelte';
 	import Roads from './Roads.svelte';
+	import Towns from './Towns.svelte';
+	import Terminator from './Terminator.svelte';
 	import Sky from './Sky.svelte';
 	import LookControls from '../flight/LookControls.svelte';
 
@@ -37,6 +43,41 @@
 	});
 
 	/**
+	 * Anchor gate for the in-map sky layers (stars, sun/moon).
+	 *
+	 * They insert `beforeId="gibs-day"` — below the ground photograph, so the
+	 * photo covers any star the depth buffer misses. But the wrapper defers the
+	 * ground source's own add to a microtask while the sky layers queue
+	 * synchronously, so at the first style flush `gibs-day` does not exist yet
+	 * and both inserts throw. The throw aborts that flush AND every later one
+	 * replays the same stale insert first, so without this gate the sky layers
+	 * never mount and the console fills with one error per styledata, forever.
+	 * Measured live: `Cannot add layer "night-stars" before non-existing layer
+	 * "gibs-day"`, persisting 30 s+ after boot with a loaded style.
+	 *
+	 * `map.loaded()` cannot be the gate: the camera flies every frame, tiles
+	 * never settle, and it reads false for the whole session. The explicit
+	 * layer probe is the thing actually needed.
+	 */
+	let skyAnchorReady = $state(false);
+	$effect(() => {
+		const m = map;
+		skyAnchorReady = false;
+		if (!m) return;
+		if (m.getLayer('gibs-day')) {
+			skyAnchorReady = true;
+			return;
+		}
+		const pin = () => {
+			if (m.getLayer('gibs-day')) skyAnchorReady = true;
+		};
+		m.on('styledata', pin);
+		return () => {
+			m.off('styledata', pin);
+		};
+	});
+
+	/**
 	 * Fly the plane.
 	 *
 	 * The camera is positioned by real ALTITUDE and aimed at a real ground
@@ -47,8 +88,43 @@
 		const m = map;
 		if (!m) return;
 
+		/**
+		 * Smoothed clearance datum — see `smoothDatum` in clearance.ts for
+		 * the policy (instant climbs, gliding falls, standing margin).
+		 * `queryTerrainElevation` returns null until its DEM tile loads, so
+		 * the ground under the camera steps from the regional mean to the
+		 * sampled height mid-flight. Worst where the mean lies most:
+		 * Himalayan mean 5,000 m against 8,000 m+ sampled ridges.
+		 */
+		let smoothGround: number | null = null;
+		let lastMs = 0;
+
 		let raf: number;
+		let loopErrors = 0;
 		const loop = () => {
+			// Scheduled FIRST: whatever below throws, the next frame still
+			// comes. The old shape scheduled at the end, so a single bad
+			// frame (a pre-load camera call, a NaN from a fresh place) killed
+			// the map forever while the HUD kept ticking on its own loop —
+			// the frozen-map-black-window failure, silent because RAF
+			// exceptions never reach a Svelte boundary.
+			raf = requestAnimationFrame(loop);
+			try {
+				frame();
+			} catch (err) {
+				loopErrors++;
+				if (loopErrors <= 3) {
+					console.warn(
+						`[Stage] frame ${loopErrors} dropped:`,
+						err instanceof Error ? err.message : String(err)
+					);
+				}
+			}
+		};
+		const frame = () => {
+			const nowMs = performance.now();
+			const dtSec = lastMs === 0 ? 0 : Math.min(0.5, (nowMs - lastMs) / 1000);
+			lastMs = nowMs;
 			const v = display.advanceTo(Date.now() / 1000);
 			const planeAt = new LngLat(v.lon, v.lat);
 			const targetAt = new LngLat(v.targetLon, v.targetLat);
@@ -94,12 +170,20 @@
 			const atTarget = resolveClearance(meanGroundM, m.queryTerrainElevation(targetAt));
 			display.noteClearance(atPlane.sampled);
 
+			const target = atPlane.groundM;
+			smoothGround = smoothDatum(smoothGround, target, dtSec);
+
 			const cam = m.calculateCameraOptionsFromTo(
 				planeAt,
-				v.aglM + atPlane.groundM,
+				v.aglM + smoothGround,
 				targetAt,
 				atTarget.groundM
 			);
+			// Publish the datum the camera just cleared, so the Hud's ALT
+			// number names what it is above. Replaced, not mutated: `view`
+			// is $state.raw and only assignment notifies, which is also why
+			// this rides along on the object advanceTo already assigns.
+			display.view = { ...v, groundM: smoothGround };
 
 			/**
 			 * Bank rolls the WORLD. This is what makes the wing look attached.
@@ -127,7 +211,6 @@
 			 * than double-counting into a barrel roll.
 			 */
 			m.jumpTo({ ...cam, roll: -v.bankDeg * WORLD_ROLL_GAIN });
-			raf = requestAnimationFrame(loop);
 		};
 
 		raf = requestAnimationFrame(loop);
@@ -143,6 +226,13 @@
 </script>
 
 <div class="world-stage">
+	<!-- MSAA for the vector edges (lamp dots, casings, extrusions): the map
+	     canvas never had it — only the Three overlay did — so every sub-pixel
+	     line shimmered under motion. One context-creation flag, no per-frame
+	     cost beyond the resolve. Pi cost is real but this is the single
+	     highest-leverage AA available to the map stack; if the thermal
+	     throttle ever points here, this is the first flag to gate at boot (it
+	     cannot be toggled on a live context). -->
 	<MapLibre
 		bind:map
 		autoloadGlobalCss={false}
@@ -153,27 +243,56 @@
 		maxPitch={88}
 		anisotropicFilterPitch={20}
 		attributionControl={false}
+		canvasContextAttributes={{ antialias: true }}
 	>
 		<!-- 3D Spherical Earth Globe Projection & Solar Lighting -->
 		<Projection type="globe" />
 		<Light anchor="map" position={sunPos} />
 
 		<Ground />
+		<!-- Opaque sky backstop, beforeId `gibs-day`: the MapLibre dome mixes
+		     its own gradient to transparent in a settled globe view (see
+		     sky-colors.ts), so without this the zenith is canvas-black at
+		     cruise in daylight. Mounted BEFORE Starfield: same anchor, and
+		     inserts stack ahead of it in mount order, so the gradient lands
+		     underneath the stars. Same anchor gate for the same reason. -->
+		{#if skyAnchorReady}
+			<SkyBackdrop />
+		{/if}
+		<!-- In-map night stars, beforeId `gibs-day`: above the SkyBackdrop
+		     gradient, below the ground photograph, which covers anything depth
+		     missed. Gated on the anchor (see `skyAnchorReady` above): mounting
+		     earlier throws inside the wrapper's style queue and poisons every
+		     retry after it. -->
+		{#if skyAnchorReady}
+			<Starfield />
+		{/if}
+		<!-- World-fixed sun/moon discs, occluded by terrain like the stars. -->
+		{#if skyAnchorReady}
+			<SunMoon />
+		{/if}
 		<Terrain />
 		<!-- Above the hillshade, below the lights. The glint is REFLECTED light,
 		     so unlike the city lights it belongs on the same side of the shading
 		     as the photograph it sits on — but it must not be dimmed by relief
 		     that has nothing to do with a lake surface, so it goes after. -->
 		<Water />
+		<!-- The terminator darkens the photograph on the night side; the
+		     lights below must keep glowing through it, so this sits before
+		     NightLights by mount order (no stable beforeId exists). -->
+		<Terminator />
 		<!-- Above Terrain, deliberately: the hillshade shades the ground
 		     PHOTOGRAPH, and city lights are emitted, not reflected. See
 		     NightLights.svelte. -->
 		<NightLights />
+		<Towns />
 		<Roads />
 		<Buildings />
 		<Sky />
 		<LookControls />
 	</MapLibre>
+	<!-- No canvas, no DOM: polls /api/weather and authors config.weather. -->
+	<LiveWeather />
 </div>
 
 <style>

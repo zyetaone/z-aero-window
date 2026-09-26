@@ -237,11 +237,10 @@
 			const ySoft = yClamp * yClamp * (3 - 2 * yClamp);
 			const brightness = 0.62 + ySoft * 0.12;
 
-			// Base opacity dropped further [0.28, 0.62] → [0.18, 0.42] to
-			// compensate for the increased sprite count + size. Total cloud
-			// "thickness" is preserved via accumulation; individual puffs
-			// are now more translucent so overlap reads as soft gradient.
-			const baseOpacity = 0.18 + rng() * 0.24;
+			// Base opacity raised [0.18, 0.42] → [0.24, 0.52] → [0.30, 0.60]:
+			// the denser sprite field reads thin on the Pi wall. Accumulation
+			// still carries total thickness; individual puffs keep a soft gradient.
+			const baseOpacity = 0.3 + rng() * 0.3;
 
 			const mat = new SpriteMaterial({
 				map: textures[idx],

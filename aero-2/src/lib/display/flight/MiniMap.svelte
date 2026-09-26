@@ -7,15 +7,26 @@
 	 *    and sideways passenger camera sightline to the city center.
 	 * 2. Elevation View: Side-profile climb/descent cosine wave with live altitude indicator.
 	 */
-	import { MapLibre, RasterTileSource, RasterLayer } from 'svelte-maplibre-gl';
-	import type { Map as MlMap } from 'maplibre-gl';
+	import { untrack } from 'svelte';
 
 	import { PUBLIC_TILE_SERVER_URL } from '$app/env/public';
 	import { useDisplay } from '../display.svelte.js';
 	import { FlightTrack, CLIMB_PERIOD_SEC } from './flight-path.js';
-	import { TILE_MAXZOOM, TILE_SIZE, tileTemplates } from '#lib/settings/tiles.js';
-
-	const BLANK_STYLE = { version: 8 as const, sources: {}, layers: [] };
+	import { tileTemplates } from '#lib/settings/tiles.js';
+	import {
+		hysteresisGate,
+		NIGHT_LIGHT_RAMP,
+		NIGHT_MOUNT_OFF,
+		NIGHT_MOUNT_ON
+	} from '../world/sun.js';
+	import { Location } from '#lib/settings/locations.js';
+	import {
+		projectMini,
+		coverTiles,
+		threadArc,
+		MINIMAP_SIZE_PX,
+		MINIMAP_TILE_ZOOM
+	} from './minimap-project.js';
 
 	/**
 	 * Fixed zoom, chosen so the WHOLE orbit fits inside the circular crop.
@@ -32,32 +43,77 @@
 
 	const display = useDisplay();
 	// PUBLIC_TILE_SERVER_URL, so a pane can read tiles from a peer on the wall.
-	const tiles = tileTemplates(PUBLIC_TILE_SERVER_URL);
+	const templates = tileTemplates(PUBLIC_TILE_SERVER_URL);
+	const gibsTemplate = templates.gibs[0];
+	const viirsTemplate = templates.viirs[0];
 
-	let map = $state<MlMap | undefined>();
-	let renderTick = $state(0);
-
+	/**
+	 * Night lights on the inset, on the main map's curve. The same
+	 * NIGHT_LIGHT_RAMP the Stage uses, so the minimap's cities arrive with
+	 * the main window's — two maps lighting the same night on different
+	 * ramps would read as one of them lagging. Mount-gated like
+	 * NightLights: by day these <img>s cost fetches for black tiles.
+	 */
+	const night = $derived(display.night);
+	const miniNightOpacity = $derived(
+		Math.min(0.8, night ** NIGHT_LIGHT_RAMP * Location.moodFor(display.config.place.id).nightGlow)
+	);
+	// Latched like the main-map layers: the inset blinking at twilight reads
+	// as a fault on a wall of three. Tracked, not untracked — the untrack
+	// froze the latch at its mount-time value (see NightLights.svelte).
+	let nightLatched = $state(false);
 	$effect(() => {
-		const m = map;
-		if (!m) return;
-		const onFrame = () => {
-			renderTick++;
+		nightLatched = hysteresisGate(miniNightOpacity, nightLatched, NIGHT_MOUNT_ON, NIGHT_MOUNT_OFF);
+	});
+
+	/**
+	 * Live pose snapshot, refreshed at 10 Hz — NOT at frame rate.
+	 *
+	 * The overlay used to re-derive off the main map's `render` event, so a
+	 * 240-point SVG path was re-projected and re-serialized as a string SIXTY
+	 * times a second to move a marker the eye cannot see move. The aircraft
+	 * crawls across a 190 px disc; 10 Hz is visually identical and drops the
+	 * overlay rebuild (plus the entire second map it hung off) off the frame
+	 * budget. Reads are untracked so the sampler never subscribes to the
+	 * frame loop it is deliberately decoupled from.
+	 */
+	const SNAP_MS = 100;
+	interface PoseSnap {
+		lat: number;
+		lon: number;
+		heading: number;
+		aglM: number;
+		effectiveSec: number;
+		targetLon: number | undefined;
+		targetLat: number | undefined;
+	}
+	let snap = $state<PoseSnap>({
+		lat: 0,
+		lon: 0,
+		heading: 0,
+		aglM: 0,
+		effectiveSec: 0,
+		targetLon: undefined,
+		targetLat: undefined
+	});
+	function samplePose(): PoseSnap {
+		const place = display.config.place;
+		return {
+			lat: display.view.lat ?? place.lat,
+			lon: display.view.lon ?? place.lon,
+			heading: display.view.planeHeadingDeg,
+			aglM: display.view.aglM,
+			effectiveSec: display.view.wallSec * display.config.speed,
+			targetLon: display.view.targetLon,
+			targetLat: display.view.targetLat
 		};
-		if (m.loaded()) {
-			renderTick++;
-		}
-		m.on('load', onFrame);
-		m.on('idle', onFrame);
-		m.on('render', onFrame);
-		m.on('move', onFrame);
-		m.on('resize', onFrame);
-		return () => {
-			m.off('load', onFrame);
-			m.off('idle', onFrame);
-			m.off('render', onFrame);
-			m.off('move', onFrame);
-			m.off('resize', onFrame);
-		};
+	}
+	$effect(() => {
+		snap = untrack(samplePose);
+		const id = setInterval(() => {
+			snap = untrack(samplePose);
+		}, SNAP_MS);
+		return () => clearInterval(id);
 	});
 
 	const place = $derived(display.config.place);
@@ -81,12 +137,11 @@
 	 */
 	const ring = $derived(track.groundTrack());
 
-	/** Live pose, straight off the view the main window just drew. */
-	const lat = $derived(display.view.lat ?? place.lat);
-	const lon = $derived(display.view.lon ?? place.lon);
-	const heading = $derived(display.view.planeHeadingDeg);
-	const aglM = $derived(display.view.aglM);
-	const wallSec = $derived(display.view.wallSec);
+	/** Live pose, at the 10 Hz snapshot — see `snap` above. */
+	const lat = $derived(snap.lat);
+	const lon = $derived(snap.lon);
+	const heading = $derived(snap.heading);
+	const aglM = $derived(snap.aglM);
 
 	/** Climb bar & elevation phase (0..1). */
 	const climb = $derived.by(() => {
@@ -96,44 +151,70 @@
 		return Math.min(1, Math.max(0, (aglM - lo) / (hi - lo)));
 	});
 
-	const effectiveSec = $derived(wallSec * display.config.speed);
+	const effectiveSec = $derived(snap.effectiveSec);
 	const climbPhase = $derived(
 		(((effectiveSec % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC
 	);
 
+	function tileUrl(template: string, x: number, y: number): string {
+		return template
+			.replace('{z}', String(MINIMAP_TILE_ZOOM))
+			.replace('{x}', String(x))
+			.replace('{y}', String(y));
+	}
+
+	/**
+	 * The integer-zoom backdrop tiles covering the inset, with pixel
+	 * placement and URLs. Recomputes only when the destination changes —
+	 * plain <img>s the browser caches, no GL context, no render loop.
+	 */
+	const miniTiles = $derived(
+		coverTiles(place.lon, place.lat, zoom).map((t) => ({
+			...t,
+			url: tileUrl(gibsTemplate, t.x, t.y),
+			nightUrl: tileUrl(viirsTemplate, t.x, t.y)
+		}))
+	);
+
 	/**
 	 * Project the aircraft marker to pixels within the circular inset.
+	 * Pure math now — no map instance, so no render-tick subscription and no
+	 * second GL context behind a 190 px disc.
 	 */
-	const marker = $derived.by(() => {
-		const _ = renderTick;
-		const m = map;
-		if (!m) return null;
-		const p = m.project([lon, lat]);
-		return { x: p.x, y: p.y };
-	});
+	const marker = $derived(projectMini(lon, lat, place.lon, place.lat, zoom));
 
 	/**
 	 * Project the camera's ground look-at target.
 	 */
 	const targetMarker = $derived.by(() => {
-		const _ = renderTick;
-		const m = map;
-		if (!m || display.view.targetLon === undefined || display.view.targetLat === undefined)
-			return null;
-		const p = m.project([display.view.targetLon, display.view.targetLat]);
-		return { x: p.x, y: p.y };
+		if (snap.targetLon === undefined || snap.targetLat === undefined) return null;
+		return projectMini(snap.targetLon, snap.targetLat, place.lon, place.lat, zoom);
 	});
 
 	/**
 	 * The whole ground track, projected to pixels and drawn as an SVG path.
+	 * No render-tick dependency anymore: the ring only changes with the
+	 * destination, so this builds once per place instead of sixty times
+	 * a second.
 	 */
 	const pathD = $derived.by(() => {
-		const _ = renderTick;
-		const m = map;
-		if (!m || !ring.length) return '';
-		const pts = ring.map(([rLon, rLat]) => m.project([rLon, rLat]));
+		if (!ring.length) return '';
+		const pts = ring.map(([rLon, rLat]) => projectMini(rLon, rLat, place.lon, place.lat, zoom));
 		if (pts.length === 0) return '';
 		return `M ${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')} Z`;
+	});
+
+	/**
+	 * Downtown thread, drawn so the marker rides ON a path mid-pass.
+	 * Null when the gate never opens (features, high floors) — draw nothing.
+	 * Same pure inputs as minimap-project.threadArc, so the arc is
+	 * identical every visit and needs no live subscription.
+	 */
+	const threadD = $derived.by(() => {
+		const arc = threadArc(track, place.lat, place.lon, display.config.floorM, display.config.speed);
+		if (!arc) return '';
+		const pts = arc.map(([aLon, aLat]) => projectMini(aLon, aLat, place.lon, place.lat, zoom));
+		return `M ${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')}`;
 	});
 
 	// Elevation profile wave SVG path (sine/cosine climb waveform)
@@ -206,31 +287,52 @@
 </script>
 
 <div class="minimap" aria-label="Flight Orbit Minimap">
-	<MapLibre
-		bind:map
-		autoloadGlobalCss={false}
-		class="fill"
-		style={BLANK_STYLE}
-		center={[place.lon, place.lat]}
-		{zoom}
-		interactive={false}
-		attributionControl={false}
-	>
-		<RasterTileSource
-			id="mini-base"
-			tiles={tiles.gibs}
-			tileSize={TILE_SIZE}
-			maxzoom={TILE_MAXZOOM.gibs}
-		>
-			<RasterLayer paint={{ 'raster-opacity': 0.6, 'raster-saturation': -0.4 }} />
-		</RasterTileSource>
-	</MapLibre>
+	<!-- Backdrop WITHOUT a second live map: a handful of static tiles placed
+	     by the same mercator math as the SVG overlay, fetched once per
+	     destination and cached by the browser. The old MapLibre instance
+	     owned a full WebGL context and repainted at frame rate for a 190 px
+	     inset — this is plain <img>s over a dark disc, at zero frame cost. -->
+	<div class="tile-bed" aria-hidden="true">
+		{#each miniTiles as t (t.url)}
+			<img
+				src={t.url}
+				alt=""
+				loading="lazy"
+				draggable="false"
+				style:left="{t.left}px"
+				style:top="{t.top}px"
+				style:width="{t.size}px"
+				style:height="{t.size}px"
+			/>
+		{/each}
+	</div>
+	{#if nightLatched}
+		<!-- Emitted light, like the main map: screen-blended so the dark
+		     frame changes nothing and lit cities read as towns. -->
+		<div class="tile-night" aria-hidden="true" style:opacity={miniNightOpacity}>
+			{#each miniTiles as t (t.nightUrl)}
+				<img
+					src={t.nightUrl}
+					alt=""
+					loading="lazy"
+					draggable="false"
+					style:left="{t.left}px"
+					style:top="{t.top}px"
+					style:width="{t.size}px"
+					style:height="{t.size}px"
+				/>
+			{/each}
+		</div>
+	{/if}
 
 	<!-- Projected SVG Ground Track & Sightline Overlay -->
-	<svg class="track-svg" viewBox="0 0 190 190" aria-hidden="true">
+	<svg class="track-svg" viewBox="0 0 {MINIMAP_SIZE_PX} {MINIMAP_SIZE_PX}" aria-hidden="true">
 		{#if pathD}
 			<path d={pathD} class="track-path-glow" />
 			<path d={pathD} class="track-path" />
+		{/if}
+		{#if threadD}
+			<path d={threadD} class="thread-path" />
 		{/if}
 
 		<!-- Sideways Passenger Window Sightline & Dynamic FOV Wedge -->
@@ -345,6 +447,30 @@
 		user-select: none;
 	}
 
+	.tile-bed {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		background: #04070d;
+		/* The live map graded its raster dimmer and cooler; keep the look. */
+		filter: opacity(0.6) saturate(0.6);
+		pointer-events: none;
+	}
+	.tile-bed img {
+		position: absolute;
+		max-width: none;
+	}
+	.tile-night {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		mix-blend-mode: screen;
+		pointer-events: none;
+	}
+	.tile-night img {
+		position: absolute;
+		max-width: none;
+	}
 	.track-svg {
 		position: absolute;
 		inset: 0;
@@ -367,6 +493,15 @@
 		stroke-width: 1.8;
 		stroke-linecap: round;
 		stroke-linejoin: round;
+	}
+
+	.thread-path {
+		fill: none;
+		stroke: var(--accent-cyan);
+		stroke-width: 1.4;
+		stroke-dasharray: 3 2;
+		stroke-linecap: round;
+		opacity: 0.85;
 	}
 
 	.sightline {

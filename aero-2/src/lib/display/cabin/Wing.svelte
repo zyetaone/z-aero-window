@@ -2,7 +2,7 @@
 	/**
 	 * Wing — High-Fidelity 3D Boeing 737 aircraft wing rendered in the passenger window.
 	 *
-	 * Uses Three.js WebGL with upward dihedral sweep, wingtip navigation light (port red),
+	 * Uses Three.js WebGL with upward dihedral sweep, wingtip navigation light (starboard green),
 	 * double-pulse strobe beacon, and dynamic specular lighting reflecting solar time.
 	 * Responds dynamically to airframe banking, solar lighting transitions, and operator alignment knobs.
 	 */
@@ -103,45 +103,18 @@
 		const SUN_COLOR = new Color(0xffeedd);
 		const MOON_COLOR = new Color(0x9fb6da);
 
-		/**
-		 * Model yaw, radians (≈300°).
-		 *
-		 * `wing.glb` is not a wing — it is a whole Sketchfab 737 (CC-BY-4.0),
-		 * 35 m across in cm units, nose toward model +Z (fin at the −Z end),
-		 * shrunk to metres by its own root node. The old 1.68 rad (≈96°)
-		 * combined with the z-mirror below put the NOSE behind the camera
-		 * and framed the tail: projected through this exact chain the nose
-		 * lands at z=7.3 against a camera at z=6.2, so the aircraft read as
-		 * flying tail-first. Proven by composing the chain headlessly
-		 * (three.js math, no renderer) over the landmarks nose (0.55,·),
-		 * tip (−0.37,·), belly (0.11,·) in NDC at 300° — nose right-forward,
-		 * wing sweeping lower-left, engines and fin behind the camera and
-		 * out of sight. Re-derive the same way if the model or framing
-		 * ever changes; eyeballing Euler triples is how it broke.
-		 */
-		const WING_YAW = 5.24;
-
 		const wingHolder = new Group();
 		// Base positioning: Root in lower right, wing sweeping into camera depth
 		wingHolder.position.set(1.1, -1.1, 0);
 		scene.add(wingHolder);
 
 		// Wingtip Strobe & Nav Light in 3D
-		const strobeLight = new PointLight(0xffffff, 0, 30);
-		strobeLight.position.set(-13.7, -4.7, -27.4);
+		const strobeLight = new PointLight(0xffffff, 0, 15);
+		strobeLight.position.set(-2.6, 0.85, -1.6);
 		wingHolder.add(strobeLight);
 
-		/**
-		 * Wingtip lights ride the SHOWN tip in holder space, not the origin.
-		 *
-		 * The tip landmark (model −X extreme) sits at (−13.7, −5.6, −27.4)
-		 * in holder units under the yaw below; the old (−2.6, 0.85, −1.6)
-		 * was placed for the previous composition and lit empty air near
-		 * the fuselage instead. Distances cover the ~24-unit camera range.
-		 */
-		const TIP_POS: [number, number, number] = [-13.7, -4.7, -27.4];
-		const navLight = new PointLight(0x22c55e, 1.5, 10);
-		navLight.position.set(...TIP_POS);
+		const navLight = new PointLight(0x22c55e, 1.5, 4); // Green starboard nav light
+		navLight.position.set(-2.6, 0.85, -1.6);
 		wingHolder.add(navLight);
 
 		let wingMesh: Object3D | null = null;
@@ -151,8 +124,8 @@
 			'/models/wing.glb',
 			(gltf) => {
 				wingMesh = gltf.scene;
-				// Yaw ≈300°: nose-forward left-window composition. See WING_YAW.
-				wingMesh.rotation.set(0.02, WING_YAW, 0.18);
+				// Canonical forward flight orientation & aerodynamic chord facing motion
+				wingMesh.rotation.set(0.02, 1.68, 0.18);
 				wingMesh.scale.set(1.11, 1.11, -1.11);
 				wingMesh.traverse((child) => {
 					if (child instanceof Mesh && child.material) {
@@ -206,7 +179,7 @@
 			}
 
 			if (wingMesh) {
-				const sweepRad = WING_YAW + (yawOffset * Math.PI) / 180;
+				const sweepRad = 1.68 + (yawOffset * Math.PI) / 180;
 				wingMesh.rotation.set(0.02, sweepRad, 0.18);
 			}
 
@@ -253,11 +226,8 @@
 					0
 				);
 
-				// Aviation Standard: green starboard, red port. The composition is
-				// a LEFT-window view (nose right), so the shown tip is port:
-				// red by default, green when the reversed loop mirrors to the
-				// other side of the aircraft.
-				navLight.color.setHex(screenSign > 0 ? 0xef4444 : 0x22c55e);
+				// Aviation Standard: Green for Starboard (Right, screenSign > 0), Red for Port (Left, screenSign < 0)
+				navLight.color.setHex(screenSign > 0 ? 0x22c55e : 0xef4444);
 			}
 
 			renderer.render(scene, camera);

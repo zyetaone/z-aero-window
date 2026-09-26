@@ -1,10 +1,13 @@
 <script lang="ts">
 	/**
-	 * RainGlass — real water droplets on the window glass with live backdrop refraction,
-	 * condensation frost, and storm lightning flash.
+	 * RainGlass — real water droplets on the window glass with live backdrop refraction
+	 * and storm lightning flash. (No frost layer ships: an earlier docstring
+	 * promised condensation frost that was never built. If frost comes back,
+	 * it wants an altitude-plus-humidity gate and edge-creeping CSS like the
+	 * beads — not a note in this sentence.)
 	 */
 	import { useDisplay } from '../display.svelte.js';
-	import { slotNoise, mulberry32 } from '../flight/flight-path.js';
+	import { strikeAt, mulberry32 } from '../flight/flight-path.js';
 
 	const display = useDisplay();
 
@@ -54,22 +57,20 @@
 	 * slot index. No shared state, no message, and a pane that reboots rejoins
 	 * the same sequence.
 	 */
-	const FLASH_PERIOD_SEC = 13;
 	/**
 	 * Read the clock the rest of the window is drawn from, rather than a second
 	 * one. `display.view.wallSec` is the timestamp the current frame's pose was
 	 * derived at, so the flash lands on exactly the frame it belongs to; a
 	 * private `Date.now()` in a private RAF is a second clock that can sample
 	 * either side of the 0.12 s strike window the pose used.
+	 *
+	 * Positioned, not fullscreen: the strike point comes with the schedule,
+	 * so the flash blooms where the weather is instead of blinking the
+	 * whole glass at once.
 	 */
-	const lightning = $derived.by(() => {
-		if (display.config.weather !== 'storm') return false;
-		const now = display.view.wallSec;
-		const slot = Math.floor(now / FLASH_PERIOD_SEC);
-		// Strike somewhere in the first 9 s of the slot, deterministically.
-		const since = now - (slot * FLASH_PERIOD_SEC + slotNoise(slot) * 9);
-		return since >= 0 && since < 0.12;
-	});
+	const strike = $derived.by(() =>
+		display.config.weather !== 'storm' ? null : strikeAt(display.view.wallSec)
+	);
 </script>
 
 {#if active}
@@ -92,8 +93,13 @@
 	</div>
 {/if}
 
-{#if lightning}
-	<div class="lightning-flash" aria-hidden="true"></div>
+{#if strike}
+	<div
+		class="lightning-flash"
+		style:background="radial-gradient(circle at {strike.x01 * 100}% {strike.y01 * 100}%, rgba(235,
+		245, 255, 0.6) 0%, rgba(235, 245, 255, 0.28) 25%, transparent 60%)"
+		aria-hidden="true"
+	></div>
 {/if}
 
 <style>
@@ -190,7 +196,6 @@
 	.lightning-flash {
 		position: absolute;
 		inset: 0;
-		background: rgba(235, 245, 255, 0.45);
 		pointer-events: none;
 		z-index: 15;
 		animation: flash 0.12s ease-out;

@@ -14,6 +14,7 @@
 		SENTINEL2_PLACES,
 		TILE_MAXZOOM,
 		TILE_SIZE,
+		sentinel2MaxZoom,
 		tileTemplates
 	} from '#lib/settings/tiles.js';
 	import { weatherLightLoss } from './atmosphere.js';
@@ -101,7 +102,10 @@
 	maxzoom={TILE_MAXZOOM.gibs}
 	attribution={TILE_ATTRIBUTION}
 >
-	<RasterLayer paint={{ ...grade, 'raster-opacity': 1.0 }} />
+	<!-- Explicit layer id (not just the source id): the in-map sky layers
+	     (stars, sun/moon) insert `beforeId` this layer, and auto-generated
+	     `svmlgl-layer-N` ids are mount-order accidents, not addresses. -->
+	<RasterLayer id="gibs-day" paint={{ ...grade, 'raster-opacity': 1.0 }} />
 </RasterTileSource>
 
 <!-- SENTINEL-2, the sharp basemap, laid OVER the MODIS wash.
@@ -131,7 +135,7 @@
 		tiles={tiles.sentinel2}
 		tileSize={TILE_SIZE}
 		minzoom={SENTINEL2_MINZOOM}
-		maxzoom={TILE_MAXZOOM.sentinel2}
+		maxzoom={sentinel2MaxZoom(display.config.place.id)}
 	>
 		<RasterLayer paint={{ ...grade, 'raster-opacity': 1.0 }} />
 	</RasterTileSource>

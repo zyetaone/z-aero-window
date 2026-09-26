@@ -170,25 +170,40 @@ describe('Sky', () => {
 	 * gaps in x were the same 0.324%, and y/size/opacity were all derived from
 	 * that same seed -- an evenly spaced comb whose brightness varied with
 	 * position.
+	 *
+	 * The population has since moved to `starfield.ts`, first as a fibonacci
+	 * sphere + iterated mulberry32 stream, now as the vendored Yale catalog
+	 * (`yale-stars.ts`) with a per-index twinkle hash; uniformity and
+	 * determinism are asserted by real unit tests in `starfield.test.ts`.
+	 * This guard stays on the source so the lattice can never come back
+	 * under a new name.
 	 */
 	it('iterates the star generator instead of re-seeding it per star', () => {
 		// Comments stripped: this file DESCRIBES the old lattice, and a guard
 		// that trips on the explanation of a bug is a guard on prose.
-		const code = findSource('Sky.svelte').replace(/\/\*[\s\S]*?\*\//g, '');
+		const code = findSource('starfield.ts').replace(/\/\*[\s\S]*?\*\//g, '');
 		expect(code, 're-seeding from the loop index produces a lattice').not.toMatch(/i \* 9301/);
-		expect(code, 'the generator must carry state between stars').toMatch(/seed = \(seed \*/);
+		expect(code, 'star positions come from the vendored catalog').toContain('yaleCatalog');
+		expect(code, 'no unseeded randomness in shipped sky code').not.toMatch(/Math\.random/);
 	});
 
 	/**
-	 * Bank reaches the world as a PITCH offset. It never reaches the map as
-	 * roll -- calculateCameraOptionsFromTo derives bearing and pitch from
-	 * geometry and nothing sets roll -- so an overlay that rotates with bank is
-	 * answering the same input differently from the world behind it.
+	 * The map now flies real camera roll (`roll: -bank * WORLD_ROLL_GAIN` in
+	 * Stage.svelte), so the celestial overlay MUST rotate — the old "never
+	 * roll" rule died with the level world it assumed. What replaced it is
+	 * stricter: the overlay takes the SAME gain from the SAME home, negated to
+	 * screen space, so the mask line tracks the rendered horizon instead of
+	 * inventing a second bank response. A local magic number here would drift
+	 * from the map's on the next tune and spill the wash over terrain.
 	 */
-	it('does not roll the celestial overlay against a world that stays level', () => {
+	it('rolls the celestial overlay at the same gain as the map', () => {
 		const src = findSource('Sky.svelte');
-		const css = src.slice(src.indexOf('<style>'));
-		expect(css).not.toMatch(/transform:\s*rotate\(var\(--view-bank\)\)/);
+		expect(src, 'one gain home, not a second number').toContain('WORLD_ROLL_GAIN');
+		expect(src, 'same input as the map roll').toContain('display.view.bankDeg');
+		// Comments stripped: the history above names the old hack, and a guard
+		// that trips on the explanation of a bug is a guard on prose.
+		const code = src.replace(/\/\*[\s\S]*?\*\//g, '');
+		expect(code, 'the old full-bank CSS hack stays dead').not.toMatch(/var\(--view-bank\)/);
 	});
 });
 
