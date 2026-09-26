@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 
 describe('Location.moodFor', () => {
 	it('falls back to the default openly for unknown ids', () => {

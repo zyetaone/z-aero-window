@@ -15,7 +15,7 @@ export const TILE_MAXZOOM = {
 	sentinel2: 13,
 	gibs: 9,
 	/** VIIRS ships GoogleMapsCompatible_Level8 — there is no z9 to ask for. */
-	viirs: 8,
+	viirs: 11,
 	terrarium: 13,
 	/**
 	 * Packed to z11 today, not the tool's z13 default.
@@ -187,7 +187,7 @@ export const IMAGERY_GRADE = {
 	fadeDuration: 0
 };
 
-const VIIRS_TINT_VERSION = 2;
+const VIIRS_TINT_VERSION = 3;
 
 export function tileTemplates(prefix = '/api/tiles'): {
 	sentinel2: string[];

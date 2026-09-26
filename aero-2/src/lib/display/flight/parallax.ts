@@ -14,7 +14,7 @@
 export const FLEET_ROLES = ['solo', 'center', 'left', 'right'] as const;
 export type FleetRole = (typeof FLEET_ROLES)[number];
 
-export const PANORAMA_ARC_DEG = 72;
+const PANORAMA_ARC_DEG = 72;
 
 export function roleYawOffsetDeg(role: FleetRole): number {
 	switch (role) {

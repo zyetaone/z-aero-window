@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { LOCATIONS } from '#lib/settings/locations.js';
+	import { LOCATIONS } from '#lib/locations.js';
 	import { SCENE_PRESETS } from '#lib/settings/presets.js';
 
 	let { origin }: { origin: string } = $props();

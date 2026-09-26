@@ -51,7 +51,7 @@ STAC = "https://earth-search.aws.element84.com/v1/search"
 
 # Shortcuts only — --lat/--lon works for anywhere and is the general path.
 #
-# The first two mirror aero-2's src/lib/settings/locations.ts; the rest are v1's
+# The first two mirror aero-2's src/lib/locations.ts; the rest are v1's
 # content/locations/catalog.ts, which is the catalog that actually ships. Kept
 # as plain numbers rather than parsed out of either TypeScript file: this is an
 # offline build step run by hand, and a parser for two differently-shaped

@@ -46,9 +46,12 @@
 		NIGHT_VECTOR_SPAN_M,
 		NIGHT_VECTOR_TOP_M
 	} from './sun.js';
-	import { Location } from '#lib/settings/locations.js';
+	import { weatherLightLoss } from './atmosphere.js';
+	import { Location } from '#lib/locations.js';
 
 	const display = useDisplay();
+	/** Metres above the road-lamp handover over which the cruise exposure ramps in. */
+	const CRUISE_EXPOSURE_SPAN_M = 4000;
 	// PUBLIC_TILE_SERVER_URL, so a pane can read tiles from a peer on the wall.
 	const tiles = tileTemplates(PUBLIC_TILE_SERVER_URL);
 
@@ -97,6 +100,40 @@
 	$effect(() => {
 		latched = hysteresisGate(nightLightOpacity, latched, NIGHT_MOUNT_ON, NIGHT_MOUNT_OFF);
 	});
+
+	/**
+	 * Exposure with altitude. VIIRS stops at z8, about 470 m a pixel, so from
+	 * cruise a city is a solid orange sheet of stretched pixels. A passenger
+	 * sees the opposite: the higher you are, the more the city collapses to
+	 * its bright cores with black between. Above the vector handover the
+	 * raster dims, gains contrast (crushes its dim skirt) and loses its
+	 * brightest cream. Values poked live at 12 km over Dubai on 2026-09-22
+	 * under the committed world grade. The ramp starts where the road lamps
+	 * hand over (NIGHT_VECTOR_TOP_M) and is full 4 km above it.
+	 */
+	const cruise = $derived.by(() => Math.round(100 * (
+		Math.max(0, Math.min(1, (display.view.aglM - NIGHT_VECTOR_TOP_M) / CRUISE_EXPOSURE_SPAN_M))
+	)) / 100);
+	/**
+	 * Low pass: below ~2.5 km the road lamps and lit windows carry the city, and
+	 * the raster, stretched to metres per pixel, is an orange blanket under
+	 * them. It hands two-thirds of itself over to the vectors from 2.5 km down
+	 * to 1 km (0.01 steps); the rest stays as the ambient glow between roads
+	 * that a city never loses. The per-place gain already sits in
+	 * nightLightOpacity above, so it is not applied twice here.
+	 */
+	const lowPass = $derived(
+		Math.round(Math.max(0, Math.min(1, (display.view.aglM - 1000) / 1500)) * 100) / 100
+	);
+	// The regional glow dims under a cloud deck too (Roads.svelte, `deck`). 0.01 steps.
+	const deck = $derived(weatherLightLoss(display.weather));
+	const viirsOpacity = $derived(
+		Math.round(
+			100 * Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise) * (0.25 + 0.75 * lowPass) * (1 - 0.8 * deck)
+		) / 100
+	);
+	const viirsContrast = $derived(0.55 * cruise);
+	const viirsBrightnessMax = $derived(1 - 0.3 * cruise);
 </script>
 
 <!-- VIIRS arrives already masked: the tile route bakes luminance into an
@@ -114,7 +151,9 @@
 	>
 		<RasterLayer
 			paint={{
-				'raster-opacity': nightLightOpacity,
+				'raster-opacity': viirsOpacity,
+				'raster-contrast': viirsContrast,
+				'raster-brightness-max': viirsBrightnessMax,
 				'raster-fade-duration': IMAGERY_GRADE.fadeDuration,
 				'raster-resampling': IMAGERY_GRADE.resampling
 			}}

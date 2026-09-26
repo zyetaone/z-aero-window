@@ -8,15 +8,27 @@ import {
 	phaseFor,
 	azimuthSweepAt,
 	FlightTrack,
-	type OrbitPose
-} from './flight-path.js';
-import { downtownBlendAt, downtownPose, downtownWarpSec } from './downtown.js';
+	type OrbitPose,
+	DWELL_SEC,
+	slotNoise,
+	M_PER_DEG_LAT, planarBearing } from './flight-path.js';
+import {
+	DOWNTOWN_GATE_PHASE_SEC,
+	downtownGateAt,
+	downtownPose,
+	downtownTimeAt,
+	downtownWarpSec,
+	DOWNTOWN_PASS_START_SEC,
+	DOWNTOWN_PASS_END_SEC,
+	DOWNTOWN_HANDOFF_SEC
+} from './downtown.js';
 import { roleYawOffsetDeg, type FleetRole } from './parallax.js';
-import { signedDelta } from '#lib/angles.js';
+import { Location } from '#lib/locations.js';
 import { resolveLocalHours } from '../world/sun.js';
 
 export interface CameraParams {
 	place: {
+		id?: string;
 		lat: number;
 		lon: number;
 		utcOffset: number;
@@ -79,14 +91,26 @@ export const DEFAULT_PITCH_DEG = -10;
  * first bites around ~4,900 m AGL and holds the target at 70 km all the way
  * to the ceiling.
  */
-export const LOOKAT_MAX_GROUND_DIST_M = 70_000;
+const LOOKAT_MAX_GROUND_DIST_M = 70_000;
 
-import { DEG2RAD } from '#lib/angles.js';
-const M_PER_DEG_LAT = 111_320;
+import { DEG2RAD, signedDelta, wrapSigned } from '#lib/angles.js';
+import type { Weather } from '#lib/wall.js';
 
 /** Written out in five places before this existed. */
-export const WEATHERS = ['clear', 'cloudy', 'rain', 'overcast', 'storm'] as const;
-export type Weather = (typeof WEATHERS)[number];
+
+/**
+ * Cloud periods: which weather a slot flies through when nothing pinned one.
+ *
+ * Roughly one slot in six is a solid deck (overcast: the ground all but
+ * gone), one in six broken cloud, the rest clear. Keyed off the same slot
+ * index as the rotation, so the change lands under the blind drop on the hop
+ * and every pane flies the same sky. Panes running a pinned `?weather=`
+ * or a pushed non-clear weather never reach this.
+ */
+export function scheduledWeather(wallSec: number): Weather {
+	const n = slotNoise(Math.floor(wallSec / DWELL_SEC), 7);
+	return n < 1 / 6 ? 'overcast' : n < 2 / 6 ? 'cloudy' : 'clear';
+}
 
 /**
  * Procedural atmospheric turbulence — micro-shakes, low-frequency bumps, wing flutter.
@@ -116,7 +140,7 @@ const TURBULENCE_INTENSITY = {
 	storm: 1.0
 } as const satisfies Record<Weather, number>;
 
-export interface Turbulence {
+interface Turbulence {
 	pitchJitterDeg: number;
 	rollJitterDeg: number;
 	verticalBumpM: number;
@@ -124,16 +148,34 @@ export interface Turbulence {
 	intensity: number;
 }
 
-export function atmosphericTurbulence(wallSec: number, weather: Weather = 'clear'): Turbulence {
+function atmosphericTurbulence(wallSec: number, weather: Weather = 'clear'): Turbulence {
 	const intensity = TURBULENCE_INTENSITY[weather];
 	const t = Math.round(wallSec * TURBULENCE_GRID_HZ) / TURBULENCE_GRID_HZ;
 
-	// Multi-octave harmonic noise.
+	/**
+	 * Two octaves, none faster than ~0.8 Hz. There was a third at 14.7 and
+	 * 22.3 rad/s: on the 50 ms grid it held one value for three frames and
+	 * jumped, which read as judder, not weather. A bump is a slow thing.
+	 */
 	const lowFreq = Math.sin(t * 0.73) * Math.cos(t * 0.37);
 	const midFreq = Math.sin(t * 3.41 + 1.2) * 0.5 + Math.cos(t * 5.13) * 0.3;
-	const highFreq = Math.sin(t * 14.7) * Math.sin(t * 22.3) * 0.2;
 
-	const composite = (lowFreq * 0.5 + midFreq * 0.35 + highFreq * 0.15) * intensity;
+	/**
+	 * Discrete bumps (aero-1's bump events): three per slot at slot-seeded
+	 * seconds, each a decaying 0.6 Hz ring over ~8 s. Present even in clear
+	 * air, scaled up by weather. Same grid, same slot noise, so every pane
+	 * hits the same pocket at the same second.
+	 */
+	const slot = Math.floor(t / DWELL_SEC);
+	const phase = t - slot * DWELL_SEC;
+	let bump = 0;
+	for (let k = 0; k < 3; k++) {
+		const at = 20 + slotNoise(slot, 31 + k) * (DWELL_SEC - 40);
+		const rel = phase - at;
+		if (rel >= 0 && rel < 10) bump += Math.exp(-rel / 2.5) * Math.sin(rel * 2 * Math.PI * 0.6);
+	}
+
+	const composite = (lowFreq * 0.55 + midFreq * 0.45) * intensity + bump * 0.7 * (0.25 + intensity);
 
 	return {
 		pitchJitterDeg: composite * 0.45,
@@ -142,14 +184,6 @@ export function atmosphericTurbulence(wallSec: number, weather: Weather = 'clear
 		wingFlutterPx: composite * 12.0,
 		intensity
 	};
-}
-
-/** Initial great-circle bearing from one point to another, in degrees. */
-function bearingTo(fromLat: number, fromLon: number, toLat: number, toLon: number): number {
-	const cosLat = Math.cos(fromLat * DEG2RAD) || 1;
-	const dNorth = (toLat - fromLat) * M_PER_DEG_LAT;
-	const dEast = (toLon - fromLon) * M_PER_DEG_LAT * cosLat;
-	return normalizeHeading((Math.atan2(dEast, dNorth) * 180) / Math.PI);
 }
 
 export interface CameraView {
@@ -216,7 +250,7 @@ export class FlightCamera {
 		const inwardDeg =
 			centerLat === undefined || centerLon === undefined
 				? plane.headingDeg + 90
-				: bearingTo(plane.lat, plane.lon, centerLat, centerLon);
+				: planarBearing(plane.lat, plane.lon, centerLat, centerLon);
 
 		const cameraBearingDeg = normalizeHeading(inwardDeg + this.azimuthDeg);
 
@@ -228,7 +262,14 @@ export class FlightCamera {
 		 * At 0.85 gain, entering a turn dramatically reveals the ground/city below,
 		 * and exiting/levelling opens the window to the horizon and sky canopy.
 		 */
-		const BANK_VIEW_GAIN = 0.85;
+		/**
+		 * 0.85 when bank reached the world ONLY as a pitch offset. Stage now
+		 * rolls the map by the bank (WORLD_ROLL_GAIN), so the same bank was
+		 * counted twice: the horizon rolled AND the sightline lifted toward
+		 * it, and every turn swung the window from mostly ground to mostly
+		 * sky. A small residual keeps a hint of the nose-up feel of a turn.
+		 */
+		const BANK_VIEW_GAIN = 0.3;
 		const bankOffset = (plane.bankDeg ?? 0) * BANK_VIEW_GAIN;
 
 		/**
@@ -347,17 +388,59 @@ export class FlightCamera {
 }
 
 export function calculateCameraView(wallSec: number, params: CameraParams): CameraView {
+	/**
+	 * Each visit cruises at its own level. The ceiling drops by up to 30% of
+	 * the climb band on a per-slot draw (never the floor: every clearance
+	 * argument is about the floor), so one visit tops out near 13 km and the
+	 * next holds 10. Same slot, same number, on every pane.
+	 */
+	const look = Location.moodFor(params.place.id ?? '');
+	const slot = Math.floor(wallSec / DWELL_SEC);
+	const band = params.ceilingM - params.floorM;
+	const ceilingM = Math.max(
+		params.floorM + band * 0.5,
+		params.ceilingM - band * 0.3 * slotNoise(slot, 11)
+	);
 	const track = new FlightTrack(
 		params.place.lat,
 		params.place.lon,
 		params.floorM,
-		params.ceilingM,
-		params.direction ?? 1,
+		ceilingM,
+		((params.direction ?? 1) * look.direction) as 1 | -1,
 		// Derived here, from the same second as the pose. See `phaseFor`.
 		phaseFor(params.place, wallSec)
 	);
-	const effectiveSec = wallSec * (params.speed ?? 1.0);
-	const plane = track.poseAt(effectiveSec);
+	const speed = params.speed ?? 1.0;
+	const effectiveSec = wallSec * speed;
+	/**
+	 * One flight clock for the whole slot: the downtown pass runs it faster
+	 * (downtownWarpSec), and the big loop keeps flying from wherever the pass
+	 * left it. Two clocks -- warped inside the pass, plain outside -- put the
+	 * aircraft in two places at the moment the pass let go.
+	 */
+	const slotStart = Math.floor(wallSec / DWELL_SEC) * DWELL_SEC;
+	const gate = params.place.isFeature
+		? 0
+		: downtownGateAt(
+				// The HIGHEST climb across the whole pass window, not the midpoint
+				// alone: the ramp pulls the aircraft from the climb to the thread
+				// altitude in 90 s, and a midpoint read let a 9 km climb at the
+				// ramp's start through the gate — 106 m/s down, measured.
+				Math.max(
+					track.altitudeAt(slotStart + DOWNTOWN_PASS_START_SEC - DOWNTOWN_HANDOFF_SEC),
+					track.altitudeAt(slotStart + DOWNTOWN_GATE_PHASE_SEC),
+					track.altitudeAt(slotStart + DOWNTOWN_PASS_END_SEC + DOWNTOWN_HANDOFF_SEC)
+				)
+			);
+	const flightSec = downtownWarpSec(effectiveSec, wallSec, speed, gate);
+	/**
+	 * Altitude keys on the WALL second, unscaled and unwarped. The speed knob
+	 * (default 4x) and the pass warp scale the loop clock, and the climb rode
+	 * along: a 900 s cosine ran in 225 s of wall time, 2.7 cycles a slot, and
+	 * measured 140 m/s (28,000 ft/min) descents. Speed means "flies the loop
+	 * faster", not "climbs faster"; the minimap strip keys the same way.
+	 */
+	const plane = { ...track.poseAt(flightSec), aglM: track.altitudeAt(wallSec) };
 	const roleOffset = roleYawOffsetDeg(params.fleetRole ?? 'solo');
 	// The operator's aim, the fleet parallax, and the slow look-around —
 	// three independent offsets, one bearing. The sweep keys off wallSec,
@@ -366,9 +449,10 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	// is a transit with a fixed off-nose aim (pinned by display.test.ts),
 	// and there is no framed subject for the pan to walk across.
 	const sweep = params.place.isFeature ? 0 : azimuthSweepAt(wallSec);
+	// The place's composition: its own downward bias on the operator's pitch.
 	const camera = new FlightCamera(
 		params.azimuthDeg + roleOffset + sweep,
-		params.pitchDeg
+		params.pitchDeg + look.pitchBiasDeg
 	);
 
 	/**
@@ -391,36 +475,27 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	/**
 	 * Mid-visit downtown thread. The pass is a wall-slot event like the
 	 * rotation itself, so it keys off wallSec — NOT effectiveSec, which the
-	 * speed knob scales. Blending two full views (not poses) keeps aim,
-	 * turbulence and time-of-day continuous: at 0 the thread view is
-	 * unreachable and at 1 the big loop is, with the handoff eased both
-	 * sides in `downtownBlendAt`.
+	 * speed knob scales. ONE pose: loop scale, clock warp and altitude all
+	 * follow the blend, so the aircraft spirals from the big ring into the
+	 * small one and back out, heading continuous throughout. (It used to
+	 * blend two views 40 km apart, which slid the aircraft sideways at
+	 * kilometres per second and flipped the heading in the handoff.) The
+	 * gate still reads the unwarped climb: the visit's altitude decides
+	 * whether the pass engages.
 	 */
-	/**
-	 * Features never thread, explicitly — not via the altitude gate. The
-	 * gate alone only saves the Himalayas (6,000 m floor); ocean and desert
-	 * fly low enough to open it, and the pass would detour a mid-transit
-	 * crossing into circles over open water. Crossing is the feature
-	 * experience; visits are for cities.
-	 */
-	const thread = params.place.isFeature ? 0 : downtownBlendAt(wallSec, plane.aglM);
-	if (thread <= 0) return big;
-	// The thread flies its own clock: position AND heading/bank come from
-	// the warped pose, so the aircraft circles downtown instead of
-	// side-slipping across it holding the big loop's attitude. The gate
-	// above deliberately still reads the unwarped climb — it is the
-	// visit's altitude that decides whether the pass engages.
-	const warpPose = track.poseAt(downtownWarpSec(effectiveSec));
-	const small = downtownPose(warpPose, params.place.lat, params.place.lon, params.floorM);
-	const threadView = camera.project(
-		small,
-		utcOffset,
-		wallSec,
-		params.place.lat,
-		params.place.lon,
-		weather
+	const thread = downtownTimeAt(((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC) * gate;
+	if (thread <= 0) return holdFloor(big, params.floorM);
+	const spiral = downtownPose(plane, params.place.lat, params.place.lon, params.floorM, thread);
+	// downtownAltM never undercuts the place floor, so the floor holds here too.
+	return holdFloor(
+		camera.project(spiral, utcOffset, wallSec, params.place.lat, params.place.lon, weather),
+		params.floorM
 	);
-	return blendViews(big, threadView, thread);
+}
+
+/** Turbulence may perturb the pose; it may not take it under the climb floor. */
+function holdFloor(view: CameraView, floorM: number): CameraView {
+	return view.aglM >= floorM ? view : { ...view, aglM: floorM };
 }
 
 /**
@@ -438,19 +513,18 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 export function blendViews(a: CameraView, b: CameraView, t: number): CameraView {
 	const s = Math.max(0, Math.min(1, t));
 	const ease = s * s * (3 - 2 * s);
-	const wrapLon = (d: number) => ((d + 540) % 360) - 180;
 	// timeOfDay blends in degree space (15 deg per hour) so a hop across
 	// midnight eases forward instead of rewinding the whole dial.
 	const todD = signedDelta(a.timeOfDay * 15, b.timeOfDay * 15) / 15;
 	return {
 		...b,
 		lat: a.lat + (b.lat - a.lat) * ease,
-		lon: a.lon + wrapLon(b.lon - a.lon) * ease,
+		lon: a.lon + wrapSigned(b.lon - a.lon) * ease,
 		aglM: a.aglM + (b.aglM - a.aglM) * ease,
 		planeHeadingDeg: a.planeHeadingDeg + signedDelta(a.planeHeadingDeg, b.planeHeadingDeg) * ease,
 		bankDeg: a.bankDeg + (b.bankDeg - a.bankDeg) * ease,
 		targetLat: a.targetLat + (b.targetLat - a.targetLat) * ease,
-		targetLon: a.targetLon + wrapLon(b.targetLon - a.targetLon) * ease,
+		targetLon: a.targetLon + wrapSigned(b.targetLon - a.targetLon) * ease,
 		distanceM: a.distanceM + (b.distanceM - a.distanceM) * ease,
 		timeOfDay: a.timeOfDay + todD * ease
 	};

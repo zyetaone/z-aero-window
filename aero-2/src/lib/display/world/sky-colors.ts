@@ -22,7 +22,7 @@
 
 import { duskHorizonMix, duskVaultMix } from './sun.js';
 import { cloudedRgb, lerpRgb, type Rgb } from './atmosphere.js';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 
 const DUSK_SKY: Rgb = [0.22, 0.12, 0.32];
 const NIGHT_SKY: Rgb = [0.01, 0.02, 0.06];

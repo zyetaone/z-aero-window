@@ -96,6 +96,10 @@ export class Location {
 	get utcOffset(): number {
 		return offsetHoursNow(this.timeZone);
 	}
+	/** The offset at a wall second, so the render path never asks a second clock (ADR-007). */
+	utcOffsetAt(wallSec: number): number {
+		return offsetHoursNow(this.timeZone, wallSec * 1000);
+	}
 
 	/**
 	 * The catalog, carried over from v1's `content/locations/catalog.ts`.
@@ -108,6 +112,10 @@ export class Location {
 	 * ground, because the camera flies at floor + terrain. Denver needs 3,000 m
 	 * for the Front Range and the Himalayas 3,500 for the obvious reason; a
 	 * coastal city does not.
+	 *
+	 * Floors were lifted 2026-09-23 (400-900 m read as a low approach for most
+	 * of every climb cycle): cities now trough at 2,500-3,300 m, ocean at 2,000,
+	 * and the spread between them is kept.
 	 *
 	 * The envelopes are deliberately NOT uniform. Identical 400..13,000 for
 	 * every place made every location fly the same profile and read as the same
@@ -127,12 +135,12 @@ export class Location {
 			78.3772,
 			'Asia/Kolkata',
 			500,
-			400,
+			2_500,
 			12_500
 		),
-		new Location('mumbai', 'Mumbai, India', 19.076, 72.8777, 'Asia/Kolkata', 10, 500, 12_000),
-		new Location('dubai', 'Dubai, UAE', 25.2048, 55.2708, 'Asia/Dubai', 5, 600, 13_000),
-		new Location('dallas', 'Dallas, Texas', 32.7767, -96.797, 'America/Chicago', 150, 700, 12_000),
+		new Location('mumbai', 'Mumbai, India', 19.076, 72.8777, 'Asia/Kolkata', 10, 2_600, 12_000),
+		new Location('dubai', 'Dubai, UAE', 25.2048, 55.2708, 'Asia/Dubai', 5, 2_800, 13_000),
+		new Location('dallas', 'Dallas, Texas', 32.7767, -96.797, 'America/Chicago', 150, 3_000, 12_000),
 		new Location(
 			'phoenix',
 			'Phoenix, Arizona',
@@ -140,7 +148,7 @@ export class Location {
 			-112.0101,
 			'America/Phoenix',
 			340,
-			800,
+			3_200,
 			12_500
 		),
 		new Location(
@@ -150,7 +158,7 @@ export class Location {
 			-115.1398,
 			'America/Los_Angeles',
 			620,
-			900,
+			3_300,
 			12_800
 		),
 		new Location(
@@ -170,7 +178,7 @@ export class Location {
 			-87.7522,
 			'America/Chicago',
 			190,
-			650,
+			2_700,
 			11_500
 		),
 		/**
@@ -201,7 +209,7 @@ export class Location {
 			-157.8583,
 			'Pacific/Honolulu',
 			0,
-			300,
+			2_000,
 			11_000,
 			'feature'
 		),
@@ -212,7 +220,7 @@ export class Location {
 			25.6628,
 			'Africa/Cairo',
 			500,
-			700,
+			2_800,
 			12_500,
 			'feature'
 		)
@@ -261,27 +269,82 @@ export class Location {
 	}
 }
 
+/**
+ * A place is a composition, not a coordinate. These are the painter's
+ * choices per destination: how far down the window looks (a coast wants
+ * horizon and sea, a plateau wants ground), where the cloud deck sits
+ * relative to the operator's 3,500 m, how much cloud the sky carries, and
+ * which way round the loop is flown so the interesting side (sea, mountains)
+ * is under the window. Render-path biases, never config writes.
+ */
 export interface PlaceMood {
 	/** Daytime dust in the air: 0 crisp alpine, ~0.4 Saharan dust. */
 	dust: number;
 	/** Night-light gain: showcase cities above 1, sleeping desert below. */
 	nightGlow: number;
+	/** Added to the pane's pitch: negative looks further down, positive lifts toward the horizon. */
+	pitchBiasDeg: number;
+	/** Added to the pane's cloud deck altitude, metres. */
+	deckOffsetM: number;
+	/** Multiplies the weather's cloud coverage: 0.4 a desert sky, 1.2 a monsoon coast. */
+	coverageBias: number;
+	/** Multiplies the loop direction: -1 flies the orbit the other way round. */
+	direction: 1 | -1;
 }
 
-const DEFAULT_MOOD: PlaceMood = { dust: 0.1, nightGlow: 1.0 };
+const DEFAULT_MOOD: PlaceMood = {
+	dust: 0.1,
+	nightGlow: 1.0,
+	pitchBiasDeg: 0,
+	deckOffsetM: 0,
+	coverageBias: 1,
+	direction: 1
+};
+
+const look = (m: Partial<PlaceMood>): PlaceMood => ({ ...DEFAULT_MOOD, ...m });
 
 const PLACE_MOODS: Record<string, PlaceMood> = {
-	hyderabad: { dust: 0.18, nightGlow: 1.0 },
-	mumbai: { dust: 0.28, nightGlow: 1.0 },
-	dubai: { dust: 0.22, nightGlow: 1.25 },
-	dallas: { dust: 0.15, nightGlow: 1.0 },
-	phoenix: { dust: 0.3, nightGlow: 0.9 },
-	las_vegas: { dust: 0.2, nightGlow: 1.25 },
-	denver: { dust: 0.05, nightGlow: 1.0 },
-	chicago_midway: { dust: 0.08, nightGlow: 1.0 },
-	himalayas: { dust: 0.0, nightGlow: 0.7 },
-	ocean: { dust: 0.12, nightGlow: 0.5 },
-	desert: { dust: 0.38, nightGlow: 0.55 }
+	// Rocky plateau, lakes, a low sprawl: look down into it.
+	hyderabad: look({ dust: 0.18, pitchBiasDeg: -2 }),
+	// Monsoon coast: sea on the window side, a low grey deck.
+	mumbai: look({ dust: 0.28, pitchBiasDeg: 1, deckOffsetM: -800, coverageBias: 1.2, direction: -1 }),
+	// Gulf coast at night: the Palm and the shoreline, horizon high, little cloud.
+	dubai: look({ dust: 0.22, nightGlow: 1.25, pitchBiasDeg: 2, deckOffsetM: -500, coverageBias: 0.8, direction: -1 }),
+	// Flat prairie grid: ground.
+	dallas: look({ dust: 0.15, pitchBiasDeg: -2 }),
+	// Desert basin, high thin cloud.
+	phoenix: look({ dust: 0.3, nightGlow: 0.9, pitchBiasDeg: -1, deckOffsetM: 800, coverageBias: 0.6 }),
+	// The Strip at night, dry air.
+	las_vegas: look({ dust: 0.2, nightGlow: 1.25, pitchBiasDeg: -1, deckOffsetM: 600, coverageBias: 0.6, direction: -1 }),
+	// Front Range to the west: fly it with the mountains under the wing, deck high.
+	denver: look({ dust: 0.05, deckOffsetM: 1200, coverageBias: 0.9 }),
+	// Lake Michigan: horizon and water, lake stratus low.
+	chicago_midway: look({ dust: 0.08, pitchBiasDeg: 1, deckOffsetM: -900, coverageBias: 1.15, direction: -1 }),
+	himalayas: look({ dust: 0.0, nightGlow: 0.7, pitchBiasDeg: -4, deckOffsetM: 3000, coverageBias: 0.9 }),
+	ocean: look({ dust: 0.12, nightGlow: 0.5, pitchBiasDeg: 3, deckOffsetM: -1000, coverageBias: 1.1 }),
+	desert: look({ dust: 0.38, nightGlow: 0.55, deckOffsetM: 800, coverageBias: 0.4 })
 };
 
 export const LOCATIONS = Location.all();
+
+/**
+ * The places the wall actually flies between.
+ *
+ * Six, not eleven. The fielded aero-1 rotation hopped between a curated set
+ * and the room read as a journey; eleven places on a four-minute dwell read
+ * as a slideshow. Home first, then the Southwest hubs, with Dubai for a
+ * daylight hour while India is at its desk (every US hub is night during
+ * IST office hours). Every entry has a Sentinel-2 pack, a roads pack, a
+ * towns pack and a buildings pack on disk; add a place here only after
+ * packing it, or the offline Pi shows a void for ten minutes.
+ *
+ * The catalogue stays whole for the operator picker and `?place=`.
+ */
+export const ROTATION: readonly Location[] = [
+	'hyderabad',
+	'dubai',
+	'dallas',
+	'denver',
+	'las_vegas',
+	'chicago_midway'
+].map((id) => Location.byId(id));

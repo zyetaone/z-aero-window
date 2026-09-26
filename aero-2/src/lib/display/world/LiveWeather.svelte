@@ -19,7 +19,7 @@
 	 * the same endpoint for the same place and apply the same union.
 	 */
 	import { useDisplay } from '../display.svelte.js';
-	import type { Weather } from '../flight/view.js';
+	import type { Weather } from '#lib/wall.js';
 
 	const display = useDisplay();
 

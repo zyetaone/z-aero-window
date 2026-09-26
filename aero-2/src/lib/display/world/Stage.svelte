@@ -6,6 +6,7 @@
 	 * Terrain (shape), Sky (air and haze), LookControls (aiming). This file owns
 	 * exactly one thing — where the camera is, every frame.
 	 */
+	import { untrack } from 'svelte';
 	import { MapLibre, Projection, Light } from 'svelte-maplibre-gl';
 	import { LngLat, type Map as MlMap } from 'maplibre-gl';
 	// Bundled locally. svelte-maplibre-gl otherwise injects a <link> to unpkg,
@@ -238,7 +239,7 @@
 		autoloadGlobalCss={false}
 		class="fill"
 		style={BLANK_STYLE}
-		center={[display.config.place.lon, display.config.place.lat]}
+		center={untrack(() => [display.config.place.lon, display.config.place.lat])}
 		zoom={9}
 		maxPitch={88}
 		anisotropicFilterPitch={20}
@@ -246,7 +247,11 @@
 		canvasContextAttributes={{ antialias: true }}
 	>
 		<!-- 3D Spherical Earth Globe Projection & Solar Lighting -->
-		<Projection type="globe" />
+		<!-- Mercator, not globe: MapLibre 6.6's globe path ignores raster-brightness
+		     and the sky colours below zoom 12, which is the whole flight envelope.
+		     Measured 2026-09-22: at 12 km the sky was grey and the night ground
+		     daylight-bright until the projection was flipped live. -->
+		<Projection type="mercator" />
 		<Light anchor="map" position={sunPos} />
 
 		<Ground />

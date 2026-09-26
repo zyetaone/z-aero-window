@@ -17,7 +17,7 @@
  */
 
 /** Hostnames. Anchored, because it reaches a Map key and a JSON response. */
-export const DEVICE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
+const DEVICE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
 
 /**
  * Two missed beats plus slack, defined in the shared root so the browser and

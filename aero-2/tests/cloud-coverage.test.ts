@@ -7,7 +7,7 @@ import {
 	nearCountFor,
 	WEATHER_COVERAGE
 } from '#lib/display/world/cloud-field.js';
-import type { Weather } from '#lib/display/flight/view.js';
+import type { Weather } from '#lib/wall.js';
 
 /**
  * Weather must change how much cloud there is, not only how it is lit.

@@ -10,9 +10,11 @@ export const ORBIT = {
 	 *
 	 * Was 0.08 / 0.25 — a 3.1x swing that made the ground track a flower. ~1.1x
 	 * is a gentle bump: an ellipse that is not machine-perfect, not a spirograph.
+	 * 0.225/0.25 (25 km north-south, 42 km east-west) put the city on the
+	 * horizon for most of each circuit; 0.19/0.21 keeps it under the wing.
 	 */
-	majorMin: 0.225,
-	majorMax: 0.25,
+	majorMin: 0.19,
+	majorMax: 0.21,
 	/**
 	 * Breathe cycles per circuit. MUST be a whole number, or the track never
 	 * returns to its own start and the drawn loop shows a seam. Low, so the
@@ -23,7 +25,7 @@ export const ORBIT = {
 	 * East-west radius as a multiple of north-south. >1 is WIDER than tall.
 	 * Was 0.6, which put the long axis up the short screen dimension.
 	 */
-	aspect: 1.7,
+	aspect: 1.35,
 	/**
 	 * Peak roll in degrees at the tightest part of the turn.
 	 *
@@ -89,24 +91,29 @@ export const BREATHE_PERIOD_SEC = ORBIT_PERIOD_SEC / ORBIT.petals;
  * rather than against a closed form keeps the bank honest when the path is
  * tuned — change `aspect` and the roll follows without a second edit.
  */
-export const TURN_RATE_REF_DEG_PER_SEC = 0.25;
+const TURN_RATE_REF_DEG_PER_SEC = 0.25;
 
 import {
+	DEG2RAD,
 	normalizeHeading as _normalizeHeading,
 	wrapSigned as normalizeSigned
 } from '#lib/angles.js';
 
-export const ALTITUDE_FLOOR_M = 400;
+/**
+ * 400 m read as a low approach for most of every climb cycle (2026-09-23,
+ * "sometimes it seems too low"). 3,000 m is a real climb-out height: roads
+ * and towers still resolve, and the cosine curve spends its trough there.
+ */
+export const ALTITUDE_FLOOR_M = 3000;
 export const ALTITUDE_CEILING_M = 13_000;
-export const CLIMB_PERIOD_SEC = 900;
 
 /**
  * How long the window holds one destination.
  *
  * Content pacing, not mechanism: v1's director ran ~2:10 per location, tuned
  * for passers-by rather than the desk-workers this installation actually sits
- * in front of. Four minutes is a starting point for a calmer room, and it is
- * one number to change.
+ * in front of. Ten minutes, the middle of the fielded aero-1 band (7 to 15),
+ * and it is one number to change.
  *
  * Lives here, not in the director, for two compounding reasons. The view
  * layer cannot import the director without closing an import cycle
@@ -117,10 +124,65 @@ export const CLIMB_PERIOD_SEC = 900;
  * reactive layer. Re-exported from the director so its importers do not
  * churn.
  */
-export const DWELL_SEC = 240;
+export const DWELL_SEC = 600;
+
+/**
+ * The climb cycle is TWO dwells, low at the pass. Measured 2026-09-24: a
+ * 900 s cosine against 600 s slots never kept the climb under the thread
+ * ceiling across the whole pass window, so the pass could not engage without
+ * pulling a 9 km climb down in 90 s (106 m/s). Two slots per cycle, trough
+ * centred on `CLIMB_LOW_PHASE_SEC` of the even slot: alternate visits get the
+ * low city pass, the others cruise high, and the curve is continuous across
+ * every hop. Peak rate pi * band / period ~ 26 m/s for a 10 km band.
+ */
+export const CLIMB_PERIOD_SEC = 2 * DWELL_SEC;
+/** Slot second at which the climb bottoms out — the downtown pass midpoint. */
+export const CLIMB_LOW_PHASE_SEC = 150;
+
+/**
+ * The blind comes down for the hop, the way aero-1 staged every location
+ * change: shut on departure, open on arrival. Nothing "flies" between
+ * cities; the passenger looks at the shade for a moment and the world has
+ * moved on when it lifts. A pure function of the wall clock, so three panes
+ * close and open on the same second without exchanging anything.
+ *
+ * LEAD hides the last seconds of the old place; LAG covers the new place's
+ * tile draw. LAG is sized for a Pi, not a Mac: lifting on a half-drawn
+ * city is the one failure a wall cannot hide, and three panes lifting at
+ * different moments would be worse, which is why this is a constant and
+ * not a tiles-loaded gate.
+ */
+export const BLIND_LEAD_SEC = 6;
+export const BLIND_LAG_SEC = 12;
+
+/** Is the automatic blind down at this second? Closed across every slot boundary. */
+export function blindClosedAt(wallSec: number): boolean {
+	const phase = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
+	return phase >= DWELL_SEC - BLIND_LEAD_SEC || phase < BLIND_LAG_SEC;
+}
 
 const TWO_PI = Math.PI * 2;
-const M_PER_DEG_LAT = 111_320;
+export const M_PER_DEG_LAT = 111_320;
+
+/**
+ * Bearing from one point to another on the flat-earth patch a flight uses,
+ * degrees clockwise from north. ONE copy: the camera's look-at and the
+ * track's heading both call this, so the minimap marker and the flown
+ * heading cannot disagree by a drifted cos-lat or metres-per-degree.
+ * `atLat` is where to evaluate the longitude squeeze; defaults to the origin.
+ */
+export function planarBearing(
+	fromLat: number,
+	fromLon: number,
+	toLat: number,
+	toLon: number,
+	atLat: number = fromLat
+): number {
+	const cosLat = Math.cos(atLat * DEG2RAD) || 1;
+	const dNorth = (toLat - fromLat) * M_PER_DEG_LAT;
+	const dEast = (toLon - fromLon) * M_PER_DEG_LAT * cosLat;
+	return normalizeHeading((Math.atan2(dEast, dNorth) * 180) / Math.PI);
+}
 
 /**
  * How far the window pans either side of its aim, degrees.
@@ -317,10 +379,7 @@ export class FlightTrack {
 	headingAt(wallSec: number, dt = 0.5): number {
 		const before = this.positionAt(wallSec - dt);
 		const after = this.positionAt(wallSec + dt);
-		const cosLat = Math.cos((this.centerLat * Math.PI) / 180) || 1;
-		const dNorth = (after.lat - before.lat) * M_PER_DEG_LAT;
-		const dEast = (after.lon - before.lon) * M_PER_DEG_LAT * cosLat;
-		return normalizeHeading((Math.atan2(dEast, dNorth) * 180) / Math.PI);
+		return planarBearing(before.lat, before.lon, after.lat, after.lon, this.centerLat);
 	}
 
 	/**
@@ -371,7 +430,8 @@ export class FlightTrack {
 	 * Compute altitude at wall-clock second `wallSec` along the climb/descent cosine curve.
 	 */
 	altitudeAt(wallSec: number): number {
-		const phase = (wallSec % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC;
+		const rel = wallSec - CLIMB_LOW_PHASE_SEC;
+		const phase = (((rel % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC;
 		const smooth = (1 - Math.cos(phase * TWO_PI)) * 0.5;
 		const band = this.ceilingM - this.floorM;
 		const base = this.floorM + band * smooth;

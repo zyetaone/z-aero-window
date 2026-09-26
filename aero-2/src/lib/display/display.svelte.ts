@@ -27,10 +27,12 @@ import {
  */
 const CRUISE_BLEND_SEC = 3.5;
 
-import { phaseFor } from './flight/flight-path.js';
+import { scheduledWeather } from './flight/view.js';
+import type { Weather } from '#lib/wall.js';
+import { blindClosedAt, phaseFor } from './flight/flight-path.js';
 import { DWELL_SEC, FlightDirector } from './flight/director.svelte.js';
 import { resolveAtmosphere, type AtmosphereState } from './world/atmosphere.js';
-import { nightAmount, sunPosition, type SunPosition } from './world/sun.js';
+import { moonPosition, nightAmount, sunPosition, type MoonPosition, type SunPosition } from './world/sun.js';
 import { createSettings, type PaneSettings } from '#lib/settings/settings.svelte.js';
 import { WallSync } from '#lib/settings/wall.svelte.js';
 import { PUBLIC_WALL_ORIGIN } from '$app/env/public';
@@ -132,14 +134,8 @@ export class AeroDisplay {
 	#frameCount = 0;
 	#lastFpsUpdate = typeof performance !== 'undefined' ? performance.now() : 0;
 
-	constructor(configOrParams?: PaneSettings | (() => PaneSettings)) {
-		if (typeof configOrParams === 'function') {
-			this.config = configOrParams();
-		} else if (configOrParams) {
-			this.config = configOrParams;
-		} else {
-			this.config = createSettings();
-		}
+	constructor(config: PaneSettings = createSettings()) {
+		this.config = config;
 
 		this.director = new FlightDirector(this.config);
 		this.view = untrack(() => calculateCameraView(Date.now() / 1000, this.config));
@@ -155,6 +151,19 @@ export class AeroDisplay {
 	 * so there is one phase and nothing to keep in step.
 	 */
 	phase: number = $derived.by(() => phaseFor(this.config.place, this.view.wallSec));
+
+	/**
+	 * The sky the panes actually fly. A pinned (`?weather=`) or pushed
+	 * non-clear weather wins; an unpinned clear sky becomes the slot schedule,
+	 * so cloud decks come and go over the day (see scheduledWeather).
+	 */
+	weather: Weather = $derived.by(() => this.weatherAt(this.view.wallSec));
+
+	private weatherAt(wallSec: number): Weather {
+		return this.config.weather !== 'clear' || !this.config.liveWeather
+			? this.config.weather
+			: scheduledWeather(wallSec);
+	}
 
 	/** Cached for the same reason as `sun`: five readers, four of them in Sky. */
 	atmosphere: AtmosphereState = $derived.by(() => resolveAtmosphere(this.view.aglM));
@@ -205,13 +214,41 @@ export class AeroDisplay {
 	 * thousand times a second. Cached, it recomputes when the pose does: once
 	 * per frame, for every reader.
 	 */
-	sun: SunPosition = $derived.by(() =>
-		sunPosition(
+	sun: SunPosition = $derived.by(() => {
+		const s = sunPosition(
 			this.view.wallSec,
 			this.config.place.lat,
-			this.config.place.utcOffset + this.config.clockOffsetH
+			this.config.place.utcOffsetAt(this.view.wallSec) + this.config.clockOffsetH
+		);
+		// Quantised to 0.1° and handed out as the SAME object while unchanged.
+		// Every paint scalar downstream (grade, hillshade, sky, light) derives
+		// from these two numbers; a fresh float each frame meant one
+		// setPaintProperty per key per frame on every layer, each restarting a
+		// 300 ms style transition that never finished. 0.1° is ~24 s of sun.
+		const azimuthDeg = Math.round(s.azimuthDeg * 10) / 10;
+		const elevationDeg = Math.round(s.elevationDeg * 10) / 10;
+		const last = this.#sunLast;
+		if (last.azimuthDeg === azimuthDeg && last.elevationDeg === elevationDeg) return last;
+		return (this.#sunLast = { azimuthDeg, elevationDeg });
+	});
+	#sunLast: SunPosition = { azimuthDeg: 0, elevationDeg: -90 };
+
+	/** The moon, quantised and identity-stable like `sun`. */
+	moon: MoonPosition = $derived.by(() => {
+		const m = moonPosition(this.view.wallSec, this.config.place.lat, this.config.place.lon);
+		const azimuthDeg = Math.round(m.azimuthDeg * 10) / 10;
+		const elevationDeg = Math.round(m.elevationDeg * 10) / 10;
+		const illumination = Math.round(m.illumination * 100) / 100;
+		const last = this.#moonLast;
+		if (
+			last.azimuthDeg === azimuthDeg &&
+			last.elevationDeg === elevationDeg &&
+			last.illumination === illumination
 		)
-	);
+			return last;
+		return (this.#moonLast = { azimuthDeg, elevationDeg, illumination });
+	});
+	#moonLast: MoonPosition = { azimuthDeg: 0, elevationDeg: -90, illumination: 0 };
 
 	/**
 	 * The wall clock the SCENE is composed at, not the one the room is in.
@@ -235,6 +272,19 @@ export class AeroDisplay {
 	 * nothing exchanged.
 	 */
 	solarSec: number = $derived.by(() => this.view.wallSec + this.config.clockOffsetH * 3600);
+
+	/**
+	 * What the shade is actually doing: the passenger's setting, overridden
+	 * by the automatic occlusion across every rotation boundary.
+	 *
+	 * Derived, never written back. `config.blindOpen` is in the wall snapshot
+	 * and is persisted; an auto-close that wrote it would push "blind closed"
+	 * to the wall and survive a reload. A pinned place (`rotate` off) never
+	 * occludes: nothing is changing under the shade.
+	 */
+	blindOpen: boolean = $derived.by(
+		() => this.config.blindOpen && !(this.config.rotate && blindClosedAt(this.view.wallSec))
+	);
 
 	advanceLocation(): void {
 		this.director.advanceDestination(Date.now() / 1000);
@@ -296,7 +346,13 @@ export class AeroDisplay {
 		// second, so every pane lands on the same place without being told.
 		this.director.tick(wallSec);
 
-		let next = calculateCameraView(wallSec, this.config);
+		let next = calculateCameraView(wallSec, {
+			...this.viewParams(wallSec),
+			place: this.config.place,
+			floorM: this.config.floorM,
+			ceilingM: this.config.ceilingM,
+			direction: this.config.direction
+		});
 		// Carry the Stage-sampled datum across the fresh object so the Hud's
 		// GND number does not blink on frames the Stage loop has not rerun.
 		next.groundM = this.view.groundM;
@@ -328,6 +384,26 @@ export class AeroDisplay {
 	 * the previous params. Floor/ceiling knob drags do NOT blend: they
 	 * change every frame while dragged and would chase forever.
 	 */
+	/**
+	 * The camera params that are not the destination. Explicit fields, never
+	 * `{ ...this.config }`: a runes class has no own enumerable state, so a
+	 * spread yields nothing (see tests/hop-blend.test.svelte.ts). Weather is
+	 * the effective sky, so scheduled cloud decks also shake the aircraft.
+	 */
+	private viewParams(wallSec: number) {
+		const c = this.config;
+		return {
+			azimuthDeg: c.azimuthDeg,
+			pitchDeg: c.pitchDeg,
+			speed: c.speed,
+			clockOffsetH: c.clockOffsetH,
+			fleetRole: c.fleetRole,
+			// From the second being computed, not from `view`, which is the LAST
+			// frame: a fresh pane's first frame must equal a running pane's.
+			weather: this.weatherAt(wallSec)
+		};
+	}
+
 	private applyCruiseBlend(wallSec: number, next: CameraView): CameraView {
 		const key = `${this.config.place.id}|${this.config.direction}`;
 		if (this.#lastPlaceKey !== null && key !== this.#lastPlaceKey && this.#lastParams) {
@@ -347,8 +423,14 @@ export class AeroDisplay {
 			this.#cruiseFrom = null;
 			return next;
 		}
+		// Named fields, NOT `{ ...this.config }`. PaneSettings is a runes class,
+		// so its fields are prototype accessors and a spread copies none of
+		// them: azimuth and pitch arrived undefined, the old pose's target went
+		// NaN, and MapLibre threw on the first frame of every rotation hop.
+		// Pinned captures (`?place=`) never cross a boundary, which is how the
+		// crash survived every visual A/B until the blind-drop hop was filmed.
 		const old = calculateCameraView(wallSec, {
-			...this.config,
+			...this.viewParams(wallSec),
 			place: from.place,
 			floorM: from.floorM,
 			ceilingM: from.ceilingM,
@@ -359,8 +441,8 @@ export class AeroDisplay {
 	}
 }
 
-export function createDisplay(configOrParams?: PaneSettings | (() => PaneSettings)): AeroDisplay {
-	const display = new AeroDisplay(configOrParams);
+export function createDisplay(config?: PaneSettings): AeroDisplay {
+	const display = new AeroDisplay(config);
 	setDisplayContext(display);
 	return display;
 }

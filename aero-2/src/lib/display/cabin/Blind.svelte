@@ -10,6 +10,8 @@
 	const display = useDisplay();
 	const blind = useBlind(display);
 
+	// The passenger's setting, not the effective state: the automatic hop
+	// occlusion must not breathe the "drag me" handle at a wall every ten minutes.
 	const showDiscoverable = $derived(!display.config.blindOpen && !blind.hasAnimated);
 
 	/**
@@ -49,7 +51,7 @@
 		aria-valuemax={105}
 		style:transform={blind.transform}
 		style:transition={blind.transition}
-		style:pointer-events={display.config.blindOpen ? 'none' : 'auto'}
+		style:pointer-events={display.blindOpen ? 'none' : 'auto'}
 	>
 		{#if blindVideoOn}
 			{#key blindVideoUrl}
@@ -76,7 +78,7 @@
 		{/if}
 	</div>
 
-	{#if display.config.blindOpen}
+	{#if display.blindOpen}
 		<div
 			class="blind-grab"
 			onpointerdown={blind.onPointerDown}

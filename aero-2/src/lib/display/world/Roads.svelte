@@ -46,7 +46,9 @@
 		NIGHT_VECTOR_TOP_M,
 		farFieldShare
 	} from './sun.js';
-	import { Location } from '#lib/settings/locations.js';
+	import { Location } from '#lib/locations.js';
+	import { quantize, shiftDash } from './beat.js';
+	import { weatherLightLoss } from './atmosphere.js';
 
 	const display = useDisplay();
 
@@ -69,6 +71,26 @@
 	);
 
 	/**
+	 * Traffic: dashes of uneven length and spacing sliding along the
+	 * arterials, MapLibre's own "animate a line" recipe. `line-dasharray`
+	 * cannot be offset, so 32 rotations of one irregular pattern are
+	 * precomputed (shiftDash) and the wall clock picks one four times a
+	 * second: one dasharray write per quarter second, identical on every
+	 * pane. Lengths are in line-widths, so the same pattern reads as traffic
+	 * spaced to the road's own width at any zoom.
+	 */
+	/** Dash and gap lengths in line-widths: cars and lorries, bunched and spread. */
+	const TRAFFIC_PATTERN = [1, 4, 0.6, 7, 1.4, 3, 0.8, 9, 1.1, 5];
+	const TRAFFIC_STEPS = 32;
+	const TRAFFIC_PERIOD = TRAFFIC_PATTERN.reduce((a, b) => a + b, 0);
+	const TRAFFIC_DASHES = Array.from({ length: TRAFFIC_STEPS }, (_, i) =>
+		shiftDash(TRAFFIC_PATTERN, (i / TRAFFIC_STEPS) * TRAFFIC_PERIOD)
+	);
+	const trafficDash = $derived(
+		TRAFFIC_DASHES[Math.floor(display.view.wallSec * 4) % TRAFFIC_STEPS]
+	);
+
+	/**
 	 * Fades OUT with altitude, which is the opposite of what a detail layer
 	 * usually does and is the whole point.
 	 *
@@ -78,11 +100,15 @@
 	 * vectors earn their keep on the way DOWN, so they arrive as the raster
 	 * runs out of pixels. 9,000 m to 4,000 m is the descent window.
 	 */
+	// 0.01 steps: a raw float per frame is a setPaintProperty per frame.
 	const altitudeFade = $derived(
-		Math.max(0, Math.min(1, (NIGHT_VECTOR_TOP_M - aglM) / NIGHT_VECTOR_SPAN_M))
+		Math.round(Math.max(0, Math.min(1, (NIGHT_VECTOR_TOP_M - aglM) / NIGHT_VECTOR_SPAN_M)) * 100) / 100
 	);
 
-	const glow = $derived(lightUp * altitudeFade);
+	// A cloud deck sits between the window and the lamps: the same light loss
+	// Ground/Sky take, so the city dims WITH the deck instead of burning through it.
+	const deck = $derived(weatherLightLoss(display.weather));
+	const glow = $derived(quantize(lightUp * altitudeFade * (1 - 0.8 * deck)));
 
 	/**
 	 * Far-field arterial dots: the city as seen from cruise.
@@ -128,9 +154,9 @@
 	 * the same knob and they are not, because the two change on wildly
 	 * different timescales.
 	 *
-	 * `CLIMB_PERIOD_SEC` is 900, and the climb curve spends ~62% of each cycle
-	 * below 9,000 m — so an altitude-gated `{#if}` mounts and unmounts this
-	 * source FOUR TIMES AN HOUR, every hour, forever. Each mount re-fetches and
+	 * `CLIMB_PERIOD_SEC` is two dwells (1,200 s), and the climb curve spends
+	 * ~62% of each cycle below 9,000 m — so an altitude-gated `{#if}` mounts and
+	 * unmounts this source THREE TIMES AN HOUR, every hour, forever. Each mount re-fetches and
 	 * re-parses the city's GeoJSON: Denver is 4.4 MB and 19,838 features, which
 	 * measures 29 ms of `JSON.parse` on an M-series Mac and is roughly 160 ms on
 	 * a Pi 5, on the main thread, in a window whose entire job is to move
@@ -338,6 +364,19 @@
 				'line-width': bloomWidth,
 				'line-blur': 3,
 				'line-opacity': bloomOpacity
+			}}
+			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+		/>
+		<!-- Traffic: irregular dashes sliding along the arterials, one dasharray
+		     write per quarter second from the wall clock (see trafficDash). -->
+		<LineLayer
+			id="city-roads-traffic"
+			filter={['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]]}
+			paint={{
+				'line-color': '#fff1c9',
+				'line-width': width,
+				'line-opacity': 0.9 * glow,
+				'line-dasharray': trafficDash
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>

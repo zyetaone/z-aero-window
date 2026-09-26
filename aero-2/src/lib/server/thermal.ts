@@ -26,7 +26,7 @@ import {
 	type ThermalState
 } from '#lib/throttle.js';
 
-export const DEFAULT_THERMAL_PATH = '/run/aero/thermal.json';
+const DEFAULT_THERMAL_PATH = '/run/aero/thermal.json';
 
 /**
  * `state: null` with a reason, never a bare 204.

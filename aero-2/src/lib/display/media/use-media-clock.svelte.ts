@@ -34,8 +34,16 @@ function probeDuration(url: string): Promise<number> {
 		const el = document.createElement('video');
 		el.preload = 'metadata';
 		el.muted = true;
-		el.onloadedmetadata = () => resolve(el.duration);
-		el.onerror = () => resolve(NaN);
+		// Let go of the element once it has answered: a <video> holding a src
+		// keeps a decoder and a network slot until GC, and twelve of them on a
+		// Pi is a playlist that never starts.
+		const done = (d: number) => {
+			el.removeAttribute('src');
+			el.load();
+			resolve(d);
+		};
+		el.onloadedmetadata = () => done(el.duration);
+		el.onerror = () => done(NaN);
 		el.src = url;
 	});
 }

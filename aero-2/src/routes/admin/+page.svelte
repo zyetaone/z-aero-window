@@ -126,6 +126,37 @@
 	 */
 	const roll = $derived(rollUpFleet(fleet ?? [], now.ms));
 
+	/**
+	 * Wi-Fi reset — the hatch for a venue whose SSID or password changed.
+	 * Resets THIS Pi (the one serving the page), not the fleet: the request
+	 * purges its saved Wi-Fi and reboots it into the setup portal, so this page
+	 * goes unreachable a couple of seconds after a 200. Token per use, in
+	 * memory only. The explicit JSON content-type is load-bearing: SvelteKit's
+	 * CSRF guard answers 403 to a same-origin POST whose content-type looks
+	 * form-like.
+	 */
+	let wifiToken = $state('');
+	let wifiStatus = $state<string | null>(null);
+	let wifiBusy = $state(false);
+	async function resetWifi() {
+		if (!wifiToken || wifiBusy) return;
+		wifiBusy = true;
+		try {
+			const res = await fetch('/api/wifi/reset', {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${wifiToken}`, 'content-type': 'application/json' },
+				body: '{}'
+			});
+			const body = (await res.json()) as { message?: string; error?: string };
+			wifiStatus = res.ok
+				? (body.message ?? 'Wi-Fi reset scheduled.')
+				: `${res.status}: ${body.error ?? body.message ?? 'refused'}`;
+		} catch (err) {
+			wifiStatus = err instanceof Error ? err.message : 'unreachable';
+		}
+		wifiBusy = false;
+	}
+
 	function copyToClipboard(text: string, label: string) {
 		if (typeof navigator !== 'undefined' && navigator.clipboard) {
 			navigator.clipboard.writeText(text);
@@ -176,6 +207,30 @@
 	<AdminFleetHealth {fleet} {fleetError} {roll} nowMs={now.ms} />
 
 	<AdminHostTelemetry {status} {statusError} />
+
+	<!-- Wi-Fi reset for THIS device. Refused (503) until the setup portal is
+	     installed, because without it this button is a remote brick. -->
+	<section class="card telemetry-section">
+		<h2>📶 Wi-Fi</h2>
+		<div class="update-row">
+			<input
+				type="password"
+				placeholder="AERO_WIFI_RESET_TOKEN"
+				bind:value={wifiToken}
+				aria-label="Wi-Fi reset token"
+			/>
+			<button type="button" class="glass-btn" disabled={!wifiToken || wifiBusy} onclick={resetWifi}>
+				{wifiBusy ? 'Resetting…' : 'Reset this device’s Wi-Fi'}
+			</button>
+		</div>
+		<p class="fleet-note">
+			Clears saved Wi-Fi on <strong>{status?.hostname ?? 'this device'}</strong> and reboots it
+			into the setup portal. This page will go unreachable; reconnect via the portal SSID.
+		</p>
+		{#if wifiStatus}
+			<p class="fleet-note">{wifiStatus}</p>
+		{/if}
+	</section>
 
 	<footer class="footer">
 		<p>{PRODUCT_NAME} &copy; 2026 {PRODUCT_OWNER} · Engineered by {ENGINEERED_BY}.</p>

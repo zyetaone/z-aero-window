@@ -3,25 +3,18 @@
  * Single source of truth for all live simulation knobs.
  */
 
-import { LOCATIONS, Location } from './locations.js';
+import { LOCATIONS, Location } from '../locations.js';
 import { SCENE_PRESETS, type ScenePreset } from './presets.js';
 import { HILLSHADE_DEFAULT, TERRAIN_EXAGGERATION } from './tiles.js';
 import { ALTITUDE_FLOOR_M, ALTITUDE_CEILING_M } from '../display/flight/flight-path.js';
-import {
-	DEFAULT_WINDOW_AZIMUTH_DEG,
-	DEFAULT_PITCH_DEG,
-	WEATHERS,
-	type Weather
-} from '../display/flight/view.js';
+import { DEFAULT_WINDOW_AZIMUTH_DEG, DEFAULT_PITCH_DEG } from '../display/flight/view.js';
+import { CLOCK_OFFSET_RANGE, WEATHERS, type DisplayMode, type Weather } from '#lib/wall.js';
 import { FLEET_ROLES, type FleetRole } from '../display/flight/parallax.js';
 import { localHourAtSunElevation, resolveLocalHours } from '../display/world/sun.js';
 import { wrapSigned } from '#lib/angles.js';
 
-export { Location } from './locations.js';
-export { SCENE_PRESETS, type ScenePreset } from './presets.js';
-export { tileTemplates } from './tiles.js';
+export { Location } from '../locations.js';
 export { FLEET_ROLES, type FleetRole } from '../display/flight/parallax.js';
-export { WEATHERS, type Weather } from '../display/flight/view.js';
 
 /**
  * Where cabin sound comes from. Declared here rather than in a leaf because,
@@ -81,7 +74,7 @@ export const KNOB_RANGE = {
 	speed: [0.1, 25.0],
 	floorM: [0, 20_000],
 	ceilingM: [0, 20_000],
-	clockOffsetH: [-12, 12],
+	clockOffsetH: CLOCK_OFFSET_RANGE,
 	shade: [0, 1],
 	exaggeration: [0.1, 6.0],
 	wingScale: [0.3, 3.0],
@@ -178,14 +171,15 @@ export class PaneSettings {
 	/** Weather conditions (clear, cloudy, rain, overcast, storm) */
 	weather = $state<Weather>('clear');
 	/**
-	 * Live sky follows the real atmosphere (see LiveWeather.svelte).
+	 * The sky follows the schedule unless pinned (`weatherAt` in display.svelte.ts).
 	 *
 	 * ON unless pinned: an explicit `?weather=` means the operator staged a
-	 * scenario and the sky must not wander off it mid-measurement. Offline
-	 * never flips this — a failed fetch simply changes nothing.
+	 * scenario and the sky must not wander off it. The real-atmosphere poller
+	 * (LiveWeather.svelte) that once wrote through here is gone; the wall-clock
+	 * schedule replaced it, and `weather` remains a wall key with the drawer
+	 * and wall.svelte.ts as its only writers.
 	 */
 	liveWeather = $state<boolean>(true);
-
 	/**
 	 * The one writer LiveWeather may call (ADR-007).
 	 *
@@ -194,10 +188,6 @@ export class PaneSettings {
 	 * build — so the poller never writes config itself and never POSTs. It
 	 * advises; this method writes, idempotently: same value, no assignment,
 	 * no deck re-roll, no fleet broadcast churn.
-	 *
-	 * Precedence is latest-writer-wins, same tolerance as the operator
-	 * drawer's own entry: a pushed drill holds until the next live poll
-	 * (≤15 min) reasserts the real sky.
 	 */
 	applyLiveWeather(w: Weather): void {
 		if (this.weather !== w) this.weather = w;
@@ -205,7 +195,7 @@ export class PaneSettings {
 	qualityMode = $state<'ultra' | 'balanced' | 'performance'>('balanced');
 
 	/** Display Modes (flight, video, screensaver, standby) */
-	displayMode = $state<'flight' | 'video' | 'screensaver' | 'standby'>('flight');
+	displayMode = $state<DisplayMode>('flight');
 
 	/**
 	 * Media playlists ship EMPTY, and the emptiness is the honest state.
@@ -231,7 +221,7 @@ export class PaneSettings {
 	fleetRole = $state<FleetRole>('solo');
 
 	/** Cabin Ambient Soundscape & Audio Playlist */
-	audioEnabled = $state<boolean>(false);
+	audioEnabled = $state<boolean>(true);
 	audioVolume = $state<number>(0.5);
 	/**
 	 * `synth`, because it is the only mode that works with no files.
@@ -563,8 +553,12 @@ export class PaneSettings {
 			this.clockOffsetH = Math.round(rawDelta * 4) / 4;
 		}
 
+		// Numeric knobs go through `set`, so a preset cannot author a value the
+		// URL and the drawer are refused: KNOB_RANGE clamps every write path.
 		for (const [key, value] of Object.entries(rest)) {
-			if (value !== undefined) (this as Record<string, unknown>)[key] = value;
+			if (value === undefined) continue;
+			if (key in KNOB_RANGE && typeof value === 'number') this.set(key as NumericKnob, value);
+			else (this as Record<string, unknown>)[key] = value;
 		}
 		if (wingVisible !== undefined) this.wing = wingVisible;
 	}

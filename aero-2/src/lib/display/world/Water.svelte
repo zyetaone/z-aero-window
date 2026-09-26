@@ -40,6 +40,7 @@
 	import { useDisplay } from '../display.svelte.js';
 	import { specularGlint } from './sun.js';
 	import { weatherLightLoss } from './atmosphere.js';
+	import { quantize, slowBeat } from './beat.js';
 
 	const display = useDisplay();
 	// PUBLIC_TILE_SERVER_URL, so a pane can read tiles from a peer on the wall.
@@ -59,7 +60,7 @@
 	 * is exactly why a lake goes flat and grey under cloud. Reuses the same
 	 * scalar as the sky and the ground so the three cannot disagree.
 	 */
-	const overcast = $derived(weatherLightLoss(display.config.weather));
+	const overcast = $derived(weatherLightLoss(display.weather));
 
 	const glint = $derived(
 		specularGlint(display.view.cameraBearingDeg, display.sun.azimuthDeg, display.sun.elevationDeg) *
@@ -73,7 +74,15 @@
 	 * shape stamped over the lake, which is worse than the flatness it set out
 	 * to fix.
 	 */
-	const opacity = $derived(Math.min(0.34, glint * 0.34));
+	/**
+	 * Breathing, not ripples. A photograph cannot be made to flow, but a glint
+	 * on real water is never steady: two slow beats (7 s and 11 s, so the
+	 * product never repeats inside a minute) swing the sheen between 70% and
+	 * 100%. Pure in wallSec, so three panes breathe together; 0.01 steps, so
+	 * the paint write lands a few times a second, not every frame.
+	 */
+	const breathe = $derived(0.85 + 0.15 * slowBeat(display.view.wallSec, 7, 11));
+	const opacity = $derived(quantize(Math.min(0.34, glint * 0.34) * breathe));
 </script>
 
 {#if hasMask && opacity > 0.01}

@@ -33,7 +33,7 @@
 	 * Same scalar the sky, the hillshade and the cloud deck read, so the four
 	 * cannot drift apart. See `weatherLightLoss`.
 	 */
-	const overcast = $derived(weatherLightLoss(display.config.weather));
+	const overcast = $derived(weatherLightLoss(display.weather));
 
 	/**
 	 * Only mount the sharp layer where it is packed.
@@ -61,7 +61,11 @@
 	 * — fields, water, bare ground — is crushed to deep nocturnal tones, while the brightest
 	 * pixels survive the squeeze and remain distinct.
 	 */
-	const groundBrightnessMax = $derived((DAY_HIGHLIGHT_CEIL - night * 0.62) * (1 - overcast * 0.45));
+	// 0.78 → 0.10 into full night: from 1.3 km, Sentinel-2 sand read as a
+	// pale daylight photo under the lamps. Unlit ground at night is near black.
+	const groundBrightnessMax = $derived(
+		Math.round((DAY_HIGHLIGHT_CEIL - night * 0.68) * (1 - overcast * 0.45) * 100) / 100
+	);
 	const groundBrightnessMin = $derived(0.01 * (1 - night) ** 2);
 
 	/** Lift contrast into the night so features separate crisply. */

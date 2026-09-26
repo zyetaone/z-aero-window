@@ -5,7 +5,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 import { resolveTileDir } from './tiles.js';
 
 /**

@@ -19,7 +19,7 @@ import { createPoller, type Poller } from '#lib/poll.js';
  * Two seconds against a five-second lead, so a pane has two chances to see a
  * push before the second it names.
  */
-export const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 2000;
 
 export type WallPoller = Poller;
 

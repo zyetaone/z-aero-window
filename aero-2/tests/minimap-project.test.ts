@@ -90,12 +90,14 @@ describe('threadArc', () => {
 		new FlightTrack(hyderabad.lat, hyderabad.lon, 400, 12_500, 1, phaseFor(hyderabad, 100));
 
 	it('draws the downtown detour the ring omits', () => {
-		const arc = threadArc(cityTrack(), hyderabad.lat, hyderabad.lon, 400, 1);
+		const arc = threadArc(cityTrack(), hyderabad.lat, hyderabad.lon, 400, 1, 100);
 		expect(arc).not.toBeNull();
 		expect(arc).toHaveLength(48);
 		// Mid-pass samples hug downtown; the window edges rejoin the big
-		// loop far outside it.
-		for (const [lon, lat] of arc!.slice(10, 38)) {
+		// loop far outside it. The 48 samples span the pass window plus the
+		// 45 s handoff each side, and downtownTimeAt ramps in over the first
+		// ~70 s, so the arc is inside 6 km from sample 14 to 33 (measured).
+		for (const [lon, lat] of arc!.slice(14, 34)) {
 			expect(kmBetween(lat, lon, hyderabad.lat, hyderabad.lon)).toBeLessThan(6);
 		}
 		expect(kmBetween(arc![0][1], arc![0][0], hyderabad.lat, hyderabad.lon)).toBeGreaterThan(8);
@@ -105,17 +107,17 @@ describe('threadArc', () => {
 	it('returns null when the gate never opens', () => {
 		const himalayas = Location.byId('himalayas');
 		const high = new FlightTrack(himalayas.lat, himalayas.lon, 6000, 13_000, 1, 1.3);
-		expect(threadArc(high, himalayas.lat, himalayas.lon, 6000, 1)).toBeNull();
+		expect(threadArc(high, himalayas.lat, himalayas.lon, 6000, 1, 100, false)).toBeNull();
 	});
 
-	it('is identical every visit — pure in track, place and speed', () => {
-		const a = threadArc(cityTrack(), hyderabad.lat, hyderabad.lon, 400, 1);
-		const b = threadArc(cityTrack(), hyderabad.lat, hyderabad.lon, 400, 1);
+	it('is identical every visit — pure in track, place, speed and slot', () => {
+		const a = threadArc(cityTrack(), hyderabad.lat, hyderabad.lon, 400, 1, 100);
+		const b = threadArc(cityTrack(), hyderabad.lat, hyderabad.lon, 400, 1, 100);
 		expect(a).toEqual(b);
 	});
 
 	it('carries the mid-pass marker: the view sits on the arc', () => {
-		const arc = threadArc(cityTrack(), hyderabad.lat, hyderabad.lon, 400, 1);
+		const arc = threadArc(cityTrack(), hyderabad.lat, hyderabad.lon, 400, 1, 100);
 		const v = calculateCameraView(100, paramsFor('?place=hyderabad&speed=1'));
 		const off = (lon: number, lat: number) =>
 			Math.min(...arc!.map(([alon, alat]) => kmBetween(lat, lon, alat, alon)));

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { LOCATIONS } from '#lib/settings/locations.js';
+import { LOCATIONS } from '#lib/locations.js';
 import { SCENE_PRESETS } from '#lib/settings/presets.js';
-import { WEATHERS } from '#lib/display/flight/view.js';
+import { WEATHERS } from '#lib/wall.js';
 import { FLEET_ROLES, AUDIO_MODES } from '#lib/settings/settings.svelte.js';
 
 /**
@@ -66,7 +66,7 @@ describe('Segmented option arrays can actually be keyed', () => {
 				const opts = /options=\{([^}]*)\}/.exec(body)?.[1]?.trim() ?? '';
 				// Primitive-union arrays are safe under identity keying.
 				const isPrimitive =
-					/^(WEATHERS|FLEET_ROLES|AUDIO_MODES)$/.test(opts) ||
+					/^(WEATHERS|DISPLAY_MODES|FLEET_ROLES|AUDIO_MODES)$/.test(opts) ||
 					opts.startsWith('[') ||
 					opts.includes('.map((p) => p.id)');
 				if (isPrimitive) continue;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCameraView } from '#lib/display/flight/view.js';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 
 /**
  * Invariant #2 is "the world is a pure function of (wall clock, place, daySeed)"

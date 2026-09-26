@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCameraView, type CameraParams } from '#lib/display/flight/view.js';
-import { Location } from '#lib/settings/locations.js';
+import { Location } from '#lib/locations.js';
 import { blendViews } from '#lib/display/flight/view.js';
 
 /**

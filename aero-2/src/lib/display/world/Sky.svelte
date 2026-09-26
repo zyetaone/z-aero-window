@@ -22,6 +22,7 @@
 		resolveSkyTopColor,
 		skyHorizonPct
 	} from './sky-colors.js';
+	import { quantize, slowBeat } from './beat.js';
 
 	const display = useDisplay();
 
@@ -31,7 +32,7 @@
 	 * How much light the weather has taken out. Shared with Ground, Terrain and
 	 * Clouds so the sky cannot disagree with the ground about the weather.
 	 */
-	const overcast = $derived(weatherLightLoss(display.config.weather));
+	const overcast = $derived(weatherLightLoss(display.weather));
 	const sunElev = $derived(display.sun.elevationDeg);
 	const sunAzimuth = $derived(display.sun.azimuthDeg);
 
@@ -119,9 +120,9 @@
 	const FOG_MIN_DENSITY = 0.8e-4;
 	const FOG_MAX_DENSITY = 4.0e-4;
 	const groundBlend = $derived.by(() => {
-		const t =
+		const density =
 			(display.atmosphere.fogDensity - FOG_MIN_DENSITY) / (FOG_MAX_DENSITY - FOG_MIN_DENSITY);
-		const byAltitude = 0.18 + 0.68 * Math.max(0, Math.min(1, t));
+		const byAltitude = 0.18 + 0.68 * Math.max(0, Math.min(1, density));
 		/**
 		 * Weather thickens the air on top of altitude.
 		 *
@@ -130,7 +131,22 @@
 		 * ceiling rather than added, so it cannot exceed the range MapLibre
 		 * accepts however the band table is later tuned.
 		 */
-		return byAltitude + (0.97 - byAltitude) * overcast * 0.75;
+		/**
+		 * Height thickens the view: from cruise the line of sight to the ground
+		 * crosses the whole boundary layer at a slant, so the ground softens as
+		 * the plane climbs even while the air at the window clears.
+		 */
+		const slant = 0.22 * Math.max(0, Math.min(1, (display.view.aglM - 5000) / 7000));
+		const weathered = Math.min(0.97, byAltitude + slant + (0.97 - byAltitude) * overcast * 0.75);
+		/**
+		 * Haze comes and goes. Two slow beats (97 s and 151 s, coprime so the
+		 * product wanders for hours) swing the ground blend ±0.06 around the
+		 * band's value, so the far ridge softens and clears the way real air
+		 * does. Pure in wallSec: three panes thicken together. 0.01 steps so
+		 * fog-ground-blend is written a few times a minute, not every frame.
+		 */
+		const drift = slowBeat(display.view.wallSec, 97, 151);
+		return quantize(Math.max(0.05, Math.min(0.97, weathered + 0.1 * drift)));
 	});
 
 	// ── 2. Celestial Solar Radiance & Milky Way ──────────────────────────────
@@ -139,6 +155,7 @@
 	// stars over terrain. What stays here is diffuse — dusk glare and the
 	// milky-way wash — which cannot read as a dead pixel wherever it lands.
 	const duskFactor = $derived(Math.max(0, Math.min(1, (12 - Math.abs(sunElev)) / 12)));
+
 	const sunScreenX = $derived(50 + (sunHeadingDelta / 180) * 50);
 
 	/**
@@ -163,6 +180,38 @@
 	 * one horizon or the seam shows.
 	 */
 	const horizonPct = $derived(skyHorizonPct(display.view.cameraPitchDeg));
+	/** Screen percent per degree below the horizon; the moon's placement uses it. */
+	const PER_DEGREE = 0.9;
+	/**
+	 * A cloud/haze DECK as a CSS band, not as sprites or a textured quad: a
+	 * gradient below the horizon, aligned to it, that thickens with weather
+	 * and only shows while the aircraft is above the deck altitude. Zero
+	 * texture memory, one compositing layer, and it rolls with the horizon.
+	 */
+	const aboveDeck = $derived(
+		quantize(Math.max(0, Math.min(1, (display.view.aglM - display.config.cloudAltitudeM - 300) / 600)))
+	);
+	const deckAmount = $derived(quantize(Math.max(0, Math.min(0.92, overcast * 1.35)) * aboveDeck));
+	const deckRgb = $derived(
+		lerpRgb([0.93, 0.93, 0.95], [0.15, 0.16, 0.19], night)
+			.map((v) => Math.round(v * 255))
+			.join(', ')
+	);
+	/**
+	 * The moon: a disc where the sky says it is, phase as a shadow disc
+	 * sliding off it. Composition over ephemeris: a degree or two of error
+	 * is invisible, a missing moon is not. Fades in through nautical dusk and
+	 * out under a deck; hidden when it is behind the cabin (more than 100
+	 * degrees off the sightline).
+	 */
+	const moon = $derived(display.moon);
+	const moonHeadingDelta = $derived(signedDelta(display.view.cameraBearingDeg, moon.azimuthDeg));
+	const moonX = $derived(quantize(50 + (moonHeadingDelta / 180) * 50, 0.1));
+	const moonY = $derived(quantize(horizonPct - moon.elevationDeg * PER_DEGREE, 0.1));
+	const moonOpacity = $derived(
+		quantize(night * (1 - overcast) * Math.max(0, Math.min(1, (moon.elevationDeg + 1) / 5)))
+	);
+	const moonVisible = $derived(moonOpacity > 0.02 && Math.abs(moonHeadingDelta) < 100);
 </script>
 
 <!-- MapLibre 3D Sky Dome, Rayleigh Haze & Horizon Mist -->
@@ -189,6 +238,26 @@
 	<!-- Golden Hour Solar Flare Radiance -->
 	{#if duskFactor > 0.05}
 		<div class="dusk-radiance" style:opacity={duskFactor * (1 - night)}></div>
+	{/if}
+
+	<!-- Cloud deck seen from above: a horizon-aligned band, CSS only -->
+	{#if display.config.clouds && deckAmount > 0.01}
+		<div
+			class="haze-deck"
+			style:--horizon="{horizonPct}%"
+			style:--deck={deckRgb}
+			style:opacity={deckAmount}
+		></div>
+	{/if}
+
+	{#if moonVisible}
+		<div
+			class="moon"
+			style:left="{moonX}%"
+			style:top="{moonY}%"
+			style:opacity={moonOpacity}
+			style:--lit={moon.illumination}
+		></div>
 	{/if}
 
 	<!-- Diffuse Milky Way wash (fades in at night). Crisp stars are in-map now. -->
@@ -218,7 +287,11 @@
 	   space; the mask line tracks the rendered horizon through turns. */
 	.sky-celestial-overlay {
 		position: absolute;
-		inset: 0;
+		/* Oversized: a full-frame rectangle rotated by the roll leaves bare
+		   triangles at the corners; 15% of slack covers a 10-degree bank. */
+		inset: -15%;
+		transform: rotate(var(--roll, 0deg));
+		transform-origin: 50% var(--horizon, 40%);
 		overflow: hidden;
 		pointer-events: none;
 		z-index: 1;
@@ -249,6 +322,41 @@
 			#000 0,
 			#000 calc(var(--horizon) - 12%),
 			transparent var(--horizon)
+		);
+	}
+
+	.moon {
+		position: absolute;
+		width: 2.4vh;
+		height: 2.4vh;
+		translate: -50% -50%;
+		border-radius: 50%;
+		overflow: hidden;
+		background: radial-gradient(circle at 42% 38%, #fffdf3 0%, #ece6d3 50%, #bdb7a6 100%);
+		box-shadow: 0 0 22px 6px rgba(255, 246, 222, 0.28);
+	}
+	/* Phase: the dark disc slides off the lit one as --lit goes 0 -> 1. */
+	.moon::after {
+		content: '';
+		position: absolute;
+		inset: -8%;
+		border-radius: 50%;
+		background: rgb(9, 11, 20);
+		translate: calc(var(--lit, 0) * 118%) 0;
+	}
+
+	.haze-deck {
+		position: absolute;
+		inset: 0;
+		/* Clear sky right at the horizon line, the deck filling in below it:
+		   thin and far at the top of the band, solid nearer the aircraft. */
+		background: linear-gradient(
+			to bottom,
+			transparent 0,
+			transparent calc(var(--horizon) - 1%),
+			rgba(var(--deck), 0.45) calc(var(--horizon) + 5%),
+			rgba(var(--deck), 0.92) calc(var(--horizon) + 22%),
+			rgba(var(--deck), 0.96) 100%
 		);
 	}
 

@@ -25,8 +25,13 @@ afterEach(() => {
 
 function harness(blindOpen = true) {
 	let advanced = 0;
+	const config = { blindOpen };
 	const display = {
-		config: { blindOpen },
+		config,
+		// The controller reads the EFFECTIVE state (auto-occlusion folded in).
+		get blindOpen() {
+			return config.blindOpen;
+		},
 		advanceLocation: () => {
 			advanced++;
 		}

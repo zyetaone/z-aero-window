@@ -295,7 +295,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		request.headers.get('Range'),
 		request.headers.get('If-None-Match')
 	);
-	if (hit === 'forbidden') return new Response('Forbidden', { status: 403 });
+	if (hit === 'forbidden') return new Response('Forbidden', { status: 403, headers: cors });
 	if (hit) return hit;
 	return new Response('Not found', { status: 404, headers: cors });
 };

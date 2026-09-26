@@ -15,7 +15,7 @@
  * suite share it. `Weather` is the const-array union from `flight/view.js`
  * (type-only import: erased, no runtime edge into the flight model).
  */
-import type { Weather } from '../display/flight/view.js';
+import type { Weather } from '#lib/wall.js';
 
 /** Open-Meteo forecast endpoint — latitude/longitude/current, nothing else. */
 export function openMeteoUrl(lat: number, lon: number): string {

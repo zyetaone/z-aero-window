@@ -19,7 +19,7 @@
 		NIGHT_MOUNT_OFF,
 		NIGHT_MOUNT_ON
 	} from '../world/sun.js';
-	import { Location } from '#lib/settings/locations.js';
+	import { Location } from '#lib/locations.js';
 	import {
 		projectMini,
 		coverTiles,
@@ -151,9 +151,11 @@
 		return Math.min(1, Math.max(0, (aglM - lo) / (hi - lo)));
 	});
 
-	const effectiveSec = $derived(snap.effectiveSec);
+	const wallSec = $derived(display.view.wallSec);
+	// Wall seconds, not wallSec * speed: the flown altitude keys on the wall
+	// clock (view.ts), and the strip must draw the same curve the dot flies.
 	const climbPhase = $derived(
-		(((effectiveSec % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC
+		(((wallSec % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC
 	);
 
 	function tileUrl(template: string, x: number, y: number): string {
@@ -211,7 +213,7 @@
 	 * identical every visit and needs no live subscription.
 	 */
 	const threadD = $derived.by(() => {
-		const arc = threadArc(track, place.lat, place.lon, display.config.floorM, display.config.speed);
+		const arc = threadArc(track, place.lat, place.lon, display.config.floorM, display.config.speed, wallSec, place.isFeature);
 		if (!arc) return '';
 		const pts = arc.map(([aLon, aLat]) => projectMini(aLon, aLat, place.lon, place.lat, zoom));
 		return `M ${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')}`;
@@ -230,7 +232,7 @@
 		const lo = display.config.floorM;
 		const hi = display.config.ceilingM;
 		const points: string[] = [];
-		const periodStart = Math.floor(effectiveSec / CLIMB_PERIOD_SEC) * CLIMB_PERIOD_SEC;
+		const periodStart = Math.floor(wallSec / CLIMB_PERIOD_SEC) * CLIMB_PERIOD_SEC;
 		for (let x = 0; x <= ELEV_WIDTH; x += 2) {
 			const t = periodStart + (x / ELEV_WIDTH) * CLIMB_PERIOD_SEC;
 			const agl = track.altitudeAt(t);

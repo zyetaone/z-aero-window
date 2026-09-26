@@ -48,7 +48,7 @@ code it covers and confirming the run goes red.
 
 | #   | Invariant                                                                                  | Enforced by                                                                                    |
 | --- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| 1   | No import cycles                                                                           | `tools/check-cycles.mjs`, in `check` and `test`                                                |
+| 1   | No import cycles                                                                           | `tools/check-repo.mjs`, in `check` and `test`                                                |
 | 2   | The world is a pure function of (wall clock, place, `daySeed`)                             | `tests/integration.test.ts` — scans for `Math.random` and for `+= dt`                          |
 | 3   | Context DI: `createDisplay()` at the root, `useDisplay()` below                            | `tests/regressions.test.ts` — exactly one call site may construct the model                    |
 | 4   | The pure simulation modules import no renderer                                             | `tests/integration.test.ts`                                                                    |
@@ -138,7 +138,7 @@ descends, and a road network is the shape of city lighting from the air.
 `tools/probe-layers.mjs` is what proves it paints — smoke would stay green with
 the source 404ing or the layer at zero opacity.
 
-**#6 and #7 are unenforced.** Both were violated within a day of being written
+**#6 and #7 were the last to be enforced** (`tests/regressions.test.ts` now checks the boundary and the no-barrel rule). Both were violated within a day of being written
 down: `Clouds` ran its own WebGL context outside the boundary until 2026-08-26,
 so a Three.js context loss took the page down while the identical MapLibre
 failure was caught and offered a retry. If either matters enough to keep, it is
@@ -249,6 +249,37 @@ Two lessons from getting it wrong first:
   collapsing sky against a foreground that correctly stays lit, and reports
   "no effect". And without freezing `Date.now`, the sun moves between samples,
   so the measurement is of sunset rather than of weather.
+
+## 4d. Time, weather and the pass: everything is a function of the wall second
+
+- **Rotation.** `DWELL_SEC` (600 s) slots; the day's order of `ROTATION` is a
+  seeded shuffle (`director.svelte.ts: orderFor`), so the sequence differs by
+  day and agrees across panes. The blind closes at every slot boundary
+  (`blindClosedAt`), and every boundary is a new place.
+- **Weather.** A pinned `?weather=` or a pushed non-clear weather wins;
+  otherwise `scheduledWeather(wallSec)` (`flight/view.ts`) gives one slot in
+  six overcast and one in six broken cloud. Consumers read `display.weather`,
+  never `config.weather`. Camera params take the frame's weather from the
+  second being computed (`weatherAt`), so a fresh pane equals a running one.
+- **Downtown pass.** One pose whose loop scale, altitude and clock warp follow
+  the blend (`downtown.ts`): spiral in 30-120 s, downtown 120-180 s, out
+  180-270 s. Altitude keys on the wall second (never the speed-scaled or
+  warped loop clock) on a two-dwell cosine whose trough is the pass midpoint,
+  so alternate visits pass low and the others cruise. The altitude gate is
+  read once per slot as the highest climb across the pass window;
+  the thread clock is the closed-form integral of the ramp and the big loop
+  flies the same clock, so nothing jumps when the pass lets go.
+- **Composition per place.** `Location.moodFor(id)` is the painter's table:
+  pitch bias, deck offset, coverage bias, loop direction, dust, night glow.
+  Render-path biases, never config writes.
+- **Motion.** Turbulence is two slow octaves plus three slot-seeded bumps on a
+  20 Hz grid (exact across panes). Clouds are fixed to the ground and stream
+  past (displacement from `view.lat/lon`, per-sprite wrap with an edge fade);
+  the deck seen from above is a CSS band in `Sky.svelte`; the celestial
+  overlay (stars, moon, haze band) rolls with the world by `WORLD_ROLL_GAIN`.
+- **Gestures.** `cabin/glass-gestures.ts`: drag nudges azimuth/pitch (pane
+  knobs, this pane only), double-tap reveals `DestinationCard` (place, its local time, the room's time, weather with its source named); a second double-tap or a 12 s timeout dismisses it. Chrome excluded by
+  selector.
 
 ## 5. Known-sharp edges
 
@@ -469,9 +500,9 @@ state. Everything else flows one direction: context down, callback props up.
 That is the Svelte 5 idiom that replaced `createEventDispatcher`, and it is
 already what this code does.
 
-### Effects: 15, and each one owns a resource
+### Effects: each one owns a resource
 
-Effects are an escape hatch, so the count matters. All 15 are lifecycle —
+Effects are an escape hatch, so each one has to justify itself (count them with `rg '^\s*\$effect\('`, and do not trust a number written here). Every one is lifecycle —
 `requestAnimationFrame` loops (3), pollers (2), intervals (3), canvas and audio
 mount, the cloud rebuild. Every one returns a teardown, and the teardowns were
 verified by counting allocations against frees: 6 `setInterval` against 4

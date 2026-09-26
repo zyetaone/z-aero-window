@@ -147,7 +147,7 @@ void main() {
 					return;
 				}
 				// Same inputs as the dome: one sky, two painters.
-				const overcast = weatherLightLoss(display.config.weather);
+				const overcast = weatherLightLoss(display.weather);
 				const inputs = {
 					baseTop: display.atmosphere.skyTop,
 					baseHorizon: display.atmosphere.skyHorizon,

@@ -39,7 +39,7 @@ try:
 except ImportError:
     sys.exit("needs Pillow: pip install pillow")
 
-# Mirrors Location.CATALOG in src/lib/settings/locations.ts. Duplicated on
+# Mirrors Location.CATALOG in src/lib/locations.ts. Duplicated on
 # purpose: this is a standalone script, and importing the TS catalog would mean
 # a build step for a tool whose whole value is being runnable on its own.
 # If a location is added there and not here, the sweep silently under-tests —

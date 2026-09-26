@@ -12,6 +12,8 @@ Wants=network-online.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
+ConditionPathExists=__AERO_APP_DIR__/build/index.js
+
 [Service]
 Type=simple
 User=__AERO_USER__
@@ -37,11 +39,10 @@ Environment=PORT=3000
 # exits 1 on a missing build, on the argument that a 503 keeps the unit green
 # while the kiosk shows an error page, so nothing ever restarts and nothing
 # ever reports. Both positions are defensible; they need different units.
-# When WorkingDirectory is repointed at aero-2, add:
-#     ConditionPathExists=__AERO_APP_DIR__/build/index.js
-# so systemd skips a start it knows will fail — a clean "Condition check
-# failed" line rather than a crash entry. Not added now, because on v1 it
-# would override the degrade-don't-crash behaviour this comment describes.
+# install.sh now defaults AERO_APP_SUBDIR to aero-2, so the condition below
+# is in: systemd skips a start it knows will fail — a clean "Condition check
+# failed" line rather than a crash loop with a dark kiosk. On v1 the build is
+# always present after install, so the condition is a no-op there.
 #
 # This used to say "see the migration plan, Phase 4". There is no migration
 # plan. The nearest document, ADR-004, is a renderer migration INSIDE aero-1

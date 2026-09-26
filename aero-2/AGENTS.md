@@ -76,8 +76,10 @@ A `+server.ts` may only export handlers (`GET`/`POST`/…/`prerender`/`config`/
 at runtime, with a green typecheck. Constants belong beside the schema they
 bound — `MAX_WALL_BYTES` lives in `#lib/wall.ts` for exactly this reason.
 
-Admin-mutating routes are bearer-gated on `AERO_ADMIN_TOKEN` and **fail closed**
-(503 when unset). `lib/server/fs-guard.ts` (`safeResolveWithin`) guards every
+Mutating routes are bearer-gated and **fail closed** (503 when unset), on three
+tokens with three blast radii: `AERO_ADMIN_TOKEN` (wall push off-loopback, media
+upload, update), `AERO_FLEET_TOKEN` (heartbeat POST), `AERO_WIFI_RESET_TOKEN`
+(purge Wi-Fi and reboot). `lib/server/fs-guard.ts` (`safeResolveWithin`) guards every
 path built from a name the process did not generate; `media-store.ts` is
 exempt because it generates its names (content hash + extension).
 

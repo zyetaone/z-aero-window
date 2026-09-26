@@ -2,12 +2,11 @@
 	/**
 	 * Wing — High-Fidelity 3D Boeing 737 aircraft wing rendered in the passenger window.
 	 *
-	 * Uses Three.js WebGL with upward dihedral sweep, wingtip navigation light (starboard green),
+	 * Uses Three.js WebGL with upward dihedral sweep, wingtip navigation light (port red),
 	 * double-pulse strobe beacon, and dynamic specular lighting reflecting solar time.
 	 * Responds dynamically to airframe banking, solar lighting transitions, and operator alignment knobs.
 	 */
 	import { useDisplay } from '../display.svelte.js';
-	import { WORLD_ROLL_GAIN } from '../flight/view.js';
 	/**
 	 * Named imports, not `import * as THREE`.
 	 *
@@ -29,9 +28,11 @@
 		Mesh,
 		Object3D,
 		PerspectiveCamera,
+		Plane,
 		PointLight,
 		Scene,
-		WebGLRenderer
+		Vector3,
+		WebGLRenderer,
 	} from 'three';
 	import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -103,19 +104,46 @@
 		const SUN_COLOR = new Color(0xffeedd);
 		const MOON_COLOR = new Color(0x9fb6da);
 
+		/**
+		 * Pose, derived from the model's own frame, no mirror.
+		 *
+		 * `wing.glb` is a whole Sketchfab 737 (CC-BY-4.0) in cm, nose toward
+		 * model +Z, up +Y, shrunk to metres by its `right_normalize` root. The
+		 * detailed wing (engine, winglet, gear) is on model +X, which in a
+		 * right-handed Y-up frame with the nose at +Z is the LEFT wing. So the
+		 * left-window composition needs no mirror: yaw +90° about Y sends the
+		 * wing (+X) away from the camera (−Z) and the nose (+Z) to the right.
+		 *
+		 * The old pose (yaw 300°, scale.z −1.11) mirrored the model to fake a
+		 * left wing it already had, and framed it from the wingtip looking back
+		 * at the root, from below. Measured 2026-09-23 with a yaw sweep: the
+		 * winglet sat nearest the camera and the flap-track fairings faced it.
+		 *
+		 * Placement was measured, not derived: the wing skin's world box was
+		 * read back through a DEV handle (`__wing`) and the offsets solved for a
+		 * seat just behind the wing, eye ~0.5 m above the wing top, fuselage
+		 * centreline 1.5 m behind the camera. The model's bare right wing and
+		 * centre section continue past the camera and are removed by the
+		 * clipping plane at the cabin wall. The engine sits below the sill.
+		 */
+		const WING_YAW = Math.PI / 2;
+		const MODEL_SCALE = 1.11;
+		/** Model-metre offsets (after right_normalize) that land the root where a window seat sees it. */
+		const WING_POS: [number, number, number] = [-4.8, -0.4, -1.2];
+		/** Fuselage wall in scene z: everything nearer the camera than this is inside the cabin. */
+		const WALL_Z = 5.8;
+
 		const wingHolder = new Group();
 		// Base positioning: Root in lower right, wing sweeping into camera depth
 		wingHolder.position.set(1.1, -1.1, 0);
 		scene.add(wingHolder);
+		renderer.localClippingEnabled = false;
+		renderer.clippingPlanes = [new Plane(new Vector3(0, 0, -1), WALL_Z)];
 
-		// Wingtip Strobe & Nav Light in 3D
-		const strobeLight = new PointLight(0xffffff, 0, 15);
-		strobeLight.position.set(-2.6, 0.85, -1.6);
-		wingHolder.add(strobeLight);
-
-		const navLight = new PointLight(0x22c55e, 1.5, 4); // Green starboard nav light
-		navLight.position.set(-2.6, 0.85, -1.6);
-		wingHolder.add(navLight);
+		// Wingtip strobe and nav light, parented to the model's tip vertex at load
+		// (cm, the model's own units), so they ride the tip under any pose.
+		const strobeLight = new PointLight(0xffffff, 0, 30);
+		const navLight = new PointLight(0x22c55e, 1.5, 10);
 
 		let wingMesh: Object3D | null = null;
 		const loader = new GLTFLoader();
@@ -124,14 +152,43 @@
 			'/models/wing.glb',
 			(gltf) => {
 				wingMesh = gltf.scene;
-				// Canonical forward flight orientation & aerodynamic chord facing motion
-				wingMesh.rotation.set(0.02, 1.68, 0.18);
-				wingMesh.scale.set(1.11, 1.11, -1.11);
+				wingMesh.rotation.set(0, WING_YAW, 0);
+				wingMesh.scale.setScalar(MODEL_SCALE);
+				wingMesh.position.set(...WING_POS);
+				const modelRoot = wingMesh.children[0] ?? wingMesh;
+				navLight.position.set(1646, 400, -5600);
+				strobeLight.position.set(1646, 410, -5560);
+				modelRoot.add(navLight, strobeLight);
+				let hidden = 0;
 				wingMesh.traverse((child) => {
-					if (child instanceof Mesh && child.material) {
-						child.material.side = DoubleSide;
+					if (!(child instanceof Mesh)) return;
+					if (child.material) child.material.side = DoubleSide;
+					/**
+					 * The glTF is a whole 737 on the ground: the main gear is down
+					 * (wheels at model y≈0, the wing box at y≈170-400 cm) and was
+					 * hanging under the wing in cruise. Anything whose top sits below
+					 * the wing's belly is gear, gear door or ground strake: hidden.
+					 */
+					child.geometry.computeBoundingBox();
+					const bb = child.geometry.boundingBox!;
+					if (bb.max.y < 130) {
+						child.visible = false;
+						hidden++;
+					}
+					/**
+					 * Nacelle decals (lettering and logo, geometry not texture) are
+					 * hidden: the airline mark belongs to a texture the operator
+					 * supplies, not to a CC-BY model. The nacelle stays plain blue.
+					 */
+					if (/^Group_072_/.test(child.name) && !/Material24|0131_Silver/.test(child.name)) {
+						child.visible = false;
+						hidden++;
 					}
 				});
+				if (import.meta.env.DEV) {
+					console.warn(`[Wing] posed; hid ${hidden} meshes`);
+					(globalThis as unknown as { __wing?: unknown }).__wing = { scene, camera, renderer, wingHolder, wingMesh };
+				}
 				wingHolder.add(wingMesh);
 			},
 			undefined,
@@ -179,8 +236,8 @@
 			}
 
 			if (wingMesh) {
-				const sweepRad = 1.68 + (yawOffset * Math.PI) / 180;
-				wingMesh.rotation.set(0.02, sweepRad, 0.18);
+				const sweepRad = WING_YAW + (yawOffset * Math.PI) / 180;
+				wingMesh.rotation.set(0, sweepRad, 0);
 			}
 
 			if (wingHolder) {
@@ -192,30 +249,14 @@
 				const currentPitchRad = ((pitchOffset + aeroFlexDeg) * Math.PI) / 180;
 
 				/**
-				 * The wing is RIGIDLY mounted, so it must roll with the airframe.
-				 *
-				 * It used to move by the aeroelastic flex term alone — 0.72 deg at
-				 * a full 18 deg bank — while the camera swung 6 deg of depression.
-				 * A wing that barely moves while the view swings reads as pasted
-				 * onto the glass, which is the loudest tell that this is a map.
-				 *
-				 * The world now rolls at WORLD_ROLL_GAIN (one home, in flight/view).
-				 * This is
-				 * the OPPOSITE sign and the same gain: the wing is fixed to the
-				 * aircraft, so in cabin space the horizon rotates one way and the
-				 * airframe stays put — which on screen means the wing counter-
-				 * rotates against the tilting world by exactly what the world
-				 * moved. Any other gain and the wing drifts against its own
-				 * horizon through every turn.
-				 *
-				 * `screenSign` mirrors it for a reversed loop, as with everything
-				 * else here: the window is on the inside of the turn either way,
-				 * so the wing hangs off the other side of the frame.
+				 * The wing is rigid to the airframe, and so is the window bezel the
+				 * camera sits in. In cabin space neither moves under bank: the
+				 * HORIZON rolls (the map's world-roll gain, in flight/view), the wing and the frame
+				 * stay put. This used to add the world's roll to the wing, which made
+				 * the wing swing against its own bezel through every turn. Only the
+				 * aeroelastic flex and the operator's pitch knob remain.
 				 */
-				const worldRollRad = (bank * WORLD_ROLL_GAIN * Math.PI) / 180;
-
-				// Rigid cabin airframe lock with aeroelastic lift flex
-				wingHolder.rotation.z = -currentPitchRad * screenSign + worldRollRad * screenSign;
+				wingHolder.rotation.z = -currentPitchRad * screenSign;
 				wingHolder.scale.set(scale * screenSign, scale, scale);
 
 				// Locked 3D translation inside cabin reference frame with high-frequency aero-flutter
@@ -226,8 +267,11 @@
 					0
 				);
 
-				// Aviation Standard: Green for Starboard (Right, screenSign > 0), Red for Port (Left, screenSign < 0)
-				navLight.color.setHex(screenSign > 0 ? 0x22c55e : 0xef4444);
+				// Aviation Standard: green starboard, red port. The composition is
+				// a LEFT-window view (nose right), so the shown tip is port:
+				// red by default, green when the reversed loop mirrors to the
+				// other side of the aircraft.
+				navLight.color.setHex(screenSign > 0 ? 0xef4444 : 0x22c55e);
 			}
 
 			renderer.render(scene, camera);

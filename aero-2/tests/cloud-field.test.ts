@@ -12,7 +12,7 @@ import {
 	WEATHER_COVERAGE
 } from '#lib/display/world/cloud-field.js';
 import { mulberry32 } from '#lib/display/flight/flight-path.js';
-import type { Weather } from '#lib/display/flight/view.js';
+import type { Weather } from '#lib/wall.js';
 
 const WEATHERS: Weather[] = ['clear', 'cloudy', 'rain', 'overcast', 'storm'];
 

@@ -3,7 +3,7 @@
  * Curated visual, atmospheric, lighting, terrain, and audio moods.
  */
 
-import type { Weather } from '../display/flight/view.js';
+import type { Weather } from '#lib/wall.js';
 
 export interface ScenePreset {
 	readonly id: string;

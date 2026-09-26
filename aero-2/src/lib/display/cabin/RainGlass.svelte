@@ -11,8 +11,8 @@
 
 	const display = useDisplay();
 
-	const active = $derived(display.config.weather === 'rain' || display.config.weather === 'storm');
-	const intensity = $derived(display.config.weather === 'storm' ? 1 : 0.72);
+	const active = $derived(display.weather === 'rain' || display.weather === 'storm');
+	const intensity = $derived(display.weather === 'storm' ? 1 : 0.72);
 	const isPerf = $derived(display.config.qualityMode === 'performance');
 	const beadCount = $derived(isPerf ? 7 : 14);
 
@@ -69,7 +69,7 @@
 	 * whole glass at once.
 	 */
 	const strike = $derived.by(() =>
-		display.config.weather !== 'storm' ? null : strikeAt(display.view.wallSec)
+		display.weather !== 'storm' ? null : strikeAt(display.view.wallSec)
 	);
 </script>
 

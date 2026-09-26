@@ -9,13 +9,15 @@
  * aero-2 frame dips. Rune-free and renderer-free, so it is unit-testable
  * and either app can use it.
  */
-import { FlightTrack } from './flight-path.js';
+import { DWELL_SEC, FlightTrack } from './flight-path.js';
 import {
+	DOWNTOWN_GATE_PHASE_SEC,
 	DOWNTOWN_HANDOFF_SEC,
 	DOWNTOWN_PASS_END_SEC,
 	DOWNTOWN_PASS_START_SEC,
-	downtownBlendAt,
+	downtownGateAt,
 	downtownPose,
+	downtownTimeAt,
 	downtownWarpSec
 } from './downtown.js';
 
@@ -51,32 +53,41 @@ export function threadArc(
 	placeLon: number,
 	floorM: number,
 	speed: number,
+	wallSec: number,
+	isFeature = false,
 	samples = 48
 ): Array<[number, number]> | null {
+	// Same model as view.ts: features never thread; the gate reads the
+	// HIGHEST climb across the pass window of THIS slot (altitude keys on the
+	// wall second, and the pass engages on alternate slots), and the thread
+	// flies the warped flight clock the camera flies.
+	if (isFeature) return null;
+	const slotStart = Math.floor(wallSec / DWELL_SEC) * DWELL_SEC;
 	const start = DOWNTOWN_PASS_START_SEC - DOWNTOWN_HANDOFF_SEC;
 	const end = DOWNTOWN_PASS_END_SEC + DOWNTOWN_HANDOFF_SEC;
+	const gate = downtownGateAt(
+		Math.max(
+			track.altitudeAt(slotStart + start),
+			track.altitudeAt(slotStart + DOWNTOWN_GATE_PHASE_SEC),
+			track.altitudeAt(slotStart + end)
+		)
+	);
+	if (gate <= 0) return null;
 	const pts: Array<[number, number]> = [];
-	let engaged = false;
 	for (let i = 0; i < samples; i++) {
 		const s = start + ((end - start) * i) / (samples - 1);
-		const eff = s * speed;
-		const plane = track.poseAt(eff);
-		const t = downtownBlendAt(s, plane.aglM);
-		let lat = plane.lat;
-		let lon = plane.lon;
+		const w = slotStart + s;
+		const t = downtownTimeAt(s) * gate;
+		const flightSec = downtownWarpSec(w * speed, w, speed, gate);
+		const plane = { ...track.poseAt(flightSec), aglM: track.altitudeAt(w) };
 		if (t > 0) {
-			engaged = true;
-			const small = downtownPose(track.poseAt(downtownWarpSec(eff)), placeLat, placeLon, floorM);
-			// Smoothstep — the same ease blendViews applies, so the arc
-			// meets the ring exactly where the marker leaves it.
-			const e = t * t * (3 - 2 * t);
-			lat = plane.lat + (small.lat - plane.lat) * e;
-			const dLon = ((small.lon - plane.lon + 540) % 360) - 180;
-			lon = plane.lon + dLon * e;
+			const small = downtownPose(plane, placeLat, placeLon, floorM, t);
+			pts.push([small.lon, small.lat]);
+		} else {
+			pts.push([plane.lon, plane.lat]);
 		}
-		pts.push([lon, lat]);
 	}
-	return engaged ? pts : null;
+	return pts;
 }
 
 const TILE_PX = 256;

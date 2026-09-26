@@ -183,6 +183,8 @@ describe('Sky', () => {
 		// that trips on the explanation of a bug is a guard on prose.
 		const code = findSource('starfield.ts').replace(/\/\*[\s\S]*?\*\//g, '');
 		expect(code, 're-seeding from the loop index produces a lattice').not.toMatch(/i \* 9301/);
+		// Positions come from a vendored catalog now, so there is no generator to
+		// carry state; the lattice check above still guards against one coming back.
 		expect(code, 'star positions come from the vendored catalog').toContain('yaleCatalog');
 		expect(code, 'no unseeded randomness in shipped sky code').not.toMatch(/Math\.random/);
 	});
