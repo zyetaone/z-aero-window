@@ -64,7 +64,7 @@ At the repo root:
 - `docs/` — ADRs, codemaps, standards, and reference notes
 - `deploy/` — Raspberry Pi provisioning and updater scripts
 - `data/` — tiles and generated assets (gitignored; symlinked into `aero-1/`)
-- `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.claude/`, `.serena/` — agent instructions
+- `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.serena/` — agent instructions
   and repo-local automation
 
 ## Key docs
