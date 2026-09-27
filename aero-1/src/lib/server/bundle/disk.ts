@@ -17,7 +17,7 @@
  * it into the client — node:fs only works server-side.
  */
 
-import { readdir, readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
+import { readdir, readFile, writeFile, unlink, mkdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ContentBundle } from '$lib/bundle/types';
@@ -95,7 +95,11 @@ export async function saveBundle(bundle: ContentBundle): Promise<void> {
 	await ensureDir();
 	map.set(bundle.id, bundle);
 	const path = join(bundlesDir(), `${bundle.id}.json`);
-	await writeFile(path, JSON.stringify(bundle, null, 2), 'utf-8');
+	// Temp + rename: a power cut mid-write used to leave a truncated bundle
+	// that failed to parse on the next boot.
+	const tmp = `${path}.tmp`;
+	await writeFile(tmp, JSON.stringify(bundle, null, 2), 'utf-8');
+	await rename(tmp, path);
 }
 
 /** Remove a bundle. Returns true if it was present before removal. */

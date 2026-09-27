@@ -18,7 +18,9 @@
  *
  * Returns false when the command was NOT scheduled: on Linux, a `sudo -n true`
  * preflight verifies the box can sudo non-interactively at all (the deploy
- * ships /etc/sudoers.d/aero for exactly these hatches). Previously a missing
+ * ships /etc/sudoers.d/aero for exactly these hatches, and that fragment
+ * grants `true` itself — without that line the preflight only passed on
+ * images that happened to carry a blanket NOPASSWD rule). Previously a missing
  * sudoers entry meant the operator got a 200/202 and then nothing happened —
  * the worst kind of silent failure on a headless fleet. Non-Linux stays a
  * warn-and-returns-true no-op so dev hosts and tests keep the old contract.

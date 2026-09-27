@@ -21,10 +21,6 @@
 		LOCATIONS.find((l) => l.id === scene.location)?.utcOffset,
 	);
 
-	/** Compact relative age for the ambient-failure list ("45s ago"). */
-	function relativeAgo(at: number): string {
-		return formatAge(at, wallClockNow());
-	}
 </script>
 
 			<section class="control-section">
@@ -53,7 +49,7 @@
 						>×</button>
 						<span class="update-failed">
 							{#each ambientFailures as f}
-								{f.deviceId} · {f.path} · {relativeAgo(f.at)}<br />
+								{f.deviceId} · {f.path} · {formatAge(f.at, wallClockNow())}<br />
 							{/each}
 						</span>
 					</p>

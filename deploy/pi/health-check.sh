@@ -169,8 +169,12 @@ fi
 
 # ─── POST to admin ───────────────────────────────────────────────────────────
 
+# The device's own wall clock, ms. The admin subtracts it from its receive
+# time; the spread across panes is the only number that says whether the
+# wall actually shares a clock (every pane derives its picture from it).
+CLOCK_MS="$(date +%s%3N 2>/dev/null || echo $(( $(date +%s) * 1000 )))"
 PAYLOAD=$(cat <<EOF
-{"deviceId":"${DEVICE_ID}","role":"${AERO_ROLE}","groupId":"${AERO_GROUP}","fps":${FPS},"temp":${TEMP_C},"uptime":${UPTIME},"crashCount":${CRASH_COUNT},"commit":"${COMMIT}","lastError":"${LAST_ERROR}","mode":"${MODE}","throttledRaw":${THROTTLED_RAW},"thermalAction":"${THERMAL_ACTION}","clockSynced":${CLOCK_SYNCED}}
+{"deviceId":"${DEVICE_ID}","role":"${AERO_ROLE}","groupId":"${AERO_GROUP}","fps":${FPS},"temp":${TEMP_C},"uptime":${UPTIME},"crashCount":${CRASH_COUNT},"commit":"${COMMIT}","lastError":"${LAST_ERROR}","mode":"${MODE}","throttledRaw":${THROTTLED_RAW},"thermalAction":"${THERMAL_ACTION}","clockSynced":${CLOCK_SYNCED},"clockMs":${CLOCK_MS}}
 EOF
 )
 

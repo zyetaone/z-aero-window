@@ -2,6 +2,8 @@
 description: How to set up a Google Maps API Key for 3D Tiles
 ---
 
+> **ARCHIVED 2025-12 (MapLibre era).** Google 3D Tiles are not part of the current stack — `aero-1/` renders Cesium World Terrain + OSM buildings and `aero-2/` renders MapLibre + Three. Kept for reference only; moved from `.agent/workflows/` on 2026-09-27.
+
 # Setting up Google Maps 3D Tiles
 
 Follow these steps to generate the required API key.

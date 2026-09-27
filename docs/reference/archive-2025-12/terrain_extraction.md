@@ -2,6 +2,8 @@
 description: How to extract real-world terrain heightmaps and satellite images
 ---
 
+> **ARCHIVED 2025-12 (MapLibre era).** The manual heightmap/satellite "Real Terrain" feature was replaced by Cesium World Terrain (aero-1) and terrain-RGB tiles (aero-2). Kept for reference only; moved from `.agent/workflows/` on 2026-09-27.
+
 # Extracting Real-World Terrain
 
 To use the "Real Terrain" feature in the app, you need two images for your desired location:

@@ -243,7 +243,10 @@ export class FlightSimEngine {
 			}
 			this.#tickAltitude(delta, ctx);
 
-			this.#tickSmoothing(delta);
+			// Camera filters on the WALL delta: a 3-fps pane (delta clamped to
+			// 0.1 s against ~0.33 s real) otherwise settles three times slower
+			// than its neighbours, indefinitely.
+			this.#tickSmoothing(ctx.wallDeltaSec);
 		});
 		return patch;
 	}
@@ -272,14 +275,8 @@ export class FlightSimEngine {
 		this.camPitch += (this.pitch - this.camPitch) * k;
 	}
 
-	/** Wall-clock step when available — same class as orbit/director/bank. */
-	#wallDt(delta: number, ctx: SimulationContext): number {
-		const w = ctx.wallDeltaSec;
-		return typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : delta;
-	}
-
-	#tickDeparture(delta: number, patch: FlightPatch, ctx: SimulationContext): void {
-		const dt = this.#wallDt(delta, ctx);
+	#tickDeparture(_delta: number, patch: FlightPatch, ctx: SimulationContext): void {
+		const dt = ctx.wallDeltaSec;
 		this.#cruiseElapsed += dt;
 		const cruiseCfg = ctx.camera.cruise;
 		const warpDuration = cruiseCfg.departureDurationSec;
@@ -301,8 +298,8 @@ export class FlightSimEngine {
 		}
 	}
 
-	#tickTransit(delta: number, patch: FlightPatch, ctx: SimulationContext): void {
-		const dt = this.#wallDt(delta, ctx);
+	#tickTransit(_delta: number, patch: FlightPatch, ctx: SimulationContext): void {
+		const dt = ctx.wallDeltaSec;
 		this.#cruiseElapsed += dt;
 		const decay = clamp(this.warpFactor - dt * 2.5, 0, 1);
 		this.warpFactor = decay * decay;
@@ -322,10 +319,8 @@ export class FlightSimEngine {
 		}
 	}
 
-	#tickArrivalHold(delta: number, _patch: FlightPatch, ctx?: SimulationContext): void {
-		// ctx optional so existing call sites that only pass delta still compile;
-		// when present, wall clock keeps arrival hold honest on a slow Pi.
-		const dt = ctx ? this.#wallDt(delta, ctx) : delta;
+	#tickArrivalHold(_delta: number, _patch: FlightPatch, ctx: SimulationContext): void {
+		const dt = ctx.wallDeltaSec;
 		this.#arrivalHoldElapsed += dt;
 		if (this.#arrivalHoldElapsed >= this.#arrivalHoldTargetSec) {
 			this.flightMode = 'orbit';
@@ -504,7 +499,7 @@ export class FlightSimEngine {
 		}
 	}
 
-	#tickAltitude(delta: number, ctx: SimulationContext): void {
+	#tickAltitude(_delta: number, ctx: SimulationContext): void {
 		if (ctx.userAdjustingAltitude) return;
 		const altCfg = ctx.camera.altitude;
 		// Flyover beat override — descend to the beat's low altitude, a touch
@@ -512,7 +507,7 @@ export class FlightSimEngine {
 		// Clamped to the camera bounds. Deterministic → identical on all Pis.
 		if (this.#flyoverAltitudeFt !== null) {
 			const target = clamp(this.#flyoverAltitudeFt, altCfg.min, altCfg.max);
-			this.altitude += (target - this.altitude) * Math.min(delta * 0.12, 1);
+			this.altitude += (target - this.altitude) * Math.min(ctx.wallDeltaSec * 0.12, 1);
 			return;
 		}
 		const loc = LOCATION_MAP.get(ctx.locationId);
@@ -535,7 +530,7 @@ export class FlightSimEngine {
 		// perceptibly shrink the FOV and "switch off" city lights at the
 		// frame edges. Slower descent reads as "settling cruise" rather
 		// than "elevator dropping".
-		this.altitude += (targetAlt - this.altitude) * Math.min(delta * 0.04, 1);
+		this.altitude += (targetAlt - this.altitude) * Math.min(ctx.wallDeltaSec * 0.04, 1);
 	}
 
 	#altitudePitch(ctx: SimulationContext): number {

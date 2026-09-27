@@ -6,7 +6,10 @@ Description=Aero Window active auto-update poll
 # lands on the fleet within minutes, not once a day. The updater exits in ~2s
 # when there's no change (a plain git fetch), so this is cheap — a rebuild +
 # restart happens ONLY on an actual new release. RandomizedDelaySec staggers
-# the fleet so all Pis don't fetch + (on a release) restart in lockstep.
+# the FETCH so three Pis don't hit origin in the same second; the RESTART is
+# deliberately in lockstep — the updater holds it to a wall-wide quarter-hour
+# boundary computed from the release commit (apply_boundary in
+# aero-updater.sh), so the wall never shows two builds side by side.
 OnBootSec=3min
 OnUnitActiveSec=15min
 RandomizedDelaySec=90

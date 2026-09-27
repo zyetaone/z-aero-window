@@ -33,6 +33,7 @@
 	 *     viirs              emitted light         (this file)
 	 *     roads              emitted light, sharp  (vector, below z8 blur)
 	 */
+	import { untrack } from 'svelte';
 	import { RasterLayer, RasterTileSource } from 'svelte-maplibre-gl';
 
 	import { IMAGERY_GRADE, TILE_MAXZOOM, TILE_SIZE, tileTemplates } from '#lib/settings/tiles.js';
@@ -92,13 +93,22 @@
 		)
 	);
 
-	// Latched against twilight dither, but TRACKED: `untrack` here evaluated
-	// the gate once at mount and froze it, so a dusk boot never mounted the
-	// layer no matter how dark it got. The hysteresis thresholds (not the
-	// untrack) are what stop the blinking; same-value writes don't notify.
+	// Latched against twilight dither. The nightLightOpacityUT is tracked — an earlier
+	// `untrack` around the whole call evaluated the gate once at mount and
+	// froze it, so a dusk boot never mounted the layer no matter how dark it
+	// got. Only the LATCH read is untracked: the effect writes `latched`, and
+	// an effect that reads what it writes re-runs on its own write (a
+	// same-value write does not notify, so it settled, but only by the gate
+	// happening to be idempotent). The hysteresis thresholds are what stop
+	// the blinking.
 	let latched = $state(false);
 	$effect(() => {
-		latched = hysteresisGate(nightLightOpacity, latched, NIGHT_MOUNT_ON, NIGHT_MOUNT_OFF);
+		latched = hysteresisGate(
+			nightLightOpacity,
+			untrack(() => latched),
+			NIGHT_MOUNT_ON,
+			NIGHT_MOUNT_OFF
+		);
 	});
 
 	/**

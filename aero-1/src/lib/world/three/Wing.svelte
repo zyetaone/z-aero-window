@@ -62,6 +62,7 @@
 	import { computeSunDirection, sunElevationSin, DEG2RAD } from '$lib/world/sky';
 	import { lerp } from '$lib/utils';
 	import { lightingState } from '$lib/world/curves';
+	import { swayDeg, strobeOn } from './wing-motion';
 	import { screenTravelSign, getScreenDriftSign, setScreenDriftSign } from '$lib/flight/screen-conventions';
 
 	const model = useAeroWindow();
@@ -351,17 +352,16 @@
 	const _yawAxis = new Vector3(0, 1, 0);
 	const _yawQuat = new Quaternion();
 
-	let _strobeT = 0;
-	let _swayT = 0;
+	// Sway and strobe are pure functions of the wall second (wing-motion.ts):
+	// no accumulators, so three wings sway and flash together and a rebooted
+	// pane rejoins the phase instead of restarting it.
 	// Anti-collision strobe: a DOUBLE flash (two quick pulses STROBE_GAP_S apart)
 	// every period — the real 737 beacon cadence, punchier than a single blink.
-	const STROBE_PERIOD_S = 1.1;
-	const STROBE_PULSE_S = 0.12;
-	const STROBE_GAP_S = 0.16;
 	// Scratch sun-direction holder for the key light (avoids per-frame alloc).
 	const _keyDir = new Vector3();
 
-	useTask((dt) => {
+	useTask(() => {
+		const wallSec = Date.now() / 1000;
 
 		// Read it directly rather than via bind:ref — the bound $state wasn't
 		// populating, so the whole tick was early-returning (no visibility swap,
@@ -423,8 +423,7 @@
 		// motion; combined with the key light, the shifting shade reads as
 		// "flying," not a static decal. Two detuned sines → non-repeating ±~2.5°
 		// roll at a lazy ~0.08–0.16 Hz.
-		_swayT += dt;
-		const sway = 1.7 * Math.sin(_swayT * 0.52) + 0.8 * Math.sin(_swayT * 0.97 + 1.3);
+		const sway = swayDeg(wallSec);
 		// Steady lean into the circular orbit turn (a real plane holds a bank
 		// through a sustained turn). motion.bankAngle only reacts to heading-CHANGE
 		// rate, which is ~0 in the slow orbit, so without this the wing wouldn't
@@ -469,12 +468,8 @@
 		navMat.opacity = navRamp * 0.95;
 		navHaloMat.opacity = navRamp * 0.55;
 		tipPoint.intensity = navRamp * 1.1;
-		_strobeT += dt;
-		if (_strobeT > STROBE_PERIOD_S) _strobeT -= STROBE_PERIOD_S;
 		// Double-flash: two pulses STROBE_GAP_S apart (737 anti-collision cadence).
-		const flash =
-			_strobeT < STROBE_PULSE_S ||
-			(_strobeT >= STROBE_GAP_S && _strobeT < STROBE_GAP_S + STROBE_PULSE_S);
+		const flash = strobeOn(wallSec);
 		strobeMat.opacity = navRamp * (flash ? 1 : 0);
 		// White anti-collision strobe: tint the tip light white during the
 		// flash — pumping intensity on the green nav color read as a green

@@ -342,7 +342,7 @@ export async function setupBuildings(
 }
 
 export function syncBuildings(
-	dt: number, nf: number, scale: number, altFt: number,
+	wallSec: number, nf: number, scale: number, altFt: number,
 	buildingsEnabled: boolean, windowLightIntensity: number, bootFade: number,
 	/** When set, window density tracks cityLightAmount (same twilight gate as wing nav + VIIRS intent). */
 	cityLightAmount?: number,
@@ -351,7 +351,10 @@ export function syncBuildings(
 	_show.update(buildingsEnabled, (v) => { tileset!.show = v; });
 
 	if (_shader) {
-		_time = (_time + dt) % (Math.PI * 4000);
+		// Window flicker phase from the wall second, not an accumulator: three
+		// panes show the same window lit at the same instant, and a rebooted
+		// pane rejoins the pattern instead of restarting it.
+		_time = wallSec % (Math.PI * 4000);
 		_shader.setUniform('u_nightFactor', nf * bootFade);
 		_shader.setUniform('u_lightIntensity', scale);
 		// Prefer SSOT cityLightAmount; fall back to legacy smoothstep if caller omits it.

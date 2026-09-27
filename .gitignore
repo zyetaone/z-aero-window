@@ -1,9 +1,6 @@
 node_modules
 
 # Output
-.output
-.vercel
-.netlify
 .wrangler
 # Unanchored, because there is no longer a single app at the repo root: v1
 # lives in aero-1/ and the rewrite in aero-2/, each with its own generated
@@ -26,21 +23,11 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Build output
-dist/
-
-# Cesium static assets (copied from node_modules during setup)
-static/cesium/
-
 # Project management symlink (sidecar, not part of repo)
 _project
 
 # Claude Code session state — worktrees + agent memory are local only
 .claude/
-
-# Tile packages (downloaded, not source)
-tile-packager/*.lock
-tile-server/*.lock
 
 # Runtime content (pushed bundles + uploaded assets)
 # `data/*`, NOT `data/` — git does not descend into an excluded DIRECTORY, so a
@@ -88,12 +75,8 @@ data/*
 **/tile-packager/data/
 tools/tile-packager/data/
 
-# graphify knowledge-graph output (regenerable)
+# graphify knowledge-graph output (regenerable; /graphify is still run here)
 graphify-out/
-src/graphify-out/
 
 # Local agent tooling state (not project source)
-.context/
 .serena/
-.codex/
-outputs/

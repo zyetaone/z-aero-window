@@ -28,6 +28,24 @@ const PEER_TTL_MS = 90_000;
  */
 const MAX_PEERS = 64;
 
+/**
+ * Pinned roster. `AERO_PEERS` is a comma-separated list of device ids; when
+ * it is set, an mDNS announcement from any id NOT on it is dropped before it
+ * reaches the peer map. Unset (the default for a fresh install) means
+ * discovery is open, as it always was — the roster is the second lock,
+ * the shape check + cap being the first. A wall with a fixed set of Pis
+ * gains nothing from open discovery and loses the ability of any device
+ * on the LAN to appear in /api/devices and receive admin commands.
+ *
+ * Read per call, not at import, so tests (and a systemd restart) see the
+ * current environment.
+ */
+export function pinnedPeers(): ReadonlySet<string> | null {
+	const raw = process.env.AERO_PEERS?.trim();
+	if (!raw) return null;
+	return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+}
+
 /** Local service port — the admin-exposed `/api/bundle/:hash` endpoint. */
 function servicePort(): number {
 	return Number.parseInt(process.env.PORT ?? '3000', 10);
@@ -134,6 +152,8 @@ export function handleResponse(resp: { answers?: Array<{ name: string; type: str
 		// allowlist the heartbeat store enforces). New entries beyond
 		// MAX_PEERS are dropped — refreshes of known peers always land.
 		if (!DEVICE_ID_PATTERN.test(deviceId)) return;
+		const roster = pinnedPeers();
+		if (roster && !roster.has(deviceId)) return;
 		if (!peers.has(deviceId) && peers.size >= MAX_PEERS) return;
 		peers.set(deviceId, { deviceId, host, port, lastSeen: Date.now() });
 	}

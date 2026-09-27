@@ -37,10 +37,9 @@ let _timeToNextLocation: number | null = null;
 let _vantageTimer = 0;
 let _timeToNextVantage: number | null = null;
 
-/** Wall-clock step when available; otherwise sim delta (tests / legacy). */
-function wallDt(delta: number, ctx: SimulationContext): number {
-	const w = ctx.wallDeltaSec;
-	return typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : delta;
+/** The wall-clock step. Required on the context, so no fallback exists. */
+function wallDt(_delta: number, ctx: SimulationContext): number {
+	return ctx.wallDeltaSec;
 }
 
 // ─── Tick ───────────────────────────────────────────────────────────────────

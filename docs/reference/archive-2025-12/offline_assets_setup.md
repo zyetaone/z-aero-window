@@ -2,6 +2,8 @@
 description: How to find and set up offline 3D city models (GLB)
 ---
 
+> **ARCHIVED 2025-12 (MapLibre era).** Describes hand-placed GLB city models for a `src/lib/layers/3d/Ground.svelte` that no longer exists — offline content today is the tile packager (`aero-1/tools/tile-packager/`) and root `data/`. Kept for reference only; moved from `.agent/workflows/` on 2026-09-27.
+
 # Setting up Offline 3D Assets
 
 Since Google 3D Tiles cannot be used offline, you can download free 3D models for your cities and load them locally.

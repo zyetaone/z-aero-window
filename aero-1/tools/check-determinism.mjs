@@ -20,6 +20,7 @@
 
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { stripSource } from './lib/strip-comments.mjs';
 
 const APP = new URL('..', import.meta.url).pathname;
 
@@ -69,14 +70,16 @@ function walk(dir) {
 	return out;
 }
 
-/** `Math.random` hits in code position (strips // tails, skips *-comment lines). */
-function codeHits(src) {
+/**
+ * `Math.random` hits in code position. Comments are blanked by a string-aware
+ * stripper (tools/lib/strip-comments.mjs) — the old `line.split('//')[0]` let
+ * `'https://x' + Math.random()` through because the `//` in the URL cut the
+ * line before the call.
+ */
+function codeHits(src, file) {
 	const hits = [];
-	src.split('\n').forEach((line, i) => {
-		const s = line.trim();
-		if (s.startsWith('*') || s.startsWith('//')) return;
-		const code = s.split('//')[0];
-		if (code.includes('Math.random')) hits.push(i + 1);
+	stripSource(src, file).split('\n').forEach((line, i) => {
+		if (line.includes('Math.random')) hits.push(i + 1);
 	});
 	return hits;
 }
@@ -84,7 +87,7 @@ function codeHits(src) {
 const violations = [];
 for (const file of [...walk(join(APP, 'src')), ...walk(join(APP, 'content'))]) {
 	const rel = file.slice(APP.length);
-	const hits = codeHits(readFileSync(file, 'utf8'));
+	const hits = codeHits(readFileSync(file, 'utf8'), file);
 	if (hits.length === 0) continue;
 	if (WAIVERS.has(rel)) continue;
 	violations.push({ rel, hits });

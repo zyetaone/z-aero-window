@@ -66,7 +66,12 @@ function tileHealth(): { status: string; hasTiles: boolean; layers: string[] } {
 function serveTile(filePath: string, cors: Record<string, string>): Response {
 	const ext = filePath.substring(filePath.lastIndexOf('.'));
 	const contentType = MIME[ext] ?? 'application/octet-stream';
-	const { size } = statSync(filePath);
+	// safeResolveWithin guards traversal, not type: a layer DIRECTORY resolves
+	// fine and used to reach createReadStream, which emits EISDIR on the
+	// stream after the 200 headers were already sent.
+	const stat = statSync(filePath);
+	if (!stat.isFile()) return new Response('Not found', { status: 404, headers: cors });
+	const { size } = stat;
 	const stream = createReadStream(filePath);
 	return new Response(stream as any, {
 		headers: {

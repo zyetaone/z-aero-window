@@ -25,6 +25,18 @@ import { applyConfigPatch } from '$lib/model/config-tree.svelte';
 import { TRANSITION_DELAY_MS } from '$lib/fleet/protocol';
 import type { WeatherType } from '$lib/types';
 
+/**
+ * One 100 ms frame on the WALL clock. The model's context builder derives
+ * wallDeltaSec from Date.now(), and no fallback to the sim delta exists any
+ * more, so under fake timers the clock must actually move or nothing
+ * time-based advances. setSystemTime rather than advanceTimersByTime: this
+ * moves the clock without firing the scheduled cruise timer under test.
+ */
+function tick100(model: AeroWindow): void {
+	vi.setSystemTime(Date.now() + 100);
+	model.tick(0.1);
+}
+
 // Shrink every autopilot cadence into tick range (model.tick rejects
 // delta > 0.1, so intervals must fire within a handful of 0.1 s ticks).
 const FAST = {
@@ -84,7 +96,7 @@ describe('AeroWindow autopilot leader lock-step', () => {
 		// nextLocation), so broadcasts[0] is not necessarily the decision.
 		let guard = 0;
 		const decisions = () => broadcasts.filter((b) => b.type === 'director_decision');
-		while (decisions().length === 0 && guard++ < 20) model.tick(0.1);
+		while (decisions().length === 0 && guard++ < 20) tick100(model);
 
 		expect(decisions()).toHaveLength(1);
 		const decision = decisions()[0];
@@ -108,7 +120,7 @@ describe('AeroWindow autopilot leader lock-step', () => {
 
 		let guard = 0;
 		const ambient = () => broadcasts.filter((b) => b.type === 'set_config');
-		while (ambient().length === 0 && guard++ < 20) model.tick(0.1);
+		while (ambient().length === 0 && guard++ < 20) tick100(model);
 
 		expect(ambient().length).toBeGreaterThan(0);
 		// All three values tickRandomize rolls must travel together — sending
@@ -122,7 +134,7 @@ describe('AeroWindow autopilot leader lock-step', () => {
 	it('solo broadcasts no ambient jitter — there are no followers to sync', () => {
 		expect(model.config.camera.parallax.role).toBe('solo');
 		let guard = 0;
-		while (guard++ < 20) model.tick(0.1);
+		while (guard++ < 20) tick100(model);
 		expect(broadcasts.filter((b) => b.type === 'set_config')).toHaveLength(0);
 	});
 
@@ -134,7 +146,7 @@ describe('AeroWindow autopilot leader lock-step', () => {
 		const flySpy = vi.spyOn(model.flight, 'flyTo');
 
 		let guard = 0;
-		while (flySpy.mock.calls.length === 0 && guard++ < 20) model.tick(0.1);
+		while (flySpy.mock.calls.length === 0 && guard++ < 20) tick100(model);
 
 		expect(flySpy).toHaveBeenCalledTimes(1);   // flew inside the tick…
 		expect(broadcasts).toHaveLength(0);        // …with nothing on the wire
@@ -148,7 +160,7 @@ describe('AeroWindow autopilot leader lock-step', () => {
 		expect(model.userAdjustingAtmosphere).toBe(false);
 
 		let guard = 0;
-		while (model.weather !== 'clear' && guard++ < 20) model.tick(0.1);
+		while (model.weather !== 'clear' && guard++ < 20) tick100(model);
 
 		expect(model.weather).toBe('clear');            // the roll landed…
 		expect(model.userAdjustingAtmosphere).toBe(false); // …without masquerading as a user

@@ -12,7 +12,7 @@ import type { SimulationContext } from '$lib/types';
 
 function makeCtx(overrides: Partial<SimulationContext> = {}): SimulationContext {
 	return {
-		time: 0, lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
+		time: 0, wallTimeSec: 0, wallDeltaSec: 0, lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
 		bankAngle: 0, weather: 'clear', skyState: 'night',
 		nightFactor: 1, dawnDuskFactor: 0, locationId: 'hyderabad',
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,
@@ -58,7 +58,7 @@ function makeCtx(overrides: Partial<SimulationContext> = {}): SimulationContext 
 /** Seed the lazy timer (tick 0), then fire past the 1s interval (tick 5). */
 function seedThenFire(ctx: SimulationContext) {
 	directorTick(0, ctx);
-	return directorTick(5, ctx);
+	return directorTick(5, { ...ctx, wallDeltaSec: 5 });
 }
 
 beforeEach(() => directorReset(makeCtx()));

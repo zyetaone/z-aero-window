@@ -1,5 +1,7 @@
 # ADR-004 — Three.js + Threlte as the Canonical Renderer
 
+> **Path note (2026-09-27):** this ADR predates the `aero-1/` · `aero-2/` split. Bare `src/…`, `content/…`, `tools/…` and `scripts/…` paths below are relative to what is now `aero-1/`; paths that no longer exist anywhere are marked *(removed)* inline. The decision text itself is unchanged.
+
 > Status: Proposed (2026-05-27) → **in hardware validation** on branch
 > `hybrid-v2` (2026-06-15). The shipped shape is a Cesium+Three **hybrid** gated
 > by `config.world.useThreeOverlay` (default off), NOT a pure-Three replacement —
@@ -22,7 +24,7 @@ third (pre-rendered video) added by the 2026-05-27 brief:
 | Path | Status | LOC | Cold bundle | External deps |
 |---|---|---|---|---|
 | **`src/lib/world/`** (Cesium) | `pre-ship-v1` — running at SWA Hyderabad | 1 966 | ~3.5 MB | Cesium Ion (token), EOX, CartoDB, NASA GIBS |
-| **`src/lib/world-three/`** (Three.js + Threlte) | Lab — `/playground/three` route | 1 001 | ~500 KB | none at runtime — assets bundled in `/static/` and `/data/` |
+| **`src/lib/world-three/`** *(removed — became `src/lib/world/three/`)* (Three.js + Threlte) | Lab — `/playground/three` route | 1 001 | ~500 KB | none at runtime — assets bundled in `/static/` and `/data/` |
 | Pre-rendered Earth Studio (proposed) | Brief only — not started | n/a | n/a | Google Earth Studio license + animator time |
 
 Cesium has proven on Pi 5 hardware at SATTVA. It also carries operational
@@ -49,7 +51,7 @@ eliminating real-time. It also:
 4. Discards the night-light pipeline already solved in ADR-003.
 5. Discards the autopilot / director / fleet protocol already shipped.
 
-Meanwhile, the playground path (`src/lib/world-three/`) has been
+Meanwhile, the playground path (`src/lib/world-three/` *(removed)*) has been
 developed in parallel and now demonstrates that **stylized
 real-time** is viable on Pi 5's budget:
 
@@ -71,7 +73,7 @@ zero external service dependency compared with the Cesium path.
 ## Decision
 
 1. **Promote `/playground/three` from lab to canonical renderer.**
-   Rename the folder `src/lib/world-three/` → `src/lib/world/` in a
+   Rename the folder `src/lib/world-three/` *(removed)* → `src/lib/world/` in a
    future cleanup pass; for now they coexist.
 
 2. **Freeze `src/lib/world/` (Cesium) at the `pre-ship-v1` tag.**
@@ -161,7 +163,7 @@ camera, and a 2× smaller code surface.
 ## Migration plan (if Accepted)
 
 Effort estimate: **15-20 days of focused work** to bring
-`src/lib/world-three/` to ship parity with `src/lib/world/`.
+`src/lib/world-three/` *(removed)* to ship parity with `src/lib/world/`.
 
 Gating checklist:
 
@@ -302,7 +304,7 @@ This hybrid + 3D work directly de-risks the "Three as future canonical" path whi
 - Deletion surface: **Decision confirmed** — leave the entire D list (old pure-Three experiment files) uncommitted. The hybrid is the active, production-leaning path. History is preserved; we can always archive or cherry-pick later.
 - Production HUD for hybrid: 
   - The hybrid model (full Cesium `CesiumViewer` + transparent `ThreeOverlay` + `CameraMirror`) makes production HUD integration straightforward.
-  - `TelemetryOverlay` and `BlindInfoCard` (currently in `src/lib/shell/hud/`) can be mounted in the same places as they are for the pure-Cesium `/playground` route.
+  - `TelemetryOverlay` and `BlindInfoCard` (currently in `src/lib/shell/hud/` *(removed — now `src/lib/shell/passenger/hud/`)*) can be mounted in the same places as they are for the pure-Cesium `/playground` route.
   - The only new consideration is ensuring the HUD reads from the shared model (it already does) and that any Three-specific telemetry (e.g. artistic layer draw calls) can be exposed via the existing `model.telemetry` ring buffer if desired.
   - Recommended integration order: first port the existing HUD components on top of the hybrid Canvas exactly as they sit on the Cesium-only route, then evaluate whether any Three-specific diagnostics should be added later.
   - This is the next natural high-value piece of work after hardware validation of the current hybrid.
@@ -357,7 +359,7 @@ pure math):
   diffuse-skyglow night curves; CityLightField + OsmRoads + CityGlowDome read
   them so the night-city layers brighten in lock-step (one owner, not per-layer
   raw-nf thresholds). Test-pinned (lights lead glow).
-- `content/palettes/city-lights.ts` — the named warm hue family (sodium/amber/
+- `content/palettes/city-lights.ts` *(removed — see `content/palettes/index.ts` header for where it went)* — the named warm hue family (sodium/amber/
   warm-white/cool-LED). A full "every layer reads one palette" merge was explored
   and rejected as a wrong abstraction (role-differentiated hues across 5
   representations); the module is the documented reference + the cheap Three

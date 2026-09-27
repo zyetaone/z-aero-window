@@ -16,6 +16,10 @@
 > `src/routes/playground2/layers/EffectStack.svelte` and
 > `src/routes/playground/layers/EffectStack.svelte` — both deleted.
 > Reconstruct from git history: `git log --all -- "**/EffectStack.svelte"`.
+>
+> **Paths in this recipe are historical.** They predate the `aero-1/` · `aero-2/`
+> split and none of the `src/routes/playground*` files resolve today; they are
+> left as written because the recipe is a record, not a map of the live tree.
 
 ## When to use this
 

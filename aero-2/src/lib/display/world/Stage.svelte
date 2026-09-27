@@ -17,7 +17,7 @@
 	import 'svelte-maplibre-gl/vite';
 
 	import { useDisplay } from '../display.svelte.js';
-	import { resolveClearance, smoothDatum } from './clearance.js';
+	import { datumAt, glideDatum, resolveClearance, type DatumGlide } from './clearance.js';
 	import { WORLD_ROLL_GAIN } from '../flight/view.js';
 	import Ground from './Ground.svelte';
 	import SkyBackdrop from './SkyBackdrop.svelte';
@@ -90,15 +90,18 @@
 		if (!m) return;
 
 		/**
-		 * Smoothed clearance datum — see `smoothDatum` in clearance.ts for
+		 * Smoothed clearance datum — see `glideDatum` in clearance.ts for
 		 * the policy (instant climbs, gliding falls, standing margin).
 		 * `queryTerrainElevation` returns null until its DEM tile loads, so
 		 * the ground under the camera steps from the regional mean to the
 		 * sampled height mid-flight. Worst where the mean lies most:
 		 * Himalayan mean 5,000 m against 8,000 m+ sampled ridges.
+		 *
+		 * The glide is an ANCHOR, not an accumulator: the datum at any frame
+		 * is a closed form of (anchor, wallSec), so frame cadence is not an
+		 * input to the picture (ADR-007). No frame delta is kept here.
 		 */
-		let smoothGround: number | null = null;
-		let lastWallSec = 0;
+		let glide: DatumGlide | null = null;
 
 		let raf: number;
 		let loopErrors = 0;
@@ -124,11 +127,6 @@
 		};
 		const frame = () => {
 			const v = display.advanceTo(Date.now() / 1000);
-			// Wall-clock frame delta (ADR-007): the glide rate is then the same
-			// number of metres per wall second on every pane, and a pane that
-			// dropped frames catches up instead of gliding slower.
-			const dtSec = lastWallSec === 0 ? 0 : Math.min(0.5, v.wallSec - lastWallSec);
-			lastWallSec = v.wallSec;
 			const planeAt = new LngLat(v.lon, v.lat);
 			const targetAt = new LngLat(v.targetLon, v.targetLat);
 
@@ -173,8 +171,8 @@
 			const atTarget = resolveClearance(meanGroundM, m.queryTerrainElevation(targetAt));
 			display.noteClearance(atPlane.sampled);
 
-			const target = atPlane.groundM;
-			smoothGround = smoothDatum(smoothGround, target, dtSec);
+			glide = glideDatum(glide, atPlane.groundM, v.wallSec);
+			const smoothGround = datumAt(glide, v.wallSec);
 
 			const cam = m.calculateCameraOptionsFromTo(
 				planeAt,

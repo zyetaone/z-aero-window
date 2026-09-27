@@ -145,6 +145,12 @@ export interface FleetSummary {
 	shedding?: number;
 	/** Online devices with any live throttle bit set. */
 	throttledLive?: number;
+	/**
+	 * Largest pairwise wall-clock difference among online devices, ms.
+	 * Undefined until two devices report a clock. The whole wall assumes
+	 * this is ~0; above a second the panes are rendering different moments.
+	 */
+	maxClockSkewMs?: number;
 }
 
 /**
