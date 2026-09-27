@@ -15,11 +15,11 @@ Run from `aero-2/`. The repo root has no `package.json`.
 
 ## Three checks, and what each one cannot see
 
-| Command | Covers | Blind to |
-|---|---|---|
-| `bun run check` | types + `tools/check-repo.mjs` | anything that only fails at runtime |
-| `bun run test` | vitest, `tests/` | routes — no test loads one |
-| `bun run smoke` | every route, real browser, real server | needs `bun run build` first |
+| Command         | Covers                                 | Blind to                            |
+| --------------- | -------------------------------------- | ----------------------------------- |
+| `bun run check` | types + `tools/check-repo.mjs`         | anything that only fails at runtime |
+| `bun run test`  | vitest, `tests/`                       | routes — no test loads one          |
+| `bun run smoke` | every route, real browser, real server | needs `bun run build` first         |
 
 `bun run smoke` is the only check that loads a page. Run it before shipping a
 route or state change. Its own docstring records the parent repo shipping
@@ -44,6 +44,7 @@ state from wall-clock time alone. A snapshot carries `applyAtWallSec`; every
 pane applies it at that second, not on receipt.
 
 What this forbids, throughout `src/lib/display/`:
+
 - `Math.random()` — use `daySeed()` + `mulberry32()` from
   `display/flight/flight-path.ts`
 - `+= dt` accumulation — derive from the clock, never integrate

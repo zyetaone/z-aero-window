@@ -82,8 +82,6 @@ describe('featureLuminance', () => {
 	it('reads null for missing or non-linear geometry', () => {
 		expect(featureLuminance(null)).toBeNull();
 		expect(featureLuminance({})).toBeNull();
-		expect(
-			featureLuminance({ geometry: { type: 'Point', coordinates: [0, 0] } })
-		).toBeNull();
+		expect(featureLuminance({ geometry: { type: 'Point', coordinates: [0, 0] } })).toBeNull();
 	});
 });

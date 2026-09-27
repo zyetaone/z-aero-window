@@ -211,7 +211,10 @@ function bakeTile(features, z, x, y, lat, outFile) {
 
 function loadCity(file) {
 	const geo = JSON.parse(readFileSync(file, 'utf8'));
-	let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+	let minLon = Infinity,
+		minLat = Infinity,
+		maxLon = -Infinity,
+		maxLat = -Infinity;
 	const features = [];
 	for (const f of geo.features) {
 		if (f.geometry?.type !== 'LineString') continue;
@@ -277,25 +280,34 @@ function selfCheck() {
 	parentCache.set('0/0', parent);
 	const z = 11;
 	const road = { properties: { class: 'primary', glow: 1 }, px: {}, bboxPx: {} };
-	const x0 = 0, y0 = 0;
-	road.px[z] = [[x0 * SIZE + 10, y0 * SIZE + 128], [x0 * SIZE + 246, y0 * SIZE + 128]];
+	const x0 = 0,
+		y0 = 0;
+	road.px[z] = [
+		[x0 * SIZE + 10, y0 * SIZE + 128],
+		[x0 * SIZE + 246, y0 * SIZE + 128]
+	];
 	road.bboxPx[z] = [x0 * SIZE + 10, y0 * SIZE + 128, x0 * SIZE + 246, y0 * SIZE + 128];
 	const radiance = upsampledRadiance(z, 0, 0);
 	const mask = lampMask([road], z, 0, 0, 25);
-	let dark = 0, max = 0;
+	let dark = 0,
+		max = 0;
 	for (let i = 0; i < SIZE * SIZE; i++) {
 		const v = radiance[i] * (FLOOR + (DOT_GAIN - FLOOR) * mask[i]);
 		if (v < 32) dark++;
 		if (v > max) max = v;
 	}
 	const ok = dark / (SIZE * SIZE) > 0.8 && max > 128;
-	console.log(`self-check: dark ${(dark / 65536).toFixed(3)} max ${max.toFixed(0)} → ${ok ? 'ok' : 'FAIL'}`);
+	console.log(
+		`self-check: dark ${(dark / 65536).toFixed(3)} max ${max.toFixed(0)} → ${ok ? 'ok' : 'FAIL'}`
+	);
 	process.exit(ok ? 0 : 1);
 }
 if (args.includes('--self-check')) selfCheck();
 
 const cities = cityArgs.length
 	? cityArgs
-	: readdirSync(ROADS_DIR).filter((f) => f.endsWith('.geojson')).map((f) => f.replace(/\.geojson$/, ''));
+	: readdirSync(ROADS_DIR)
+			.filter((f) => f.endsWith('.geojson'))
+			.map((f) => f.replace(/\.geojson$/, ''));
 console.log(`bake-viirs-lamps: zooms ${ZOOMS.join(',')} → ${VIIRS_DIR}`);
 for (const c of cities) bakeCity(c);

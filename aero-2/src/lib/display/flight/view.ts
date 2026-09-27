@@ -11,7 +11,9 @@ import {
 	type OrbitPose,
 	DWELL_SEC,
 	slotNoise,
-	M_PER_DEG_LAT, planarBearing } from './flight-path.js';
+	M_PER_DEG_LAT,
+	planarBearing
+} from './flight-path.js';
 import {
 	DOWNTOWN_GATE_PHASE_SEC,
 	downtownGateAt,

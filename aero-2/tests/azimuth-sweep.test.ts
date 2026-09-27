@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCameraView } from '#lib/display/flight/view.js';
-import {
-	AZIMUTH_SWEEP_DEG,
-	DWELL_SEC,
-	azimuthSweepAt
-} from '#lib/display/flight/flight-path.js';
+import { AZIMUTH_SWEEP_DEG, DWELL_SEC, azimuthSweepAt } from '#lib/display/flight/flight-path.js';
 import { readSettings } from '#lib/settings/settings.svelte.js';
 import { signedDelta } from '#lib/angles.js';
 

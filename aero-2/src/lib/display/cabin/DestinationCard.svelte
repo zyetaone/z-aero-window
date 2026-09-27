@@ -23,7 +23,6 @@
 	import { useDisplay } from '../display.svelte.js';
 	import { formatClock, formatUtcOffset } from '#lib/format.js';
 
-
 	const { ondismiss }: { ondismiss: () => void } = $props();
 	const display = useDisplay();
 
@@ -63,7 +62,9 @@
 	<span class="line"
 		><span class="k">Weather</span> {display.weather} <span class="z">{weatherLabel}</span></span
 	>
-	<span class="line"><span class="k">Altitude</span> {altitudeM.toLocaleString()} m above ground</span>
+	<span class="line"
+		><span class="k">Altitude</span> {altitudeM.toLocaleString()} m above ground</span
+	>
 </div>
 
 <style>

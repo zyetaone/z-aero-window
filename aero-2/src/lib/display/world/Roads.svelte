@@ -102,7 +102,8 @@
 	 */
 	// 0.01 steps: a raw float per frame is a setPaintProperty per frame.
 	const altitudeFade = $derived(
-		Math.round(Math.max(0, Math.min(1, (NIGHT_VECTOR_TOP_M - aglM) / NIGHT_VECTOR_SPAN_M)) * 100) / 100
+		Math.round(Math.max(0, Math.min(1, (NIGHT_VECTOR_TOP_M - aglM) / NIGHT_VECTOR_SPAN_M)) * 100) /
+			100
 	);
 
 	// A cloud deck sits between the window and the lamps: the same light loss

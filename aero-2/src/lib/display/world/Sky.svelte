@@ -189,7 +189,9 @@
 	 * texture memory, one compositing layer, and it rolls with the horizon.
 	 */
 	const aboveDeck = $derived(
-		quantize(Math.max(0, Math.min(1, (display.view.aglM - display.config.cloudAltitudeM - 300) / 600)))
+		quantize(
+			Math.max(0, Math.min(1, (display.view.aglM - display.config.cloudAltitudeM - 300) / 600))
+		)
 	);
 	const deckAmount = $derived(quantize(Math.max(0, Math.min(0.92, overcast * 1.35)) * aboveDeck));
 	const deckRgb = $derived(

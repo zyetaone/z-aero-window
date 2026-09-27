@@ -162,9 +162,7 @@ export async function openMedia(
 	return {
 		// node:stream/web vs DOM ReadableStream: structurally identical, two
 		// declarations, and only one is what `Response` accepts.
-		stream: Readable.toWeb(
-			createReadStream(path, range)
-		) as unknown as ReadableStream<Uint8Array>,
+		stream: Readable.toWeb(createReadStream(path, range)) as unknown as ReadableStream<Uint8Array>,
 		/** Bytes this stream will yield -- the slice, not the file. */
 		size: range ? range.end - range.start + 1 : info.size
 	};

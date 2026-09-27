@@ -102,7 +102,9 @@ describe('readThermalState', () => {
 
 	it('accepts a reading inside the window and rejects one just outside', () => {
 		const at = 10_000_000;
-		const file = withFile(JSON.stringify({ tempC: 45, throttledRaw: 0, action: 'ok', updatedAtMs: at }));
+		const file = withFile(
+			JSON.stringify({ tempC: 45, throttledRaw: 0, action: 'ok', updatedAtMs: at })
+		);
 		expect(readThermalState(file, at + THERMAL_STALE_MS).state).not.toBeNull();
 		expect(readThermalState(file, at + THERMAL_STALE_MS + 1).state).toBeNull();
 	});

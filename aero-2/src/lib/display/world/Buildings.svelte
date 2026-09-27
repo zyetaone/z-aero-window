@@ -5,7 +5,13 @@
 	 * Renders realistic city skyscrapers with height-based 3D extrusions,
 	 * solar daytime architectural shading, and evening glowing window illumination.
 	 */
-	import { GeoJSONSource, FillExtrusionLayer, FillLayer, Image, LineLayer } from 'svelte-maplibre-gl';
+	import {
+		GeoJSONSource,
+		FillExtrusionLayer,
+		FillLayer,
+		Image,
+		LineLayer
+	} from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
 	import { quantize, slowBeat } from './beat.js';
 	import { weatherLightLoss } from './atmosphere.js';
@@ -18,7 +24,9 @@
 	const isPerf = $derived(display.config.qualityMode === 'performance');
 
 	// Fade out buildings when climbing into the upper stratosphere (> 7,500m)
-	const altitudeFade = $derived(Math.round(Math.max(0, Math.min(1, (8000 - aglM) / 2500)) * 100) / 100);
+	const altitudeFade = $derived(
+		Math.round(Math.max(0, Math.min(1, (8000 - aglM) / 2500)) * 100) / 100
+	);
 
 	// Dynamic building color transitioning from day concrete to night illuminated facade
 	// Ramped by height, not one flat tone: low stock reads dark, towers light,
@@ -30,15 +38,7 @@
 				: night < 0.6
 					? ['#a86a2a', '#ffd27a'] // golden hour
 					: ['#1e3a5f', '#7dd3fc']; // dusk into night
-		return [
-			'interpolate',
-			['linear'],
-			['coalesce', ['get', 'height'], 20],
-			4,
-			lo,
-			60,
-			hi
-		] as never;
+		return ['interpolate', ['linear'], ['coalesce', ['get', 'height'], 20], 4, lo, 60, hi] as never;
 	});
 	/**
 	 * Lit windows: a 32 px tile of a dark facade with a scatter of warm dots,
@@ -53,7 +53,7 @@
 		const data = new Uint8ClampedArray(WINDOWS_PX * WINDOWS_PX * 4);
 		for (let i = 0; i < data.length; i += 4) data.set([16, 18, 28, 255], i);
 		let seed = 0x9e3779b9;
-		const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+		const rand = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
 		for (let n = 0; n < 170; n++) {
 			const x = Math.floor(rand() * WINDOWS_PX);
 			const y = Math.floor(rand() * WINDOWS_PX);
@@ -62,7 +62,8 @@
 			data.set(px, (y * WINDOWS_PX + x) * 4);
 			// Most windows are two pixels wide; every fourth is a lit floor, four wide.
 			const run = rand() < 0.25 ? 4 : 2;
-			for (let k = 1; k < run && x + k < WINDOWS_PX; k++) data.set(px, (y * WINDOWS_PX + x + k) * 4);
+			for (let k = 1; k < run && x + k < WINDOWS_PX; k++)
+				data.set(px, (y * WINDOWS_PX + x + k) * 4);
 		}
 		return { width: WINDOWS_PX, height: WINDOWS_PX, data };
 	})();

@@ -21,7 +21,6 @@ import { pushWall, readWall } from '#lib/server/wall-store.js';
 import { MAX_WALL_BYTES, parseWallState } from '#lib/wall.js';
 import type { RequestHandler } from './$types';
 
-
 const wallPath = () => process.env.AERO_WALL_PATH ?? undefined;
 
 export const OPTIONS: RequestHandler = corsPreflight('GET, POST, OPTIONS');

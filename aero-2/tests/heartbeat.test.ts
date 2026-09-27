@@ -115,14 +115,29 @@ describe('summarize', () => {
 	 * which is why all nineteen of them passed before and after the fix.
 	 */
 	it('drops a dead pane out of the health metrics, not just the count', () => {
-		recordHeartbeat({ deviceId: 'left', fps: 30, temp: 82, thermalAction: 'shed', clockSynced: false }, 0);
-		recordHeartbeat({ deviceId: 'right', fps: 60, temp: 44, thermalAction: 'ok', clockSynced: true }, 0);
+		recordHeartbeat(
+			{ deviceId: 'left', fps: 30, temp: 82, thermalAction: 'shed', clockSynced: false },
+			0
+		);
+		recordHeartbeat(
+			{ deviceId: 'right', fps: 60, temp: 44, thermalAction: 'ok', clockSynced: true },
+			0
+		);
 
 		const fresh = summarize(1);
-		expect(fresh).toMatchObject({ online: 2, maxTempC: 82, shedding: 1, clockUnsynced: 1, avgFps: 45 });
+		expect(fresh).toMatchObject({
+			online: 2,
+			maxTempC: 82,
+			shedding: 1,
+			clockUnsynced: 1,
+			avgFps: 45
+		});
 
 		// `left` goes quiet; `right` keeps beating.
-		recordHeartbeat({ deviceId: 'right', fps: 60, temp: 44, thermalAction: 'ok', clockSynced: true }, ONLINE_WINDOW_MS);
+		recordHeartbeat(
+			{ deviceId: 'right', fps: 60, temp: 44, thermalAction: 'ok', clockSynced: true },
+			ONLINE_WINDOW_MS
+		);
 		const after = summarize(ONLINE_WINDOW_MS + 1);
 
 		expect(after.total, 'the device is still known').toBe(2);

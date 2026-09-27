@@ -61,7 +61,7 @@ const isLocalSpec = (spec) =>
 	// that imports it -- every +server.ts and +page.svelte would flag.
 	!/(^|\/)\$types$/.test(spec) &&
 	(spec.startsWith('#lib/') ||
-	spec.startsWith('#routes/') ||
+		spec.startsWith('#routes/') ||
 		spec.startsWith('./') ||
 		spec.startsWith('../'));
 

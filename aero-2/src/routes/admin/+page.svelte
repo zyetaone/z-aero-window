@@ -224,8 +224,8 @@
 			</button>
 		</div>
 		<p class="fleet-note">
-			Clears saved Wi-Fi on <strong>{status?.hostname ?? 'this device'}</strong> and reboots it
-			into the setup portal. This page will go unreachable; reconnect via the portal SSID.
+			Clears saved Wi-Fi on <strong>{status?.hostname ?? 'this device'}</strong> and reboots it into the
+			setup portal. This page will go unreachable; reconnect via the portal SSID.
 		</p>
 		{#if wifiStatus}
 			<p class="fleet-note">{wifiStatus}</p>

@@ -431,7 +431,8 @@ export class FlightTrack {
 	 */
 	altitudeAt(wallSec: number): number {
 		const rel = wallSec - CLIMB_LOW_PHASE_SEC;
-		const phase = (((rel % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC;
+		const phase =
+			(((rel % CLIMB_PERIOD_SEC) + CLIMB_PERIOD_SEC) % CLIMB_PERIOD_SEC) / CLIMB_PERIOD_SEC;
 		const smooth = (1 - Math.cos(phase * TWO_PI)) * 0.5;
 		const band = this.ceilingM - this.floorM;
 		const base = this.floorM + band * smooth;

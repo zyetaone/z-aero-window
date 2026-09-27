@@ -32,7 +32,7 @@
 		PointLight,
 		Scene,
 		Vector3,
-		WebGLRenderer,
+		WebGLRenderer
 	} from 'three';
 	import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -187,7 +187,13 @@
 				});
 				if (import.meta.env.DEV) {
 					console.warn(`[Wing] posed; hid ${hidden} meshes`);
-					(globalThis as unknown as { __wing?: unknown }).__wing = { scene, camera, renderer, wingHolder, wingMesh };
+					(globalThis as unknown as { __wing?: unknown }).__wing = {
+						scene,
+						camera,
+						renderer,
+						wingHolder,
+						wingMesh
+					};
 				}
 				wingHolder.add(wingMesh);
 			},

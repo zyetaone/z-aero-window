@@ -111,8 +111,7 @@ export function extractCity(id, lat, lon) {
 					const gy = ty * png.height + by * BLOCK + BLOCK / 2;
 					const plon = pixelLon(gx, SCAN_ZOOM);
 					const plat = pixelLat(gy, SCAN_ZOOM);
-					if (Math.abs(plon - lon) > BOX_DEG || Math.abs(plat - lat) > BOX_DEG)
-						continue;
+					if (Math.abs(plon - lon) > BOX_DEG || Math.abs(plat - lat) > BOX_DEG) continue;
 					features.push({
 						type: 'Feature',
 						properties: { i: intensity },

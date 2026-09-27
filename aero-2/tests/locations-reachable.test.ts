@@ -24,7 +24,9 @@ describe('every location is actually reachable', () => {
 		for (const id of ids) expect(Location.isValid(id), `${id} not in catalogue`).toBe(true);
 		// A rotation stop without a sharp basemap is a void on the offline Pi.
 		const unpacked = ids.filter((id) => !SENTINEL2_PLACES.has(id));
-		expect(unpacked, `rotation stops without a Sentinel-2 pack: ${unpacked.join(', ')}`).toEqual([]);
+		expect(unpacked, `rotation stops without a Sentinel-2 pack: ${unpacked.join(', ')}`).toEqual(
+			[]
+		);
 	});
 
 	it('visits every rotation stop within one day of slots', () => {

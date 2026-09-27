@@ -5,7 +5,7 @@
 	 */
 	import { useDisplay } from '../display/display.svelte.js';
 	import { LOCATIONS } from '../locations.js';
-		import { FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
+	import { FLEET_ROLES, AUDIO_MODES } from './settings.svelte.js';
 	import { DWELL_SEC } from '../display/flight/flight-path.js';
 
 	import { fetchStatus, type KioskStatus } from '#lib/status.js';
@@ -460,7 +460,6 @@
 		border-bottom: 1px solid var(--glass-border-subtle);
 		padding-bottom: 0.4rem;
 	}
-
 
 	.diag-list {
 		display: flex;

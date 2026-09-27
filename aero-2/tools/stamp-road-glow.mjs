@@ -51,9 +51,7 @@ export function lonLatToTile(lon, lat, z) {
 	const n = 2 ** z;
 	const x = Math.floor(((lon + 180) / 360) * n);
 	const latRad = (lat * Math.PI) / 180;
-	const y = Math.floor(
-		((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
-	);
+	const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
 	return [x, y];
 }
 
@@ -124,8 +122,7 @@ function luminanceAt(lon, lat) {
 	const latRad = (lat * Math.PI) / 180;
 	const px = Math.floor((((lon + 180) / 360) * n - x) * png.width);
 	const py = Math.floor(
-		(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n - y) *
-			png.height
+		(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n - y) * png.height
 	);
 	return blockLuminance(png, px, py);
 }

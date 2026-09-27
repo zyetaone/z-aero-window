@@ -213,7 +213,15 @@
 	 * identical every visit and needs no live subscription.
 	 */
 	const threadD = $derived.by(() => {
-		const arc = threadArc(track, place.lat, place.lon, display.config.floorM, display.config.speed, wallSec, place.isFeature);
+		const arc = threadArc(
+			track,
+			place.lat,
+			place.lon,
+			display.config.floorM,
+			display.config.speed,
+			wallSec,
+			place.isFeature
+		);
 		if (!arc) return '';
 		const pts = arc.map(([aLon, aLat]) => projectMini(aLon, aLat, place.lon, place.lat, zoom));
 		return `M ${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')}`;

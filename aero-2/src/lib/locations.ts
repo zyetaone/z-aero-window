@@ -140,7 +140,16 @@ export class Location {
 		),
 		new Location('mumbai', 'Mumbai, India', 19.076, 72.8777, 'Asia/Kolkata', 10, 2_600, 12_000),
 		new Location('dubai', 'Dubai, UAE', 25.2048, 55.2708, 'Asia/Dubai', 5, 2_800, 13_000),
-		new Location('dallas', 'Dallas, Texas', 32.7767, -96.797, 'America/Chicago', 150, 3_000, 12_000),
+		new Location(
+			'dallas',
+			'Dallas, Texas',
+			32.7767,
+			-96.797,
+			'America/Chicago',
+			150,
+			3_000,
+			12_000
+		),
 		new Location(
 			'phoenix',
 			'Phoenix, Arizona',
@@ -307,21 +316,65 @@ const PLACE_MOODS: Record<string, PlaceMood> = {
 	// Rocky plateau, lakes, a low sprawl: look down into it.
 	hyderabad: look({ dust: 0.18, pitchBiasDeg: -2 }),
 	// Monsoon coast: sea on the window side, a low grey deck.
-	mumbai: look({ dust: 0.28, pitchBiasDeg: 1, deckOffsetM: -800, coverageBias: 1.2, direction: -1 }),
+	mumbai: look({
+		dust: 0.28,
+		pitchBiasDeg: 1,
+		deckOffsetM: -800,
+		coverageBias: 1.2,
+		direction: -1
+	}),
 	// Gulf coast at night: the Palm and the shoreline, horizon high, little cloud.
-	dubai: look({ dust: 0.22, nightGlow: 1.25, pitchBiasDeg: 2, deckOffsetM: -500, coverageBias: 0.8, direction: -1 }),
+	dubai: look({
+		dust: 0.22,
+		nightGlow: 1.25,
+		pitchBiasDeg: 2,
+		deckOffsetM: -500,
+		coverageBias: 0.8,
+		direction: -1
+	}),
 	// Flat prairie grid: ground.
 	dallas: look({ dust: 0.15, pitchBiasDeg: -2 }),
 	// Desert basin, high thin cloud.
-	phoenix: look({ dust: 0.3, nightGlow: 0.9, pitchBiasDeg: -1, deckOffsetM: 800, coverageBias: 0.6 }),
+	phoenix: look({
+		dust: 0.3,
+		nightGlow: 0.9,
+		pitchBiasDeg: -1,
+		deckOffsetM: 800,
+		coverageBias: 0.6
+	}),
 	// The Strip at night, dry air.
-	las_vegas: look({ dust: 0.2, nightGlow: 1.25, pitchBiasDeg: -1, deckOffsetM: 600, coverageBias: 0.6, direction: -1 }),
+	las_vegas: look({
+		dust: 0.2,
+		nightGlow: 1.25,
+		pitchBiasDeg: -1,
+		deckOffsetM: 600,
+		coverageBias: 0.6,
+		direction: -1
+	}),
 	// Front Range to the west: fly it with the mountains under the wing, deck high.
 	denver: look({ dust: 0.05, deckOffsetM: 1200, coverageBias: 0.9 }),
 	// Lake Michigan: horizon and water, lake stratus low.
-	chicago_midway: look({ dust: 0.08, pitchBiasDeg: 1, deckOffsetM: -900, coverageBias: 1.15, direction: -1 }),
-	himalayas: look({ dust: 0.0, nightGlow: 0.7, pitchBiasDeg: -4, deckOffsetM: 3000, coverageBias: 0.9 }),
-	ocean: look({ dust: 0.12, nightGlow: 0.5, pitchBiasDeg: 3, deckOffsetM: -1000, coverageBias: 1.1 }),
+	chicago_midway: look({
+		dust: 0.08,
+		pitchBiasDeg: 1,
+		deckOffsetM: -900,
+		coverageBias: 1.15,
+		direction: -1
+	}),
+	himalayas: look({
+		dust: 0.0,
+		nightGlow: 0.7,
+		pitchBiasDeg: -4,
+		deckOffsetM: 3000,
+		coverageBias: 0.9
+	}),
+	ocean: look({
+		dust: 0.12,
+		nightGlow: 0.5,
+		pitchBiasDeg: 3,
+		deckOffsetM: -1000,
+		coverageBias: 1.1
+	}),
 	desert: look({ dust: 0.38, nightGlow: 0.55, deckOffsetM: 800, coverageBias: 0.4 })
 };
 

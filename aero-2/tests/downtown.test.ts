@@ -60,9 +60,7 @@ describe('downtownBlendAt', () => {
 		expect(mid).toBeLessThan(1);
 		expect(downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M)).toBe(1);
 		// Exact middle of the fade is exactly half open.
-		expect(downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M / 2)).toBe(
-			0.5
-		);
+		expect(downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M - DOWNTOWN_GATE_FADE_M / 2)).toBe(0.5);
 		// The ceiling itself is shut, and fractional seconds blend like whole ones.
 		expect(downtownBlendAt(150, DOWNTOWN_THREAD_MAX_AGL_M)).toBe(0);
 		expect(downtownBlendAt(150.5, LOW)).toBe(1);
@@ -234,9 +232,7 @@ describe('downtown thread in production config', () => {
 			const place = Location.byId(id);
 			// 2550: slot 4 (even), 150 s in — mid-pass and the climb's trough.
 			const v = calculateCameraView(2550, paramsFor(`?place=${id}`));
-			expect(kmBetween(v.lat, v.lon, place.lat, place.lon), `${id} off-thread`).toBeLessThan(
-				6
-			);
+			expect(kmBetween(v.lat, v.lon, place.lat, place.lon), `${id} off-thread`).toBeLessThan(6);
 			// The climb is at its trough (the wander taper is zero there too), so
 			// the thread bottoms out at the thread altitude: Denver's own 3,000 m
 			// floor, Hyderabad's DOWNTOWN_MIN_AGL_M.

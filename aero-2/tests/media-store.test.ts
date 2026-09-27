@@ -148,10 +148,9 @@ describe('media-store', () => {
 		);
 		// Junk must not disable the cap.
 		for (const v of ['', 'lots', '0', '-5']) {
-			expect(
-				maxUploadBytes({ AERO_MEDIA_MAX_MB: v } as unknown as NodeJS.ProcessEnv),
-				v
-			).toBe(50 * 1024 * 1024);
+			expect(maxUploadBytes({ AERO_MEDIA_MAX_MB: v } as unknown as NodeJS.ProcessEnv), v).toBe(
+				50 * 1024 * 1024
+			);
 		}
 	});
 });

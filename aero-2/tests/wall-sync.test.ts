@@ -210,14 +210,19 @@ describe('audioUrls on the receive side', () => {
 		const config = createSettings();
 		applyWallState(state({ audioUrls: ['/api/media/abc123def4567890.mp3'] }), config, 100);
 		expect(config.audioPlaylist).toEqual(['/api/media/abc123def4567890.mp3']);
-		expect(config.audioMode, 'tracks with the mode still at synth is two switches for one intent').toBe('playlist');
+		expect(
+			config.audioMode,
+			'tracks with the mode still at synth is two switches for one intent'
+		).toBe('playlist');
 		expect(config.audioEnabled).toBe(true);
 	});
 
 	it('reaches every pane identically, which is the entire point', () => {
 		const left = createSettings();
 		const right = createSettings();
-		const push = state({ audioUrls: ['/api/media/aaaaaaaaaaaaaaaa.mp3', '/api/media/bbbbbbbbbbbbbbbb.mp3'] });
+		const push = state({
+			audioUrls: ['/api/media/aaaaaaaaaaaaaaaa.mp3', '/api/media/bbbbbbbbbbbbbbbb.mp3']
+		});
 		applyWallState(push, left, 100);
 		applyWallState(push, right, 100);
 		expect(left.audioPlaylist).toEqual(right.audioPlaylist);
@@ -274,11 +279,7 @@ describe('mediaUrls on the receive side', () => {
 	 */
 	it('sorts a mixed list by what can actually render it', () => {
 		const config = createSettings();
-		applyWallState(
-			state({ mediaUrls: ['/a.mp4', '/b.webp', '/c.webm', '/d.jpg'] }),
-			config,
-			100
-		);
+		applyWallState(state({ mediaUrls: ['/a.mp4', '/b.webp', '/c.webm', '/d.jpg'] }), config, 100);
 		expect(config.videoPlaylist).toEqual(['/a.mp4', '/c.webm']);
 		expect(config.screensaverUrls).toEqual(['/b.webp', '/d.jpg']);
 		expect(config.videoUrl).toBe('/a.mp4');
@@ -311,9 +312,7 @@ describe('mediaUrls on the receive side', () => {
 			'http://10.0.0.5:3000/api/media/abc123def4567890.mp4',
 			'https://cdn.example.com/x.mp4'
 		]);
-		expect(config.audioPlaylist).toEqual([
-			'http://10.0.0.5:3000/api/media/0123456789abcdef.mp3'
-		]);
+		expect(config.audioPlaylist).toEqual(['http://10.0.0.5:3000/api/media/0123456789abcdef.mp3']);
 	});
 
 	/**
@@ -333,7 +332,12 @@ describe('mediaUrls on the receive side', () => {
 		const config = createSettings();
 		const pushed = ['/api/media/abc123def4567890.mp4', '/api/media/0123456789abcdef.webp'];
 		const origin = 'http://10.0.0.5:3000';
-		applyWallState(state({ mediaUrls: pushed, audioUrls: ['/api/media/fedcba9876543210.mp3'] }), config, 100, origin);
+		applyWallState(
+			state({ mediaUrls: pushed, audioUrls: ['/api/media/fedcba9876543210.mp3'] }),
+			config,
+			100,
+			origin
+		);
 
 		expect(seedMediaDraft([config.videoPlaylist, config.screensaverUrls], origin)).toEqual(pushed);
 		expect(seedMediaDraft([config.audioPlaylist], origin)).toEqual([
@@ -343,12 +347,17 @@ describe('mediaUrls on the receive side', () => {
 
 	it('an extensionless URL, which lands in both lists, seeds back exactly once', () => {
 		const config = createSettings();
-		applyWallState(state({ mediaUrls: ['https://cdn.example.com/stream'] }), config, 100, 'http://10.0.0.5:3000');
+		applyWallState(
+			state({ mediaUrls: ['https://cdn.example.com/stream'] }),
+			config,
+			100,
+			'http://10.0.0.5:3000'
+		);
 		expect(config.videoPlaylist).toEqual(['https://cdn.example.com/stream']);
 		expect(config.screensaverUrls).toEqual(['https://cdn.example.com/stream']);
-		expect(seedMediaDraft([config.videoPlaylist, config.screensaverUrls], 'http://10.0.0.5:3000')).toEqual([
-			'https://cdn.example.com/stream'
-		]);
+		expect(
+			seedMediaDraft([config.videoPlaylist, config.screensaverUrls], 'http://10.0.0.5:3000')
+		).toEqual(['https://cdn.example.com/stream']);
 	});
 
 	it('does not strip an origin that is not this wall', () => {

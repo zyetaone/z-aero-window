@@ -25,7 +25,13 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
 import { safeResolveWithin } from './fs-guard.js';
-import { isAllowedExtension, listMedia, maxUploadBytes, mediaDir, saveMedia } from './media-store.js';
+import {
+	isAllowedExtension,
+	listMedia,
+	maxUploadBytes,
+	mediaDir,
+	saveMedia
+} from './media-store.js';
 import type { MediaItem } from './media-store.js';
 
 /**

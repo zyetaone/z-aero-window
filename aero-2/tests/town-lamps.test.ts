@@ -27,9 +27,7 @@ describe('pixelLon/pixelLat', () => {
 		const gx = ((lon + 180) / 360) * 256 * 2 ** z;
 		const latRad = (lat * Math.PI) / 180;
 		const gy =
-			((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
-			256 *
-			2 ** z;
+			((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * 256 * 2 ** z;
 		expect(pixelLon(gx, z)).toBeCloseTo(lon, 9);
 		expect(pixelLat(gy, z)).toBeCloseTo(lat, 9);
 		// And the inverted point sits inside the tile the stamp names.

@@ -25,7 +25,11 @@ const DEVICE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
  * this module's readers already use.
  */
 export { FLEET_ONLINE_WINDOW_MS as ONLINE_WINDOW_MS } from '#lib/status.js';
-import { FLEET_ONLINE_WINDOW_MS as ONLINE_WINDOW_MS, rollUpFleet, type FleetRollup } from '#lib/status.js';
+import {
+	FLEET_ONLINE_WINDOW_MS as ONLINE_WINDOW_MS,
+	rollUpFleet,
+	type FleetRollup
+} from '#lib/status.js';
 
 export interface HeartbeatSample {
 	deviceId: string;

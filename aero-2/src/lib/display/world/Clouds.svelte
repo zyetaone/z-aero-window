@@ -102,7 +102,9 @@
 	// frozen deck; `slotNoise` is wall-shared, so every pane rolls the same.
 	const coverSlot = $derived(Math.floor(display.view.wallSec / 900));
 	const coverageScale = $derived(
-		(WEATHER_COVERAGE[display.weather] ?? 1) * look.coverageBias * (0.8 + 0.4 * slotNoise(coverSlot, 11))
+		(WEATHER_COVERAGE[display.weather] ?? 1) *
+			look.coverageBias *
+			(0.8 + 0.4 * slotNoise(coverSlot, 11))
 	);
 
 	/**
@@ -152,7 +154,6 @@
 
 		const cloudGroup = new Group();
 		scene.add(cloudGroup);
-
 
 		const textureLoader = new TextureLoader();
 		const textures: Texture[] = [];
@@ -486,7 +487,8 @@
 			 * square, so the population never thins out ahead or piles up behind.
 			 */
 			const pl = display.config.place;
-			const eastM = (display.view.lon - pl.lon) * M_PER_DEG_LAT * Math.cos(display.view.lat * DEG2RAD);
+			const eastM =
+				(display.view.lon - pl.lon) * M_PER_DEG_LAT * Math.cos(display.view.lat * DEG2RAD);
 			const northM = (display.view.lat - pl.lat) * M_PER_DEG_LAT;
 			const wrap = (v: number, r: number) => ((((v + r) % (2 * r)) + 2 * r) % (2 * r)) - r;
 
@@ -541,7 +543,10 @@
 				s.position.z = wz;
 				// Fade to nothing over the outer 12% of the tier square, so a sprite
 				// that wraps to the far side does so invisible instead of popping.
-				const edge = Math.max(0, Math.min(1, (r - Math.max(Math.abs(wx), Math.abs(wz))) / (0.12 * r)));
+				const edge = Math.max(
+					0,
+					Math.min(1, (r - Math.max(Math.abs(wx), Math.abs(wz))) / (0.12 * r))
+				);
 				edgeFade[i] = edge;
 
 				// Forward Mie scatter

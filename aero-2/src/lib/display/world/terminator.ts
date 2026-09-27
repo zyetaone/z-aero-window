@@ -208,7 +208,9 @@ function coversBothPoles(center: GeoPoint, radiusDeg: number): boolean {
  * Using each end's own latitude instead leaves a jag of up to one step there.
  */
 function poleCapRing(curve: GeoPoint[], pole: 1 | -1): GeoPoint[] {
-	const pts = curve.map((p) => ({ lat: p.lat, lng: wrapSigned(p.lng) })).sort((a, b) => a.lng - b.lng);
+	const pts = curve
+		.map((p) => ({ lat: p.lat, lng: wrapSigned(p.lng) }))
+		.sort((a, b) => a.lng - b.lng);
 	const first = pts[0];
 	const last = pts[pts.length - 1];
 	const span = first.lng + 360 - last.lng;

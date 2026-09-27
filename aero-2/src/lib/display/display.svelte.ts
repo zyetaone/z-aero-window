@@ -32,7 +32,13 @@ import type { Weather } from '#lib/wall.js';
 import { blindClosedAt, phaseFor } from './flight/flight-path.js';
 import { DWELL_SEC, FlightDirector } from './flight/director.svelte.js';
 import { resolveAtmosphere, type AtmosphereState } from './world/atmosphere.js';
-import { moonPosition, nightAmount, sunPosition, type MoonPosition, type SunPosition } from './world/sun.js';
+import {
+	moonPosition,
+	nightAmount,
+	sunPosition,
+	type MoonPosition,
+	type SunPosition
+} from './world/sun.js';
 import { createSettings, type PaneSettings } from '#lib/settings/settings.svelte.js';
 import { WallSync } from '#lib/settings/wall.svelte.js';
 import { PUBLIC_WALL_ORIGIN } from '$app/env/public';

@@ -289,10 +289,7 @@ export const NIGHT_FAR_SPAN_M = 4000;
  */
 export function farFieldShare(aglM: number): number {
 	if (!Number.isFinite(aglM)) return 0;
-	return Math.max(
-		0,
-		Math.min(1, (aglM - NIGHT_VECTOR_TOP_M) / NIGHT_FAR_SPAN_M)
-	);
+	return Math.max(0, Math.min(1, (aglM - NIGHT_VECTOR_TOP_M) / NIGHT_FAR_SPAN_M));
 }
 /**
  * Dusk/dawn mount hysteresis for the night layers.
@@ -383,11 +380,16 @@ export function moonPosition(wallSec: number, lat: number, lon: number): MoonPos
 	const sinAlt = Math.sin(latR) * Math.sin(dec) + Math.cos(latR) * Math.cos(dec) * Math.cos(ha);
 	const alt = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
 	// atan2 form measured from south, westward; +180 turns it into a compass bearing.
-	const az = Math.atan2(Math.sin(ha), Math.cos(ha) * Math.sin(latR) - Math.tan(dec) * Math.cos(latR));
+	const az = Math.atan2(
+		Math.sin(ha),
+		Math.cos(ha) * Math.sin(latR) - Math.tan(dec) * Math.cos(latR)
+	);
 	const azimuthDeg = (((az * RAD2DEG + 180) % 360) + 360) % 360;
 
 	const sunM = (357.528 + 0.9856003 * d) * DEG2RAD;
-	const sunLambda = (280.46 + 0.9856474 * d) * DEG2RAD + (1.915 * Math.sin(sunM) + 0.02 * Math.sin(2 * sunM)) * DEG2RAD;
+	const sunLambda =
+		(280.46 + 0.9856474 * d) * DEG2RAD +
+		(1.915 * Math.sin(sunM) + 0.02 * Math.sin(2 * sunM)) * DEG2RAD;
 	const illumination = (1 - Math.cos(lambda - sunLambda)) / 2;
 
 	return { azimuthDeg, elevationDeg: alt * RAD2DEG, illumination };

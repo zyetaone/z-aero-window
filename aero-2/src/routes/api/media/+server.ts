@@ -26,7 +26,12 @@ import { json } from '@sveltejs/kit';
 
 import { requireBearer } from '#lib/server/auth.js';
 import { corsPreflight, lanCorsHeaders, withCors } from '#lib/server/cors.js';
-import { isAllowedExtension, listMedia, maxUploadBytes, saveMedia } from '#lib/server/media-store.js';
+import {
+	isAllowedExtension,
+	listMedia,
+	maxUploadBytes,
+	saveMedia
+} from '#lib/server/media-store.js';
 import type { RequestHandler } from './$types';
 
 export const OPTIONS: RequestHandler = corsPreflight('GET, POST, OPTIONS');
@@ -80,10 +85,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 	}
 	if (!isAllowedExtension(file.name)) {
-		return json(
-			{ error: `unsupported file type: ${file.name}` },
-			{ status: 415, headers: cors }
-		);
+		return json({ error: `unsupported file type: ${file.name}` }, { status: 415, headers: cors });
 	}
 
 	const item = await saveMedia(file.name, new Uint8Array(await file.arrayBuffer()));

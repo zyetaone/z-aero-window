@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCameraView } from '#lib/display/flight/view.js';
 import { readSettings } from '#lib/settings/settings.svelte.js';
-import { ALTITUDE_CEILING_M, ALTITUDE_FLOOR_M, CLIMB_PERIOD_SEC, DWELL_SEC } from '#lib/display/flight/flight-path.js';
+import {
+	ALTITUDE_CEILING_M,
+	ALTITUDE_FLOOR_M,
+	CLIMB_PERIOD_SEC,
+	DWELL_SEC
+} from '#lib/display/flight/flight-path.js';
 
-const paramsFor = (place: string) => readSettings(new URL(`http://kiosk.local/?place=${place}&role=center`));
+const paramsFor = (place: string) =>
+	readSettings(new URL(`http://kiosk.local/?place=${place}&role=center`));
 const kmBetween = (aLat: number, aLon: number, bLat: number, bLon: number) => {
 	const dLat = (aLat - bLat) * 111.32;
 	const dLon = (aLon - bLon) * 111.32 * Math.cos((bLat * Math.PI) / 180);

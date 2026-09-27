@@ -20,12 +20,7 @@
 	 */
 	import { GeoJSONSource, CircleLayer } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
-	import {
-		hysteresisGate,
-		NIGHT_LIGHT_RAMP,
-		NIGHT_MOUNT_OFF,
-		NIGHT_MOUNT_ON
-	} from './sun.js';
+	import { hysteresisGate, NIGHT_LIGHT_RAMP, NIGHT_MOUNT_OFF, NIGHT_MOUNT_ON } from './sun.js';
 	import { Location } from '#lib/locations.js';
 
 	const display = useDisplay();
@@ -67,15 +62,7 @@
 		1,
 		'#ffd9a0'
 	] as never;
-	const radius = [
-		'interpolate',
-		['linear'],
-		['zoom'],
-		7,
-		1.5,
-		11,
-		3
-	] as never;
+	const radius = ['interpolate', ['linear'], ['zoom'], 7, 1.5, 11, 3] as never;
 </script>
 
 {#if mounted}

@@ -19,7 +19,14 @@ describe('rotation hop', () => {
 		const after = display.advanceTo(boundary + 0.5);
 		expect(after.lat).not.toBe(before.lat);
 		for (const v of [before, after]) {
-			for (const k of ['lat', 'lon', 'targetLat', 'targetLon', 'aglM', 'planeHeadingDeg'] as const) {
+			for (const k of [
+				'lat',
+				'lon',
+				'targetLat',
+				'targetLon',
+				'aglM',
+				'planeHeadingDeg'
+			] as const) {
 				const n = (v as unknown as Record<string, number>)[k];
 				expect(Number.isFinite(n), `${k}=${n}`).toBe(true);
 			}

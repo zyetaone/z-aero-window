@@ -9,11 +9,7 @@ import {
 	daySeed,
 	CLIMB_PERIOD_SEC
 } from '#lib/display/flight/flight-path.js';
-import {
-	calculateCameraView,
-	FlightCamera,
-	WORLD_ROLL_GAIN
-} from '#lib/display/flight/view.js';
+import { calculateCameraView, FlightCamera, WORLD_ROLL_GAIN } from '#lib/display/flight/view.js';
 import { resolveAtmosphere, weatherLightLoss, cloudedRgb } from '#lib/display/world/atmosphere.js';
 import { DOWNTOWN_MIN_AGL_M } from '#lib/display/flight/downtown.js';
 import { slotNoise, phaseFor } from '#lib/display/flight/flight-path.js';
@@ -1410,10 +1406,14 @@ describe('the wing is attached to the aircraft', () => {
 	 */
 	it('the world rolls from flight/view and the wing does not roll at all', () => {
 		const stage = readFileSync('src/lib/display/world/Stage.svelte', 'utf8');
-		expect(stage, 'Stage.svelte must import WORLD_ROLL_GAIN').toMatch(/import\s*\{[^}]*WORLD_ROLL_GAIN/);
+		expect(stage, 'Stage.svelte must import WORLD_ROLL_GAIN').toMatch(
+			/import\s*\{[^}]*WORLD_ROLL_GAIN/
+		);
 		const code = (f: string) => readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 		expect(code('src/lib/display/world/Stage.svelte')).not.toMatch(/const\s+WORLD_ROLL_GAIN\s*=/);
-		expect(code('src/lib/display/cabin/Wing.svelte'), 'the wing is airframe-fixed').not.toMatch(/ROLL_GAIN/);
+		expect(code('src/lib/display/cabin/Wing.svelte'), 'the wing is airframe-fixed').not.toMatch(
+			/ROLL_GAIN/
+		);
 		expect(code('src/lib/display/cabin/Wing.svelte')).not.toMatch(/worldRoll/);
 	});
 

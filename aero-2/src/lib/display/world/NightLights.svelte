@@ -111,9 +111,16 @@
 	 * under the committed world grade. The ramp starts where the road lamps
 	 * hand over (NIGHT_VECTOR_TOP_M) and is full 4 km above it.
 	 */
-	const cruise = $derived.by(() => Math.round(100 * (
-		Math.max(0, Math.min(1, (display.view.aglM - NIGHT_VECTOR_TOP_M) / CRUISE_EXPOSURE_SPAN_M))
-	)) / 100);
+	const cruise = $derived.by(
+		() =>
+			Math.round(
+				100 *
+					Math.max(
+						0,
+						Math.min(1, (display.view.aglM - NIGHT_VECTOR_TOP_M) / CRUISE_EXPOSURE_SPAN_M)
+					)
+			) / 100
+	);
 	/**
 	 * Low pass: below ~2.5 km the road lamps and lit windows carry the city, and
 	 * the raster, stretched to metres per pixel, is an orange blanket under
@@ -129,7 +136,11 @@
 	const deck = $derived(weatherLightLoss(display.weather));
 	const viirsOpacity = $derived(
 		Math.round(
-			100 * Math.min(0.5, nightLightOpacity) * (1 - 0.6 * cruise) * (0.25 + 0.75 * lowPass) * (1 - 0.8 * deck)
+			100 *
+				Math.min(0.5, nightLightOpacity) *
+				(1 - 0.6 * cruise) *
+				(0.25 + 0.75 * lowPass) *
+				(1 - 0.8 * deck)
 		) / 100
 	);
 	const viirsContrast = $derived(0.55 * cruise);

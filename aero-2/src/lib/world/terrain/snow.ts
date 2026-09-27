@@ -87,15 +87,7 @@ export function withSnowLine(
 		'case',
 		['<=', ['elevation'], fadeStart],
 		ramp,
-		[
-			'interpolate',
-			['linear'],
-			['elevation'],
-			fadeStart,
-			ramp,
-			line,
-			rgb(SNOW_RGB)
-		]
+		['interpolate', ['linear'], ['elevation'], fadeStart, ramp, line, rgb(SNOW_RGB)]
 	] as unknown as ExpressionSpecification;
 }
 
