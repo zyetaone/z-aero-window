@@ -73,7 +73,9 @@ export function resolveClearance(
 export const DATUM_MARGIN_M = 120;
 
 /**
- * How fast the smoothed datum falls toward a lower target, per second.
+ * How fast the smoothed datum falls toward a lower target: the rate
+ * constant of the exponential approach, per second. The remaining gap
+ * shrinks by e^-2.5 (~92%) every second.
  *
  * Rises are instant (never ease into a ridge); falls glide so the camera
  * does not step off cliff edges. 2.5 halves the burial window of the old
@@ -82,20 +84,59 @@ export const DATUM_MARGIN_M = 120;
 export const DATUM_FALL_PER_SEC = 2.5;
 
 /**
- * One frame of the smoothed clearance datum.
+ * A fall in progress: where it started, when, and where it is going.
+ *
+ * The anchor for a CLOSED-FORM glide. The old `smoothDatum` integrated
+ * `prev + (goal - prev) * dt * rate` frame by frame on a wall-clock delta —
+ * rate-correct, but the value at any second depended on which frames a
+ * pane had rendered since the fall began (`+= dt` in disguise; ADR-007).
+ * Keyed on the wall second instead, `datumAt` is a pure function of
+ * (anchor, wallSec): two panes holding the same anchor agree at every
+ * second whatever their frame cadence, and a pane that drops frames does
+ * not glide slower.
+ *
+ * What the anchor cannot do: survive a reboot. It is the second the DEM
+ * sample under THIS pane changed, and that is pane-local by nature (tiles
+ * decode when they decode). A pane that boots mid-glide has no anchor and
+ * stands on the goal at once — as it always did — and its neighbours
+ * converge on it within a few time constants. The closed form removes
+ * frame-phase drift, not tile-timing drift. Replaced, never mutated.
+ */
+export interface DatumGlide {
+	/** Datum at the anchor second. */
+	readonly fromM: number;
+	/** Wall second the fall was anchored at. */
+	readonly fromWallSec: number;
+	/** Margined target the fall approaches; never crossed. */
+	readonly goalM: number;
+}
+
+/**
+ * The datum at `wallSec` for a glide: an exponential approach from the
+ * anchor toward the goal. `exp` is strictly positive, so a fall never
+ * crosses below its goal; a second before the anchor reads the anchor.
+ */
+export function datumAt(glide: DatumGlide, wallSec: number): number {
+	const elapsed = Math.max(0, wallSec - glide.fromWallSec);
+	return glide.goalM + (glide.fromM - glide.goalM) * Math.exp(-DATUM_FALL_PER_SEC * elapsed);
+}
+
+/**
+ * Advance the glide for a new terrain sample at `wallSec`.
  *
  * Pure so the burial contract is unit-testable: a newly sampled ridge is
- * climbed INSTANTLY (the result equals the margined goal whenever the goal
- * is above the previous datum), a falling datum approaches from above and
- * never crosses below the goal, and the margin holds in both directions.
- * `dtSec` is a WALL-clock delta (Stage derives it from `view.wallSec`, not
- * `performance.now()`), so the glide covers the same metres per second on
- * every pane; they can still disagree by a frame mid-glide — invisible, and
- * both ends are the shared sampled values.
+ * climbed INSTANTLY (the glide re-anchors ON the margined goal whenever the
+ * goal is at or above the current datum), a lower goal is approached from
+ * above and never crossed, and the margin holds in both directions. An
+ * unchanged goal returns the SAME anchor, so a fall in progress stays a
+ * function of the wall second alone; a goal that moves lower again
+ * mid-fall re-anchors at the current datum so the picture never jumps.
  */
-export function smoothDatum(prev: number | null, target: number, dtSec: number): number {
+export function glideDatum(prev: DatumGlide | null, target: number, wallSec: number): DatumGlide {
 	const goal = target + DATUM_MARGIN_M;
-	if (prev === null || goal >= prev) return goal;
-	const step = Math.min(1, Math.max(0, dtSec) * DATUM_FALL_PER_SEC);
-	return prev + (goal - prev) * step;
+	if (prev === null) return { fromM: goal, fromWallSec: wallSec, goalM: goal };
+	if (goal === prev.goalM) return prev;
+	const current = datumAt(prev, wallSec);
+	if (goal >= current) return { fromM: goal, fromWallSec: wallSec, goalM: goal };
+	return { fromM: current, fromWallSec: wallSec, goalM: goal };
 }
