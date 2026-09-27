@@ -49,6 +49,7 @@
 	import { Location } from '#lib/locations.js';
 	import { quantize, shiftDash } from './beat.js';
 	import { weatherLightLoss } from './atmosphere.js';
+	import { CASING_COLOR, LAMP_COLOR, SNAP, lampOpacity } from './roads-paint.js';
 
 	const display = useDisplay();
 
@@ -128,14 +129,7 @@
 	 * windows share the seam by construction (sun.ts), so no altitude
 	 * double-draws or gaps.
 	 */
-	const far = $derived(lightUp * farFieldShare(aglM));
-
-	/**
-	 * Per-road VIIRS gain, stamped offline by tools/stamp-road-glow.mjs.
-	 * Lamp-runs through bright ground burn full; rural connectors dim
-	 * toward ember. Unstamped packs read 1 — the old flat look, not dark.
-	 */
-	const viirsGlow = ['coalesce', ['get', 'glow'], 1] as never;
+	const far = $derived(quantize(lightUp * farFieldShare(aglM)));
 
 	/**
 	 * Feature locations have no roads and never will.
@@ -204,19 +198,26 @@
 	const glimmer = $derived(lampGlimmer(wallT));
 
 	/**
-	 * Opacity expressions: the altitude/night scalar and the 5 Hz shimmer
-	 * stay reactive numbers; the VIIRS gain is a per-feature expression.
-	 * MapLibre multiplies them per lamp-run, so a motorway through the
-	 * dark prairie draws dimmer than the same class downtown. Declared
-	 * after the shimmer sampler they read — declaration order is the
-	 * dependency order here.
+	 * Opacities are PLAIN NUMBERS, never expressions — see roads-paint.ts.
+	 *
+	 * The per-road VIIRS gain used to be multiplied in here, which made each
+	 * of these data-driven, and a data-driven `setPaintProperty` reloads the
+	 * whole `city-roads` source: the 5 Hz shimmer was re-tiling 20k features
+	 * five times a second. The gain now rides in the colour's alpha
+	 * (`LAMP_COLOR`, set once); MapLibre multiplies colour alpha by opacity
+	 * per lamp-run, so a motorway through the dark prairie still draws
+	 * dimmer than the same class downtown. Quantised to 0.01: a number that
+	 * only changes on the grid is one uniform write per step. Declared after
+	 * the shimmer sampler they read — declaration order is the dependency
+	 * order here.
 	 */
-	const bloomOpacity = $derived(['*', 0.22 * glow, viirsGlow] as never);
-	const casingOpacity = $derived(['*', 0.8 * glow, viirsGlow] as never);
-	const majorOpacity = $derived(['*', 0.55 * glow, flicker, viirsGlow] as never);
-	const glimmerOpacity = $derived(['*', 0.4 * glow, glimmer, viirsGlow] as never);
-	const minorOpacity = $derived(['*', 0.5 * glow, flicker, viirsGlow] as never);
-	const farOpacity = $derived(['*', 0.75 * far, viirsGlow] as never);
+	const bloomOpacity = $derived(lampOpacity(0.22, glow));
+	const trafficOpacity = $derived(lampOpacity(0.9, glow));
+	const casingOpacity = $derived(lampOpacity(0.8, glow));
+	const majorOpacity = $derived(lampOpacity(0.55, glow, flicker));
+	const glimmerOpacity = $derived(lampOpacity(0.4, glow, glimmer));
+	const minorOpacity = $derived(lampOpacity(0.5, glow, flicker));
+	const farOpacity = $derived(lampOpacity(0.75, far));
 
 	/**
 	 * Arterials vs the minor grid, as filters.
@@ -315,29 +316,16 @@
 	 * (no flicker): it is roadbed, not lamp.
 	 */
 	const casingWidth = $derived(widthAt(1.7));
-	const casingColor = '#17110b';
 
 	/**
-	 * Sodium amber for the big roads, cooler white for the small grid.
-	 *
-	 * Backwards from the intuition that motorways are the modern LED ones, and
-	 * deliberately so: from altitude the arterials are the continuous lit runs
-	 * and the residential grid reads as scattered cooler points. Picking the
-	 * warm tone for the DOMINANT line keeps the overall cast matching VIIRS
-	 * underneath, which is strongly amber. Two vector colours against one
-	 * raster colour is already the limit of what stays coherent.
+	 * Colours are STATIC and carry the VIIRS gain as alpha (roads-paint.ts).
+	 * Plain constants, not `$derived`: they have no reactive input, and a
+	 * fresh array per render would be a `setPaintProperty` per render that
+	 * only MapLibre's `deepEqual` short-circuit saves.
 	 */
-	const color = $derived([
-		'match',
-		['get', 'class'],
-		'motorway',
-		'#ffb959',
-		'trunk',
-		'#ffab45',
-		'primary',
-		'#ffa63c',
-		'#e8d9c0'
-	] as never);
+	const color = LAMP_COLOR as never;
+	const casingColor = CASING_COLOR as never;
+	const snap = SNAP as never;
 </script>
 
 {#if mounted}
@@ -354,7 +342,8 @@
 				'line-color': color,
 				'line-width': bloomWidth,
 				'line-blur': 3,
-				'line-opacity': bloomOpacity
+				'line-opacity': bloomOpacity,
+				'line-opacity-transition': snap
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>
@@ -366,7 +355,8 @@
 			paint={{
 				'line-color': '#fff1c9',
 				'line-width': width,
-				'line-opacity': 0.9 * glow,
+				'line-opacity': trafficOpacity,
+				'line-opacity-transition': snap,
 				'line-dasharray': trafficDash
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -378,7 +368,8 @@
 				'line-color': casingColor,
 				'line-width': casingWidth,
 				'line-blur': 0,
-				'line-opacity': casingOpacity
+				'line-opacity': casingOpacity,
+				'line-opacity-transition': snap
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 		/>
@@ -399,6 +390,7 @@
 				'line-width': width,
 				'line-blur': 1,
 				'line-opacity': majorOpacity,
+				'line-opacity-transition': snap,
 				'line-dasharray': [1.5, 2.4]
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -411,6 +403,7 @@
 				'line-width': width,
 				'line-blur': 2,
 				'line-opacity': glimmerOpacity,
+				'line-opacity-transition': snap,
 				'line-dasharray': [0.9, 4.2]
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -423,6 +416,7 @@
 				'line-width': width,
 				'line-blur': 1,
 				'line-opacity': minorOpacity,
+				'line-opacity-transition': snap,
 				'line-dasharray': [0.4, 3]
 			}}
 			layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -448,6 +442,7 @@
 				'line-width': width,
 				'line-blur': 1,
 				'line-opacity': farOpacity,
+				'line-opacity-transition': snap,
 				'line-dasharray': [
 					'step',
 					['zoom'],
