@@ -157,7 +157,6 @@ export class AeroWindow {
 	// High-frequency animation time (not reactive — updated each tick).
 	// Read internally via #createContext to feed engines; no external consumer.
 	#time = 0;
-	// Wall-clock of the previous tick (Date.now() ms). 0 = no frame seen yet.
 
 	// Private perf counters. 0 = no frame seen yet, so the first frame only
 	// establishes the baseline and contributes no period sample.
@@ -612,7 +611,7 @@ export class AeroWindow {
 		// would both run the autopilot and fight over the location, or none
 		// would and the wall would freeze on one scene.
 		ctx.isLeader = isGroupLeader(this.config.camera.parallax.role);
-		const directorPatch = directorTick(delta, ctx);
+		const directorPatch = directorTick(ctx);
 
 		if (directorPatch.configs) {
 			for (const { path, value } of directorPatch.configs) {

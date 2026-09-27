@@ -50,15 +50,15 @@ function makeCtx(overrides: Partial<SimulationContext> = {}): SimulationContext 
 
 describe('directorTick — gates', () => {
 	it('returns empty patch when not leader', () => {
-		const patch = directorTick(100, makeCtx({ isLeader: false, wallDeltaSec: 100 }));
+		const patch = directorTick(makeCtx({ isLeader: false, wallDeltaSec: 100 }));
 		expect(patch.configs).toBeUndefined();
 		expect(patch.nextLocation).toBeUndefined();
 	});
 
 	it('runs randomisation on the leader once the interval lapses', () => {
 		// Two ticks: first seeds lazy timers, second fires past the (1s) interval.
-		directorTick(0, makeCtx());
-		const patch = directorTick(5, makeCtx({ wallDeltaSec: 5 }));
+		directorTick(makeCtx());
+		const patch = directorTick(makeCtx({ wallDeltaSec: 5 }));
 		expect(patch.configs).toBeDefined();
 		expect(patch.configs!.length).toBeGreaterThan(0);
 	});

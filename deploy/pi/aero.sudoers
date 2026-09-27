@@ -10,7 +10,11 @@
 # preflight passed only because the first user's blanket NOPASSWD file
 # (/etc/sudoers.d/010_pi-nopasswd) happened to exist. On any image without
 # it, both hatches 503'd on every Pi.
-# nmcli is granted for exactly the subcommand /api/wifi/reset runs, not the
-# whole binary (the old grant could add or modify connections).
+# nmcli is granted for the one VERB /api/wifi/reset uses — `connection delete` —
+# not the whole binary (the old grant could add or modify connections). Note
+# the limit is the verb, not the exact argument list: sudo matches arguments
+# with fnmatch, where `*` spans whitespace, so trailing arguments are also
+# permitted. There is no escalation through `connection delete`, but do not
+# read this as "exactly the subcommand".
 # /bin and /usr/bin are both listed because usrmerge systems resolve either.
 __AERO_USER__ ALL=(root) NOPASSWD: /usr/bin/true, /bin/true, /usr/bin/systemctl start aero-updater.service, /bin/systemctl start aero-updater.service, /sbin/reboot, /usr/sbin/reboot, /usr/bin/nmcli connection delete *, /bin/nmcli connection delete *

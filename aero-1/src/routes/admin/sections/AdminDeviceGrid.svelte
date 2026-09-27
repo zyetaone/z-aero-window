@@ -127,7 +127,22 @@
 
 							<div class="card-footer">
 								<span class="last-seen">
-									{device.online ? 'Active' : `Last: ${formatAge(device.lastSeen, wallClockNow())}`}
+									<!--
+										lastSeen === 0 is the store's SENTINEL for "never heard
+										from", not a timestamp: the store seeds every row with it
+										and #pollStatus returns only {deviceId, online:false} when a
+										peer's /api/status is unreachable, so the field is never
+										overwritten. formatAge is a pure epoch-difference and
+										cannot know that, so it rendered "Last: 497115h ago" —
+										an age of 56 years, which reads as a bug and hides the
+										real state. formatAge(0, …) itself is tested as valid
+										epoch-0 arithmetic, so the guard belongs here.
+									-->
+									{device.online
+										? 'Active'
+										: device.lastSeen > 0
+											? `Last: ${formatAge(device.lastSeen, wallClockNow())}`
+											: 'Never seen'}
 								</span>
 								{#if selected}
 									<span class="selected-badge">Selected</span>

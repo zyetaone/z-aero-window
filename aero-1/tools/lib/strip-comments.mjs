@@ -19,6 +19,19 @@
  *   - regex literals (`/\/\//`)      would need a parser to disambiguate `/`
  *   - `${ }` nesting inside templates a template holding a `//` or a backtick
  *                                    inside its expression is vanishingly rare
+ *   - a quoted block-comment terminator inside a block comment. `indexOf('*' + '/')`
+ *     ends the comment at the FIRST such pair, even when it sits inside a
+ *     quoted example, so the leftover quote then opens a phantom string that
+ *     swallows a real `//` later on the line. Same class as the regex case —
+ *     fixing it needs real parsing. (Writing this note without a literal
+ *     terminator is not a stylistic choice: the first draft of it contained
+ *     one and broke this very file.)
+ *
+ * Both were swept before being accepted: no regex literal in src/, content/ or
+ * tools/ contains `//` or `/*`, and no block comment quotes its own terminator,
+ * so all three checkers are correct over the current corpus. Record the sweep
+ * date when re-checking after adding files, because the failure mode is silent
+ * — a swallowed `//` means a pattern in a real comment is scanned as code.
  *
  * For `.svelte` files, JS comment syntax only applies inside `<script>`; in
  * markup an `https://` in text is not a comment, an HTML comment is, and `<style>`

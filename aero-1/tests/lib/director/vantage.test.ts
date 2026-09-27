@@ -57,8 +57,8 @@ function makeCtx(overrides: Partial<SimulationContext> = {}): SimulationContext 
 
 /** Seed the lazy timer (tick 0), then fire past the 1s interval (tick 5). */
 function seedThenFire(ctx: SimulationContext) {
-	directorTick(0, ctx);
-	return directorTick(5, { ...ctx, wallDeltaSec: 5 });
+	directorTick(ctx);
+	return directorTick({ ...ctx, wallDeltaSec: 5 });
 }
 
 beforeEach(() => directorReset(makeCtx()));
@@ -71,7 +71,7 @@ describe('tickVantage — night-city flyover beat', () => {
 	});
 
 	it('does not fire before the interval lapses', () => {
-		const patch = directorTick(0, makeCtx());   // only the lazy-seed tick
+		const patch = directorTick(makeCtx());   // only the lazy-seed tick
 		expect(patch.vantageBeat).toBeUndefined();
 	});
 

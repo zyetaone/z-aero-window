@@ -15,7 +15,9 @@
  * Call lifecycle:
  *   initBuildings(C, v)               — once, stores refs
  *   setupBuildings(enabled)            — once, async, creates tileset + shader
- *   syncBuildings(dt, nf, scale, ...)  — per-tick
+ *   syncBuildings(wallSec, nf, scale, ...)  — per-tick, wallSec ABSOLUTE
+ *     wall second, not a delta: the buildings shader derives its state from
+ *     the clock so panes agree without talking to each other (ADR-007).
  *   setWireframe(enabled)              — operator toggle
  *   updateQuality(sse)                 — quality preset change
  */

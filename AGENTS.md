@@ -63,7 +63,7 @@ Pane.svelte (RAF via game-loop.ts)
   └── model.tick(delta)
        ├── flight.tick(delta, ctx)       → FlightPatch (wraps body in untrack())
        ├── motionStep(delta, ctx)        → void        (wraps body in untrack())
-       ├── directorTick(delta, ctx)      → WorldPatch  (leader-only, wraps in untrack())
+       ├── directorTick(ctx)             → WorldPatch  (leader-only, wraps in untrack())
        └── telemetry.recordFrame(duration)
 ```
 
@@ -415,12 +415,25 @@ Budget: ~1.2 GB per Pi. See `docs/ADR-002-zero-cost-caching-strategy.md`.
 
 Heuristic dev utilities — verify hits before deleting:
 
-| Command | Finds |
-|---|---|
-| `node tools/reachability-scan.mjs` | modules unreachable from any entrypoint |
-| `node tools/config-key-scan.mjs` | config-tree keys nothing reads |
-| `node tools/doc-path-scan.mjs` | file paths in docs that no longer exist |
-| `node tools/dead-export-scan.mjs` | exported symbols with no non-test, non-barrel consumer |
+**Run these from `aero-1/`, except `doc-path-scan`, which must run from the repo
+root.** They all shell out to `git ls-files`, whose pathspec is CWD-relative, so
+the wrong directory does not error — it silently scans a different (or empty)
+set of files and reports a clean result.
+
+| Command | Run from | Finds |
+|---|---|---|
+| `node tools/reachability-scan.mjs` | `aero-1/` | modules unreachable from any entrypoint |
+| `node tools/config-key-scan.mjs` | `aero-1/` | config-tree keys nothing reads |
+| `node tools/doc-path-scan.mjs` | **repo root** | file paths in docs that no longer exist |
+| `node tools/dead-export-scan.mjs` | `aero-1/` | exported symbols with no non-test, non-barrel consumer |
+
+The split is not arbitrary. The first, second and fourth use a bare
+`git ls-files`, so from `aero-1/` they see that app's 390 files and find real
+entrypoints — the same command from the root sees 736 files, finds 0
+entrypoints and reports everything vacuously clean. `doc-path-scan` is the
+opposite: it asks for `git ls-files docs AGENTS.md README.md`, and those paths
+only exist at the root, so from `aero-1/` it matches nothing and reports
+"0 stale, 0 excused" — a clean bill of health from having read no files at all.
 
 ## Route smoke test
 

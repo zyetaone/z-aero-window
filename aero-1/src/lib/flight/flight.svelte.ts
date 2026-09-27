@@ -243,9 +243,28 @@ export class FlightSimEngine {
 			}
 			this.#tickAltitude(delta, ctx);
 
-			// Camera filters on the WALL delta: a 3-fps pane (delta clamped to
-			// 0.1 s against ~0.33 s real) otherwise settles three times slower
-			// than its neighbours, indefinitely.
+			// Camera filters on the WALL delta, not the clamped frame delta, so
+			// the smoothing constant cannot depend on how the game loop chose to
+			// bound this frame.
+			//
+			// Measured, though: this is currently a NO-OP, and it is worth knowing
+			// why before anyone "simplifies" it. game-loop clamps the delta to
+			// 0.1 s, but #tickSmoothing's own k is capped at 0.3, and that cap
+			// saturates for any frame ≥ 42.8 ms (~23.4 fps) — 1 - e^(-d/0.12)
+			// reaches 0.3 at d = 0.0428. So a slow pane is already pinned at
+			// k = 0.3 whether it is handed 0.1 or 0.33, and a fast pane is never
+			// clamped at all, so both inputs agree. Verified equal at 60, 20 and
+			// 3 fps.
+			//
+			// The consequence is that a 3-fps pane DOES still settle in wall
+			// time more slowly than its neighbours — 0.3 per frame at 3 fps is
+			// ~0.9/s against ~18/s at 60 — which is the drift the original
+			// comment claimed to fix. It is inherent to a per-frame cap, not to
+			// the delta, so removing the cap (or scaling it by frame time) is
+			// what would actually fix it, and that is a change to camera feel on
+			// hardware we cannot bench here. Left alone deliberately, not
+			// overlooked. See #tickAltitude, which is wall-scaled properly and
+			// does behave differently below 10 fps.
 			this.#tickSmoothing(ctx.wallDeltaSec);
 		});
 		return patch;
@@ -345,6 +364,19 @@ export class FlightSimEngine {
 		// (angle0, wallT0) to the current wallT with fixed substeps. Missed
 		// frames / different FPS no longer leave panes at different phases —
 		// they reconverge on the next tick that shares wallT.
+		// The `??` looks dead — `wallTimeSec` is a required field on
+		// SimulationContext, and TypeScript will not flag a fallback against a
+		// non-nullable left side. It is NOT dead. Test contexts are built by
+		// casting a literal (`as unknown as SimulationContext`) and routinely
+		// omit fields they do not exercise; drop this and every such helper
+		// computes `undefined - x` = NaN, which does not throw — it silently
+		// freezes the scenario loop. Caught by
+		// tests/lib/flight/flight-scenario-loop.test.svelte.ts when the
+		// fallback was removed.
+		//
+		// So this stays a fallback for TYPEDNESS failures only, not a second
+		// source of time in normal operation: every real context is built by
+		// #createContext, which always sets it.
 		const wallT = ctx.wallTimeSec ?? ctx.time;
 		const breathePhase = (wallT / orbit.breathePeriod) * Math.PI * 2;
 		const breathe = (Math.sin(breathePhase) + 1) * 0.5;
@@ -416,6 +448,19 @@ export class FlightSimEngine {
 		// Wall-clock absolute progress — same multi-Pi self-heal as #tickOrbit.
 		// Progress is (wallT − legStart) × speedNorm / duration, not a running
 		// sum of wallDelta, so missed frames reconverge.
+		// The `??` looks dead — `wallTimeSec` is a required field on
+		// SimulationContext, and TypeScript will not flag a fallback against a
+		// non-nullable left side. It is NOT dead. Test contexts are built by
+		// casting a literal (`as unknown as SimulationContext`) and routinely
+		// omit fields they do not exercise; drop this and every such helper
+		// computes `undefined - x` = NaN, which does not throw — it silently
+		// freezes the scenario loop. Caught by
+		// tests/lib/flight/flight-scenario-loop.test.svelte.ts when the
+		// fallback was removed.
+		//
+		// So this stays a fallback for TYPEDNESS failures only, not a second
+		// source of time in normal operation: every real context is built by
+		// #createContext, which always sets it.
 		const wallT = ctx.wallTimeSec ?? ctx.time;
 		if (this.#scenarioLegStartWallT === null) this.#scenarioLegStartWallT = wallT;
 		// NORMALISE THE SPEED KNOB — DO NOT PASS IT RAW.

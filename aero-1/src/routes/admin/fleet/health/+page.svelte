@@ -14,6 +14,7 @@
 	import type { FleetSummary } from '$lib/fleet/protocol';
 	import { formatUptime } from '$lib/utils';
 	import { ONLINE_THRESHOLD_MS } from '$lib/fleet/protocol';
+	import { subscribeWallClock, wallClockNow } from '$lib/shell/passenger/wall-clock.svelte';
 
 	// $state.raw — samples is replaced wholesale on each poll response,
 	// never mutated in place. Skip the per-element proxy traversal.
@@ -46,8 +47,18 @@
 	const interval = setInterval(poll, 5_000);
 	onDestroy(() => clearInterval(interval));
 
+	// Ages must read the SHARED wall clock, not this page's own Date.now():
+	// a pane whose clock is minutes off would compute its own ages from its
+	// own idea of now, and the fleet view would disagree with every pane's
+	// telemetry about whether a device is alive. Same reason the device grid
+	// subscribes — f7c55f59 converted that page and missed this sibling.
+	// Without this the "N s ago" text only re-evaluates on the 5 s poll, so
+	// it also advances in 5 s steps and a device can read as online for up to
+	// 5 s after it drops.
+	$effect(() => subscribeWallClock());
+
 	function isOnline(s: HeartbeatSample): boolean {
-		return Date.now() - s.receivedAt < ONLINE_THRESHOLD_MS;
+		return wallClockNow() - s.receivedAt < ONLINE_THRESHOLD_MS;
 	}
 
 	function tempColor(c: number): string {
@@ -141,7 +152,7 @@
 					{/if}
 				</dl>
 				<footer>
-					last heartbeat {Math.round((Date.now() - s.receivedAt) / 1000)}s ago
+					last heartbeat {Math.round((wallClockNow() - s.receivedAt) / 1000)}s ago
 				</footer>
 			</article>
 		{:else}

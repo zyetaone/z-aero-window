@@ -10,9 +10,10 @@
  * `let` so it persists across ticks without consumer plumbing. There is
  * only one director in the process — no multi-instance use case exists.
  *
- * Timers advance with wallDeltaSec (falling back to sim delta) so a slow
- * Pi (~3 fps, dt clamped at 0.1 s) still hops cities on real wall time —
- * same class of fix as orbit/scenario wall-clock integration.
+ * Timers advance on wallDeltaSec, so a slow Pi (~3 fps, frame delta clamped
+ * at 0.1 s) still hops cities on real wall time. There is no sim-delta
+ * fallback: wallDeltaSec is required on the context and wallDt() is the only
+ * thing that reads it. Same class of fix as orbit/scenario integration.
  */
 
 import { untrack } from 'svelte';
@@ -37,14 +38,18 @@ let _timeToNextLocation: number | null = null;
 let _vantageTimer = 0;
 let _timeToNextVantage: number | null = null;
 
-/** The wall-clock step. Required on the context, so no fallback exists. */
-function wallDt(_delta: number, ctx: SimulationContext): number {
+/** The wall-clock step.
+ *
+ * The frame delta is deliberately not a parameter. It is not used, and
+ * accepting it would leave a caller free to pass the wrong one — which is
+ * exactly the mistake the sim-delta fallback used to be. */
+function wallDt(ctx: SimulationContext): number {
 	return ctx.wallDeltaSec;
 }
 
 // ─── Tick ───────────────────────────────────────────────────────────────────
 
-export function directorTick(delta: number, ctx: SimulationContext): WorldPatch {
+export function directorTick(ctx: SimulationContext): WorldPatch {
 	const patch: WorldPatch = {};
 	untrack(() => {
 		// Phase 7 — followers in a multi-Pi panorama do not run the
@@ -53,17 +58,17 @@ export function directorTick(delta: number, ctx: SimulationContext): WorldPatch 
 		// apply via the fleet client. Without this gate, three Pis would
 		// each pick a different random scenario.
 		if (!ctx.isLeader || !ctx.director.autopilot.enabled) return;
-		const configs = tickRandomize(delta, ctx);
+		const configs = tickRandomize(ctx);
 		if (configs) patch.configs = configs;
 
 		if (ctx.isOrbitMode) {
-			const nextLoc = tickDirector(delta, ctx);
+			const nextLoc = tickDirector(ctx);
 			if (nextLoc) {
 				// A location change enters cruise mode — never fire a vantage
 				// beat the same frame (the beat needs orbit). Location wins.
 				patch.nextLocation = nextLoc;
 			} else {
-				const beat = tickVantage(delta, ctx);
+				const beat = tickVantage(ctx);
 				if (beat) patch.vantageBeat = beat;
 			}
 		}
@@ -100,10 +105,10 @@ export function directorReset(ctx: SimulationContext): void {
 
 // ─── Weather randomisation ──────────────────────────────────────────────────
 
-function tickRandomize(delta: number, ctx: SimulationContext): Array<{ path: string; value: unknown }> | null {
+function tickRandomize(ctx: SimulationContext): Array<{ path: string; value: unknown }> | null {
 	const ap = ctx.director.autopilot;
 	const am = ctx.director.ambient;
-	const dt = wallDt(delta, ctx);
+	const dt = wallDt(ctx);
 
 	if (_nextRandomizeTime === null) {
 		_nextRandomizeTime = randomBetween(ap.initialMinDelay, ap.initialMaxDelay);
@@ -139,9 +144,9 @@ function tickRandomize(delta: number, ctx: SimulationContext): Array<{ path: str
 
 // ─── Auto-pilot director ────────────────────────────────────────────────────
 
-function tickDirector(delta: number, ctx: SimulationContext): LocationId | null {
+function tickDirector(ctx: SimulationContext): LocationId | null {
 	const ap = ctx.director.autopilot;
-	const dt = wallDt(delta, ctx);
+	const dt = wallDt(ctx);
 
 	if (_timeToNextLocation === null) {
 		_timeToNextLocation = randomBetween(ap.initialMinDelay, ap.initialMaxDelay);
@@ -168,10 +173,10 @@ function tickDirector(delta: number, ctx: SimulationContext): LocationId | null 
  * the pitch/altitude/duration. Only fires at night (the whole point is the
  * city lights); by day the timer just idles.
  */
-function tickVantage(delta: number, ctx: SimulationContext): VantageBeat | null {
+function tickVantage(ctx: SimulationContext): VantageBeat | null {
 	const v = ctx.director.autopilot.vantage;
 	if (!v.enabled) return null;
-	const dt = wallDt(delta, ctx);
+	const dt = wallDt(ctx);
 
 	if (_timeToNextVantage === null) {
 		_timeToNextVantage = randomBetween(v.minIntervalSec, v.maxIntervalSec);
