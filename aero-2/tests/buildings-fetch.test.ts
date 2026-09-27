@@ -1,0 +1,330 @@
+import { describe, it, expect } from 'vitest';
+import { execFile, execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+/**
+ * `tools/fetch-buildings.py` cannot be exercised against Overpass from a test,
+ * or from most CI, so the parts that decide what lands on disk are tested
+ * against a FIXTURE instead: the Overpass response shape, height derivation,
+ * the deterministic selection, and above all the self-check that refuses to
+ * write a pack which does not contain its own pin.
+ *
+ * The self-check is the part worth testing. The defect it exists to stop —
+ * Hyderabad's pack, 10.9 km from a 6.4 km box, synthetic, 564 identical
+ * rectangles at a uniform 8 m — was written by a person or a script that
+ * trusted its own output, and survived every check in this repo. If the only
+ * thing between the next bad pack and disk is four lines at the bottom of a
+ * Python file that nobody runs, then those four lines are load-bearing and
+ * need a test like any other.
+ *
+ * The tool is invoked as a SUBPROCESS, not imported, because the properties
+ * worth asserting are the ones a caller sees: exit code, what is on disk, and
+ * what is in the refusal file. Importing would test the functions and miss the
+ * argument handling and the exit codes.
+ *
+ * THE FIXTURE IS A REAL OVERPASS RESPONSE SHAPE, hand-built to exercise each
+ * branch: a way with an explicit height, one with levels only, one with a type
+ * default, one with nothing (which must be DROPPED, not guessed), and a
+ * multipolygon relation whose member way arrives open and must be closed.
+ */
+const TOOL = resolve(process.cwd(), 'tools/fetch-buildings.py');
+
+function fixture(elements: unknown[]): string {
+	return JSON.stringify({ version: 0.6, generator: 'fixture', elements });
+}
+
+interface RunResult {
+	status: number;
+	stderr: string;
+	dir: string;
+}
+
+/**
+ * Runs the tool against a local stub of the Overpass endpoint, so the whole
+ * path — HTTP, JSON parse, geometry, self-check, write — is exercised without
+ * a network. A stub is the only way to test a failure mode, and the failure
+ * modes here are the point.
+ */
+async function run(elements: unknown[], args: string[] = []): Promise<RunResult> {
+	const dir = mkdtempSync(join(tmpdir(), 'aero-buildings-'));
+	const { createServer } = await import('node:http');
+	const body = fixture(elements);
+
+	const server = createServer((req, res) => {
+		let payload = '';
+		req.on('data', (c) => (payload += c));
+		req.on('end', () => {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(body);
+		});
+	});
+
+	await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+	const port = (server.address() as { port: number }).port;
+
+	try {
+		/**
+		 * ASYNC, and it has to be.
+		 *
+		 * The first version of this used `execFileSync` and the suite hung for
+		 * the full timeout on every case, with no output. The stub Overpass
+		 * endpoint lives in THIS process, so answering the tool's POST needs the
+		 * event loop — and `execFileSync` blocks the event loop for exactly as
+		 * long as the child runs. The child waits for a response that cannot be
+		 * produced until the child exits. A textbook self-deadlock, and one that
+		 * looks like a slow test rather than a wrong one.
+		 */
+		const { status, stderr } = await new Promise<{ status: number; stderr: string }>(
+			(resolve, reject) => {
+				execFile(
+					'python3',
+					[
+						TOOL,
+						'testville',
+						'--lat',
+						'0',
+						'--lon',
+						'0',
+						// `--out` is not optional here. Without it the tool writes to
+						// `./data/buildings` in the REPO, which is what the first
+						// version of this test did: it passed, and left a 68 KB
+						// testville.geojson in the working tree. The tool's default is
+						// correct for a human at a repo root and wrong for a test.
+						'--out',
+						dir,
+						'--endpoint',
+						`http://127.0.0.1:${port}/api/interpreter`,
+						...args
+					],
+					{ encoding: 'utf8' },
+					(error, _stdout, errOut) => {
+						if (error && typeof error.code !== 'number') return reject(error);
+						resolve({ status: error ? (error.code as number) : 0, stderr: errOut ?? '' });
+					}
+				);
+			}
+		);
+		return { status, stderr, dir };
+	} finally {
+		server.close();
+	}
+}
+
+/** A closed square around (lat, lon), as an Overpass `way` with geometry. */
+function square(lat: number, lon: number, tags: Record<string, string>) {
+	const d = 0.0002;
+	return {
+		type: 'way',
+		id: Math.floor(Math.random() * 1e9),
+		tags,
+		geometry: [
+			{ lat: lat - d, lon: lon - d },
+			{ lat: lat + d, lon: lon - d },
+			{ lat: lat + d, lon: lon + d },
+			{ lat: lat - d, lon: lon + d },
+			{ lat: lat - d, lon: lon - d }
+		]
+	};
+}
+
+/** Enough well-sized footprints to clear MIN_FEATURES. */
+function manySquares(n: number, lat: number, lon: number) {
+	return Array.from({ length: n }, (_, i) =>
+		square(lat + (i % 20) * 0.0004, lon + Math.floor(i / 20) * 0.0004, {
+			building: 'office',
+			height: '30'
+		})
+	);
+}
+
+describe('fetch-buildings.py', () => {
+	it('writes a pack that covers its own pin, with a manifest', async () => {
+		const r = await run(manySquares(320, 0, 0));
+		expect(r.status, r.stderr).toBe(0);
+
+		const pack = join(r.dir, 'data/buildings/testville.geojson');
+		expect(existsSync(pack)).toBe(true);
+		const fc = JSON.parse(readFileSync(pack, 'utf8'));
+		expect(fc.type).toBe('FeatureCollection');
+		expect(fc.features.length).toBeGreaterThanOrEqual(300);
+
+		// Every ring closed, every coordinate finite, and inside the pin's box.
+		for (const f of fc.features) {
+			const ring = f.geometry.coordinates[0];
+			expect(ring[0]).toEqual(ring[ring.length - 1]);
+			for (const [lng, lat] of ring) {
+				expect(Number.isFinite(lng) && Number.isFinite(lat)).toBe(true);
+				expect(Math.abs(lat)).toBeLessThan(90);
+				expect(Math.abs(lng)).toBeLessThan(180);
+			}
+		}
+
+		const manifest = JSON.parse(
+			readFileSync(join(r.dir, 'data/buildings/source-testville.json'), 'utf8')
+		);
+		expect(manifest.place).toBe('testville');
+		expect(manifest.lat).toBe(0);
+		expect(manifest.contentSha256).toMatch(/^[0-9a-f]{64}$/);
+		// The `night` colour belongs to the glow stamper, not here.
+		expect(manifest.note).toContain('stamp-building-glow');
+		for (const f of fc.features) {
+			expect(Object.keys(f.properties)).toEqual(['height']);
+		}
+		rmSync(r.dir, { recursive: true, force: true });
+	});
+
+	it('REFUSES a pack that does not contain the pin, and writes no pack', async () => {
+		/**
+		 * The Hyderabad case exactly: plenty of features, all valid, all in the
+		 * wrong place. A tool that trusted its own output would write it and the
+		 * defect would be invisible until someone flew it.
+		 */
+		const r = await run(manySquares(320, 0.1, 0.1)); // ~11 km south
+		expect(r.status).toBe(2);
+		expect(r.stderr).toContain('REFUSING');
+		expect(r.stderr).toContain('does not contain its own pin');
+
+		// Crucially: NO pack on disk, and the candidate preserved for inspection.
+		expect(existsSync(join(r.dir, 'data/buildings/testville.geojson'))).toBe(false);
+		const rej = JSON.parse(readFileSync(join(r.dir, 'data/buildings/testville.rej.json'), 'utf8'));
+		expect(rej.problems.join(' ')).toContain('does not contain its own pin');
+		rmSync(r.dir, { recursive: true, force: true });
+	});
+
+	it('REFUSES a pack too thin to read as a city', async () => {
+		/**
+		 * The Denver case: the right place, but 190 footprints. Containment
+		 * passes, so this has to be a separate refusal.
+		 */
+		const r = await run(manySquares(120, 0, 0));
+		expect(r.status).toBe(2);
+		expect(r.stderr).toContain('footprints');
+		expect(existsSync(join(r.dir, 'data/buildings/testville.geojson'))).toBe(false);
+		rmSync(r.dir, { recursive: true, force: true });
+	});
+
+	it('derives height from height, then levels, then a type default', async () => {
+		const r = await run([
+			square(0, 0, { building: 'yes', height: '123.5' }),
+			square(0.0005, 0, { building: 'yes', 'building:levels': '10' }),
+			square(0.001, 0, { building: 'office' }),
+			...manySquares(300, 0.002, 0)
+		]);
+		expect(r.status, r.stderr).toBe(0);
+		const fc = JSON.parse(readFileSync(join(r.dir, 'data/buildings/testville.geojson'), 'utf8'));
+		const heights = fc.features.map((f: { properties: { height: number } }) => f.properties.height);
+
+		expect(heights).toContain(123.5); // height tag
+		expect(heights).toContain(32); // 10 levels x 3.2
+		expect(heights).toContain(26); // office default
+		rmSync(r.dir, { recursive: true, force: true });
+	});
+
+	it('drops buildings it cannot size rather than guessing a height', async () => {
+		const r = await run([
+			square(0, 0, { building: 'yes' }), // no height, no levels, type 'yes' -> default 8
+			square(0.0005, 0, { highway: 'residential' }), // no building tag at all
+			...manySquares(300, 0.002, 0)
+		]);
+		expect(r.status, r.stderr).toBe(0);
+		expect(r.stderr).toMatch(/dropped \d+ elements/);
+		rmSync(r.dir, { recursive: true, force: true });
+	});
+
+	it('keeps the tallest when over the cap, deterministically', async () => {
+		/**
+		 * A skyline is what reads from 2 km up. A random 600 of 40,000 would be
+		 * a field of bungalows with three towers in it, and — worse for a test —
+		 * would differ run to run, so two panes built from the same Overpass
+		 * response would not be the same city.
+		 *
+		 * The cap cannot go below MIN_FEATURES or the self-check refuses, which
+		 * is correct: so this buries three distinctive towers among 320 filler
+		 * and caps at 300, which must keep all three and drop 20.
+		 */
+		const towers = [
+			square(0, 0, { building: 'yes', height: '250' }),
+			square(0.0001, 0, { building: 'yes', height: '99' }),
+			square(0.0002, 0, { building: 'yes', height: '140' })
+		];
+		const elements = [...towers, ...manySquares(320, 0.001, 0.001)];
+		const a = await run(elements, ['--max-features', '300']);
+		const b = await run(elements, ['--max-features', '300']);
+		expect(a.status, a.stderr).toBe(0);
+		expect(b.status, b.stderr).toBe(0);
+
+		const heights = (dir: string) =>
+			JSON.parse(readFileSync(join(dir, 'data/buildings/testville.geojson'), 'utf8')).features.map(
+				(f: { properties: { height: number } }) => f.properties.height
+			);
+
+		const kept = heights(a.dir);
+		expect(kept.length).toBe(300);
+		// All three towers survive the cap; the filler is all 30 m.
+		for (const h of [250, 140, 99]) expect(kept).toContain(h);
+		// Deterministic: the same response yields the same pack, property for
+		// property. Overpass's element order is not stable, so this is the only
+		// thing standing between two panes and two different skylines.
+		expect(heights(a.dir)).toEqual(heights(b.dir));
+		rmSync(a.dir, { recursive: true, force: true });
+		rmSync(b.dir, { recursive: true, force: true });
+	});
+
+	it('closes an open member way from a multipolygon relation', async () => {
+		const r = await run([
+			{
+				type: 'relation',
+				id: 1,
+				tags: { building: 'yes', height: '40' },
+				members: [
+					{
+						type: 'way',
+						role: 'outer',
+						// Open ring — relations commonly hand members back unclosed.
+						geometry: [
+							{ lat: -0.0002, lon: -0.0002 },
+							{ lat: 0.0002, lon: -0.0002 },
+							{ lat: 0.0002, lon: 0.0002 },
+							{ lat: -0.0002, lon: 0.0002 }
+						]
+					}
+				]
+			},
+			...manySquares(300, 0.001, 0)
+		]);
+		expect(r.status, r.stderr).toBe(0);
+		const fc = JSON.parse(readFileSync(join(r.dir, 'data/buildings/testville.geojson'), 'utf8'));
+		const rel = fc.features.find(
+			(f: { properties: { height: number } }) => f.properties.height === 40
+		);
+		expect(rel).toBeDefined();
+		const ring = rel.geometry.coordinates[0];
+		expect(ring[0]).toEqual(ring[ring.length - 1]);
+		rmSync(r.dir, { recursive: true, force: true });
+	});
+
+	it('rejects an unknown place unless coordinates are given', () => {
+		/**
+		 * The PLACES table is a copy of `src/lib/locations.ts`, and a copy that
+		 * silently fetches the wrong city is the defect this whole file is about
+		 * in a different costume. Refusing an unknown label is what stops a
+		 * typo from becoming a pack somewhere else entirely.
+		 */
+		let status = 0;
+		let stderr = '';
+		try {
+			execFileSync('python3', [TOOL, 'atlantis'], {
+				encoding: 'utf8',
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
+		} catch (e) {
+			const err = e as { status?: number; stderr?: string };
+			status = err.status ?? 1;
+			stderr = err.stderr ?? '';
+		}
+		expect(status).toBe(2);
+		expect(stderr).toContain('unknown place');
+	});
+});

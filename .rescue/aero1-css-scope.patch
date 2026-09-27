@@ -1,0 +1,1889 @@
+diff --git a/aero-1/src/routes/admin/admin.css b/aero-1/src/routes/admin/admin.css
+index 2fa733f8..a8835627 100644
+--- a/aero-1/src/routes/admin/admin.css
++++ b/aero-1/src/routes/admin/admin.css
+@@ -1,11 +1,19 @@
+ /* Admin shared styles — extracted verbatim from +page.svelte <style>.
+- * Plain CSS import = global scope. Two deliberate transforms:
+- * - `:global(body)` → `body` (was already global).
+- * - `.controls :global(x)` → `.dashboard .controls x`: the piercing
+- *   rules target panel-child internals; the prefix keeps admin-only
+- *   scope and pre-extraction specificity. No app.css collisions.
++ *
++ * A plain CSS import is GLOBAL, and the app is client-routed, so once /admin
++ * has been visited these rules stay loaded on every later route. Bare
++ * `.stat`, `.btn`, `label`, `select`… were reaching /admin/fleet/health and
++ * the kiosk's TelemetryPanel. Every rule is therefore scoped under the page
++ * root:
++ * - `:where(.dashboard) x` — `:where()` adds ZERO specificity, so the cascade
++ *   inside the admin page is unchanged (a `.dashboard x` prefix would have
++ *   out-ranked the panel components' own scoped rules).
++ * - `body` → `body:has(.dashboard)` — applies only while the admin root is
++ *   mounted (app.css sets no body rule; `:has()` needs Chromium ≥ 105).
++ * - `.controls :global(x)` → `.dashboard .controls x`: the piercing rules
++ *   target panel-child internals; the prefix keeps pre-extraction specificity.
+  */
+-	body {
++	body:has(.dashboard) {
+ 		margin: 0;
+ 		background: var(--bg-base);
+ 		color: var(--text);
+@@ -20,7 +28,7 @@
+ 	}
+ 
+ 	/* Header */
+-	.header {
++	:where(.dashboard) .header {
+ 		display: flex;
+ 		align-items: center;
+ 		justify-content: space-between;
+@@ -29,13 +37,13 @@
+ 		border-bottom: 1px solid var(--border);
+ 	}
+ 
+-	.header-left {
++	:where(.dashboard) .header-left {
+ 		display: flex;
+ 		align-items: baseline;
+ 		gap: 12px;
+ 	}
+ 
+-	h1 {
++	:where(.dashboard) h1 {
+ 		font-size: 20px;
+ 		font-weight: 700;
+ 		color: #fafafa;
+@@ -43,7 +51,7 @@
+ 
+ 	/* Operator-facing release stage. Deliberately absent from the kiosk window
+ 	   itself — see PRODUCT_STAGE in $lib/credits. */
+-	.stage-badge {
++	:where(.dashboard) .stage-badge {
+ 		align-self: center;
+ 		background: rgba(214,158,46,0.16);
+ 		border: 1px solid rgba(214,158,46,0.42);
+@@ -56,18 +64,18 @@
+ 		border-radius: 10px;
+ 	}
+ 
+-	.subtitle {
++	:where(.dashboard) .subtitle {
+ 		font-size: 13px;
+ 		color: var(--muted);
+ 	}
+ 
+-	.header-right {
++	:where(.dashboard) .header-right {
+ 		display: flex;
+ 		align-items: center;
+ 		gap: 16px;
+ 	}
+ 
+-	.connection-badge {
++	:where(.dashboard) .connection-badge {
+ 		font-size: 12px;
+ 		padding: 4px 10px;
+ 		border-radius: 12px;
+@@ -75,12 +83,12 @@
+ 		color: var(--error-text);
+ 	}
+ 
+-	.connection-badge.online {
++	:where(.dashboard) .connection-badge.online {
+ 		background: #14532d;
+ 		color: var(--ok-text);
+ 	}
+ 
+-	.fps-badge {
++	:where(.dashboard) .fps-badge {
+ 		font-size: 12px;
+ 		font-weight: 600;
+ 		padding: 4px 10px;
+@@ -89,16 +97,16 @@
+ 		color: var(--text-dim);
+ 		font-family: ui-monospace, monospace;
+ 	}
+-	.fps-badge.good {
++	:where(.dashboard) .fps-badge.good {
+ 		background: #14532d;
+ 		color: var(--ok-text);
+ 	}
+-	.fps-badge.warn {
++	:where(.dashboard) .fps-badge.warn {
+ 		background: #713f12;
+ 		color: #fde68a;
+ 	}
+ 
+-	.clock-display {
++	:where(.dashboard) .clock-display {
+ 		font-size: 13px;
+ 		font-family: ui-monospace, monospace;
+ 		color: var(--muted);
+@@ -106,7 +114,7 @@
+ 	}
+ 
+ 	/* Health bar */
+-	.health-bar {
++	:where(.dashboard) .health-bar {
+ 		display: flex;
+ 		align-items: center;
+ 		justify-content: space-between;
+@@ -117,13 +125,13 @@
+ 		flex-wrap: wrap;
+ 	}
+ 
+-	.health-stats {
++	:where(.dashboard) .health-stats {
+ 		display: flex;
+ 		align-items: center;
+ 		gap: 20px;
+ 	}
+ 
+-	.health-stat {
++	:where(.dashboard) .health-stat {
+ 		font-size: 12px;
+ 		color: var(--text-dim);
+ 		display: flex;
+@@ -131,26 +139,26 @@
+ 		gap: 6px;
+ 	}
+ 
+-	.health-stat strong {
++	:where(.dashboard) .health-stat strong {
+ 		color: var(--text);
+ 	}
+ 
+-	.health-dot {
++	:where(.dashboard) .health-dot {
+ 		width: 6px;
+ 		height: 6px;
+ 		border-radius: 50%;
+ 	}
+ 
+-	.health-dot.online { background: var(--ok); }
+-	.health-dot.offline { background: var(--error); }
++	:where(.dashboard) .health-dot.online { background: var(--ok); }
++	:where(.dashboard) .health-dot.offline { background: var(--error); }
+ 
+-	.alerts {
++	:where(.dashboard) .alerts {
+ 		display: flex;
+ 		gap: 8px;
+ 		flex-wrap: wrap;
+ 	}
+ 
+-	.alert-badge {
++	:where(.dashboard) .alert-badge {
+ 		font-size: 11px;
+ 		padding: 3px 8px;
+ 		border-radius: 4px;
+@@ -158,18 +166,18 @@
+ 		color: var(--text-dim);
+ 	}
+ 
+-	.alert-badge.error {
++	:where(.dashboard) .alert-badge.error {
+ 		background: #7f1d1d;
+ 		color: var(--error-text);
+ 	}
+ 
+-	.alert-badge.warning {
++	:where(.dashboard) .alert-badge.warning {
+ 		background: #713f12;
+ 		color: #fde68a;
+ 	}
+ 
+ 	/* Content layout */
+-	.content {
++	:where(.dashboard) .content {
+ 		display: flex;
+ 		flex: 1;
+ 		overflow: hidden;
+@@ -196,8 +204,7 @@
+ 		color: var(--muted);
+ 		margin: 0 0 10px;
+ 	}
+-	.dashboard .controls .control label,
+-	.dashboard .controls .toggle-container {
++	.dashboard .controls .control label, .dashboard .controls .toggle-container {
+ 		color: var(--text-dim);
+ 		text-shadow: none;
+ 	}
+@@ -205,7 +212,7 @@
+ 		text-shadow: none;
+ 	}
+ 
+-	.control-section h3 {
++	:where(.dashboard) .control-section h3 {
+ 		font-size: 11px;
+ 		text-transform: uppercase;
+ 		letter-spacing: 0.08em;
+@@ -216,7 +223,7 @@
+ 		align-items: center;
+ 	}
+ 
+-	.hint-muted {
++	:where(.dashboard) .hint-muted {
+ 		font-size: 10px;
+ 		color: var(--muted);
+ 		text-transform: none;
+@@ -224,19 +231,19 @@
+ 		font-weight: 400;
+ 	}
+ 
+-	label {
++	:where(.dashboard) label {
+ 		display: flex;
+ 		flex-direction: column;
+ 		gap: 4px;
+ 		margin-bottom: 10px;
+ 	}
+ 
+-	label span {
++	:where(.dashboard) label span {
+ 		font-size: 12px;
+ 		color: var(--text-dim);
+ 	}
+ 
+-	select, .input {
++	:where(.dashboard) select, :where(.dashboard) .input {
+ 		background: var(--bg-base);
+ 		border: 1px solid var(--border);
+ 		color: var(--text);
+@@ -246,27 +253,23 @@
+ 		width: 100%;
+ 	}
+ 
+-	select:focus:not(:focus-visible), .input:focus:not(:focus-visible) {
++	:where(.dashboard) select:focus:not(:focus-visible), :where(.dashboard) .input:focus:not(:focus-visible) {
+ 		outline: none;
+ 		border-color: var(--accent);
+ 	}
+ 
+-	.btn:focus-visible,
+-	.device-card:focus-visible,
+-	.btn-x:focus-visible,
+-	select:focus-visible,
+-	.input:focus-visible {
++	:where(.dashboard) .btn:focus-visible, :where(.dashboard) .device-card:focus-visible, :where(.dashboard) .btn-x:focus-visible, :where(.dashboard) select:focus-visible, :where(.dashboard) .input:focus-visible {
+ 		outline: 2px solid var(--accent);
+ 		outline-offset: 2px;
+ 	}
+ 
+-	.mode-buttons {
++	:where(.dashboard) .mode-buttons {
+ 		display: flex;
+ 		gap: 6px;
+ 		margin-bottom: 10px;
+ 	}
+ 
+-	.media-warn {
++	:where(.dashboard) .media-warn {
+ 		margin: 0 0 10px;
+ 		padding: 8px 10px;
+ 		font-size: 11px;
+@@ -275,27 +278,27 @@
+ 		background: #713f12;
+ 		color: #fde68a;
+ 	}
+-	.media-warn code {
++	:where(.dashboard) .media-warn code {
+ 		font-size: 10px;
+ 		word-break: break-all;
+ 	}
+-	.media-warn-inline {
++	:where(.dashboard) .media-warn-inline {
+ 		color: #fde68a;
+ 	}
+ 
+-	.asset-hint {
++	:where(.dashboard) .asset-hint {
+ 		margin: 8px 0 6px;
+ 		font-size: 11px;
+ 		color: var(--text-dim);
+ 	}
+-	.asset-hint.muted { opacity: 0.7; }
+-	.asset-grid {
++	:where(.dashboard) .asset-hint.muted { opacity: 0.7; }
++	:where(.dashboard) .asset-grid {
+ 		display: flex;
+ 		flex-wrap: wrap;
+ 		gap: 6px;
+ 		margin-bottom: 10px;
+ 	}
+-	.asset-chip {
++	:where(.dashboard) .asset-chip {
+ 		font-size: 11px;
+ 		padding: 4px 8px;
+ 		border-radius: 999px;
+@@ -308,19 +311,19 @@
+ 		text-overflow: ellipsis;
+ 		white-space: nowrap;
+ 	}
+-	.asset-chip.active {
++	:where(.dashboard) .asset-chip.active {
+ 		border-color: var(--accent);
+ 		color: var(--text);
+ 		background: color-mix(in srgb, var(--accent) 18%, transparent);
+ 	}
+-	.slide-url-row {
++	:where(.dashboard) .slide-url-row {
+ 		display: flex;
+ 		gap: 6px;
+ 		margin: 8px 0;
+ 	}
+-	.slide-url-row .input { flex: 1; }
+-	.slide-url-row .btn { width: auto; }
+-	.slide-list {
++	:where(.dashboard) .slide-url-row .input { flex: 1; }
++	:where(.dashboard) .slide-url-row .btn { width: auto; }
++	:where(.dashboard) .slide-list {
+ 		list-style: none;
+ 		margin: 0 0 10px;
+ 		padding: 0;
+@@ -328,7 +331,7 @@
+ 		flex-direction: column;
+ 		gap: 4px;
+ 	}
+-	.slide-list li {
++	:where(.dashboard) .slide-list li {
+ 		display: flex;
+ 		align-items: center;
+ 		gap: 6px;
+@@ -338,12 +341,12 @@
+ 		background: var(--bg-surface);
+ 		border: 1px solid var(--border);
+ 	}
+-	.slide-idx {
++	:where(.dashboard) .slide-idx {
+ 		opacity: 0.5;
+ 		font-variant-numeric: tabular-nums;
+ 		min-width: 1.2em;
+ 	}
+-	.slide-url {
++	:where(.dashboard) .slide-url {
+ 		flex: 1;
+ 		min-width: 0;
+ 		overflow: hidden;
+@@ -352,8 +355,8 @@
+ 		font-size: 10px;
+ 		color: var(--text-dim);
+ 	}
+-	.slide-actions { display: flex; gap: 2px; }
+-	.icon-btn {
++	:where(.dashboard) .slide-actions { display: flex; gap: 2px; }
++	:where(.dashboard) .icon-btn {
+ 		width: 22px;
+ 		height: 22px;
+ 		border: none;
+@@ -364,9 +367,9 @@
+ 		font-size: 12px;
+ 		line-height: 1;
+ 	}
+-	.icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
++	:where(.dashboard) .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+ 
+-	.btn {
++	:where(.dashboard) .btn {
+ 		padding: 8px 14px;
+ 		border-radius: 6px;
+ 		font-size: 13px;
+@@ -375,30 +378,30 @@
+ 		transition: background 0.15s, opacity 0.15s;
+ 	}
+ 
+-	.btn:hover:not(:disabled) { opacity: 0.85; }
++	:where(.dashboard) .btn:hover:not(:disabled) { opacity: 0.85; }
+ 
+-	.btn:disabled { opacity: 0.5; cursor: not-allowed; }
++	:where(.dashboard) .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+ 
+-	.btn-primary {
++	:where(.dashboard) .btn-primary {
+ 		background: var(--primary);
+ 		color: white;
+ 		width: 100%;
+ 	}
+ 
+-	.btn-secondary {
++	:where(.dashboard) .btn-secondary {
+ 		background: var(--border);
+ 		color: var(--text);
+ 		width: 100%;
+ 	}
+ 
+-	.btn-outline {
++	:where(.dashboard) .btn-outline {
+ 		background: transparent;
+ 		border: 1px solid #3f3f46;
+ 		color: var(--text-dim);
+ 		width: 100%;
+ 	}
+ 
+-	.btn-mode {
++	:where(.dashboard) .btn-mode {
+ 		flex: 1;
+ 		background: #1e1e24;
+ 		color: var(--muted);
+@@ -406,25 +409,25 @@
+ 		font-size: 12px;
+ 	}
+ 
+-	.btn-mode.active {
++	:where(.dashboard) .btn-mode.active {
+ 		background: #1e3a5f;
+ 		color: #93c5fd;
+ 	}
+ 
+ 	/* Range sliders */
+-	.slider-header {
++	:where(.dashboard) .slider-header {
+ 		display: flex;
+ 		justify-content: space-between;
+ 		align-items: center;
+ 	}
+ 
+-	.slider-value {
++	:where(.dashboard) .slider-value {
+ 		font-size: 12px;
+ 		color: #93c5fd;
+ 		font-variant-numeric: tabular-nums;
+ 	}
+ 
+-	.range {
++	:where(.dashboard) .range {
+ 		-webkit-appearance: none;
+ 		appearance: none;
+ 		width: 100%;
+@@ -435,7 +438,7 @@
+ 		cursor: pointer;
+ 	}
+ 
+-	.range::-webkit-slider-thumb {
++	:where(.dashboard) .range::-webkit-slider-thumb {
+ 		-webkit-appearance: none;
+ 		appearance: none;
+ 		width: 14px;
+@@ -446,7 +449,7 @@
+ 		border: 2px solid #1e3a5f;
+ 	}
+ 
+-	.range::-moz-range-thumb {
++	:where(.dashboard) .range::-moz-range-thumb {
+ 		width: 14px;
+ 		height: 14px;
+ 		border-radius: 50%;
+@@ -456,7 +459,7 @@
+ 	}
+ 
+ 	/* Toggles */
+-	.toggle-label {
++	:where(.dashboard) .toggle-label {
+ 		display: flex;
+ 		flex-direction: row;
+ 		align-items: center;
+@@ -465,7 +468,7 @@
+ 		cursor: pointer;
+ 	}
+ 
+-	.toggle-label input[type="checkbox"] {
++	:where(.dashboard) .toggle-label input[type="checkbox"] {
+ 		width: 16px;
+ 		height: 16px;
+ 		accent-color: var(--accent);
+@@ -473,30 +476,30 @@
+ 	}
+ 
+ 	/* Grid area */
+-	.grid-area {
++	:where(.dashboard) .grid-area {
+ 		flex: 1;
+ 		padding: 24px;
+ 		overflow-y: auto;
+ 	}
+ 
+-	.grid-toolbar {
++	:where(.dashboard) .grid-toolbar {
+ 		display: flex;
+ 		justify-content: flex-end;
+ 		margin-bottom: 12px;
+ 	}
+ 
+-	.grid-toolbar .btn {
++	:where(.dashboard) .grid-toolbar .btn {
+ 		width: auto;
+ 	}
+ 
+-	.device-grid {
++	:where(.dashboard) .device-grid {
+ 		display: grid;
+ 		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+ 		gap: 16px;
+ 	}
+ 
+ 	/* Device card */
+-	.device-card {
++	:where(.dashboard) .device-card {
+ 		background: var(--bg-surface);
+ 		border: 1px solid var(--border);
+ 		border-radius: 10px;
+@@ -509,27 +512,26 @@
+ 		width: 100%;
+ 	}
+ 
+-	.device-card:hover {
++	:where(.dashboard) .device-card:hover {
+ 		border-color: #3f3f46;
+ 	}
+ 
+-	.device-card.selected {
++	:where(.dashboard) .device-card.selected {
+ 		border-color: var(--accent);
+ 		box-shadow: 0 0 0 1px var(--accent);
+ 	}
+ 
+-	.device-card.offline .card-body,
+-	.device-card.offline .card-footer {
++	:where(.dashboard) .device-card.offline .card-body, :where(.dashboard) .device-card.offline .card-footer {
+ 		opacity: 0.55;
+ 	}
+ 
+-	.card-header {
++	:where(.dashboard) .card-header {
+ 		display: flex;
+ 		align-items: center;
+ 		gap: 8px;
+ 	}
+ 
+-	.status-dot {
++	:where(.dashboard) .status-dot {
+ 		width: 8px;
+ 		height: 8px;
+ 		border-radius: 50%;
+@@ -537,11 +539,11 @@
+ 		flex-shrink: 0;
+ 	}
+ 
+-	.status-dot.online {
++	:where(.dashboard) .status-dot.online {
+ 		background: var(--ok);
+ 	}
+ 
+-	.hostname {
++	:where(.dashboard) .hostname {
+ 		font-weight: 600;
+ 		font-size: 14px;
+ 		color: #fafafa;
+@@ -550,49 +552,49 @@
+ 		white-space: nowrap;
+ 	}
+ 
+-	.card-body {
++	:where(.dashboard) .card-body {
+ 		display: flex;
+ 		flex-direction: column;
+ 		gap: 6px;
+ 	}
+ 
+-	.stat {
++	:where(.dashboard) .stat {
+ 		display: flex;
+ 		justify-content: space-between;
+ 		align-items: center;
+ 	}
+ 
+-	.stat-row {
++	:where(.dashboard) .stat-row {
+ 		display: flex;
+ 		gap: 16px;
+ 	}
+ 
+-	.stat-row .stat {
++	:where(.dashboard) .stat-row .stat {
+ 		flex: 1;
+ 	}
+ 
+-	.stat-label {
++	:where(.dashboard) .stat-label {
+ 		font-size: 11px;
+ 		color: var(--muted);
+ 		text-transform: uppercase;
+ 		letter-spacing: 0.05em;
+ 	}
+ 
+-	.mode-chip.mode-media {
++	:where(.dashboard) .mode-chip.mode-media {
+ 		color: #93c5fd;
+ 		font-weight: 600;
+ 		text-transform: capitalize;
+ 	}
+ 
+-	.stat-value {
++	:where(.dashboard) .stat-value {
+ 		font-size: 13px;
+ 		color: #d4d4d8;
+ 	}
+ 
+-	.fps-good { color: var(--ok-text); }
++	:where(.dashboard) .fps-good { color: var(--ok-text); }
+ 
+ 	/* Hardening surface — running-commit chip + error strip */
+-	.commit-chip {
++	:where(.dashboard) .commit-chip {
+ 		margin-left: auto;
+ 		font-family: ui-monospace, monospace;
+ 		font-size: 0.65rem;
+@@ -601,7 +603,7 @@
+ 		background: rgba(148, 163, 184, 0.15);
+ 		color: #94a3b8;
+ 	}
+-	.error-strip {
++	:where(.dashboard) .error-strip {
+ 		margin: 0.35rem 0 0;
+ 		padding: 0.25rem 0.5rem;
+ 		border-radius: 4px;
+@@ -612,10 +614,10 @@
+ 		overflow: hidden;
+ 		text-overflow: ellipsis;
+ 	}
+-	.error-last { opacity: 0.75; }
+-	.fps-warn { color: var(--warn); }
++	:where(.dashboard) .error-last { opacity: 0.75; }
++	:where(.dashboard) .fps-warn { color: var(--warn); }
+ 
+-	.card-footer {
++	:where(.dashboard) .card-footer {
+ 		display: flex;
+ 		justify-content: space-between;
+ 		align-items: center;
+@@ -623,12 +625,12 @@
+ 		border-top: 1px solid #1e1e24;
+ 	}
+ 
+-	.last-seen {
++	:where(.dashboard) .last-seen {
+ 		font-size: 11px;
+ 		color: var(--muted);
+ 	}
+ 
+-	.selected-badge {
++	:where(.dashboard) .selected-badge {
+ 		font-size: 10px;
+ 		padding: 2px 8px;
+ 		border-radius: 8px;
+@@ -637,7 +639,7 @@
+ 	}
+ 
+ 	/* Empty state */
+-	.empty-state {
++	:where(.dashboard) .empty-state {
+ 		display: flex;
+ 		flex-direction: column;
+ 		align-items: center;
+@@ -647,69 +649,69 @@
+ 		gap: 8px;
+ 	}
+ 
+-	.empty-title {
++	:where(.dashboard) .empty-title {
+ 		font-size: 18px;
+ 		font-weight: 600;
+ 		color: var(--text-dim);
+ 	}
+ 
+-	.empty-desc {
++	:where(.dashboard) .empty-desc {
+ 		font-size: 14px;
+ 		color: var(--muted);
+ 	}
+ 
+ 	/* Device bindings (SWA corridor) */
+-	.bindings-my {
++	:where(.dashboard) .bindings-my {
+ 		background: var(--bg-base);
+ 		border: 1px solid var(--border);
+ 		border-radius: 6px;
+ 		padding: 10px;
+ 		margin-bottom: 12px;
+ 	}
+-	.bindings-caption {
++	:where(.dashboard) .bindings-caption {
+ 		font-size: 10px;
+ 		color: var(--muted);
+ 		text-transform: uppercase;
+ 		letter-spacing: 0.08em;
+ 		margin-bottom: 6px;
+ 	}
+-	.scene-time-note {
++	:where(.dashboard) .scene-time-note {
+ 		font-size: 11px;
+ 		line-height: 1.45;
+ 		color: var(--muted);
+ 		margin: 0 0 10px;
+ 	}
+-	.section-caption {
++	:where(.dashboard) .section-caption {
+ 		font-size: 11px;
+ 		line-height: 1.45;
+ 		color: var(--muted);
+ 		margin: 0 0 8px;
+ 	}
+-	.section-caption code {
++	:where(.dashboard) .section-caption code {
+ 		font-size: 10.5px;
+ 		color: var(--text-dim);
+ 	}
+-	.update-result {
++	:where(.dashboard) .update-result {
+ 		font-size: 11px;
+ 		color: var(--ok-text);
+ 		margin: 8px 0 0;
+ 	}
+-	.update-result.has-failures {
++	:where(.dashboard) .update-result.has-failures {
+ 		color: #fbbf24;
+ 	}
+-	.update-failed {
++	:where(.dashboard) .update-failed {
+ 		display: block;
+ 		font-size: 10.5px;
+ 		color: var(--muted);
+ 		margin-top: 3px;
+ 		word-break: break-word;
+ 	}
+-	.ambient-dismiss {
++	:where(.dashboard) .ambient-dismiss {
+ 		display: inline-flex;
+ 		vertical-align: -6px;
+ 		margin-left: 6px;
+ 	}
+-	.bindings-fp {
++	:where(.dashboard) .bindings-fp {
+ 		display: inline-block;
+ 		font-size: 11px;
+ 		color: #93c5fd;
+@@ -719,18 +721,18 @@
+ 		margin-bottom: 8px;
+ 		font-family: ui-monospace, Menlo, monospace;
+ 	}
+-	.bindings-form {
++	:where(.dashboard) .bindings-form {
+ 		display: flex;
+ 		gap: 6px;
+ 		margin-bottom: 8px;
+ 	}
+-	.bindings-form .select { flex: 0 0 80px; padding: 6px 8px; font-size: 12px; }
+-	.bindings-form .input { flex: 1; padding: 6px 8px; font-size: 12px; }
+-	.bindings-form .btn { flex: 0 0 auto; padding: 6px 12px; font-size: 12px; }
+-	.bindings-hint { font-size: 11px; color: var(--muted); margin: 0; }
+-	.bindings-hint strong { color: var(--text); }
+-	.bindings-hint .muted { color: var(--muted); }
+-	.bindings-list {
++	:where(.dashboard) .bindings-form .select { flex: 0 0 80px; padding: 6px 8px; font-size: 12px; }
++	:where(.dashboard) .bindings-form .input { flex: 1; padding: 6px 8px; font-size: 12px; }
++	:where(.dashboard) .bindings-form .btn { flex: 0 0 auto; padding: 6px 12px; font-size: 12px; }
++	:where(.dashboard) .bindings-hint { font-size: 11px; color: var(--muted); margin: 0; }
++	:where(.dashboard) .bindings-hint strong { color: var(--text); }
++	:where(.dashboard) .bindings-hint .muted { color: var(--muted); }
++	:where(.dashboard) .bindings-list {
+ 		list-style: none;
+ 		padding: 0;
+ 		margin: 0;
+@@ -738,25 +740,25 @@
+ 		flex-direction: column;
+ 		gap: 4px;
+ 	}
+-	.bindings-row {
++	:where(.dashboard) .bindings-row {
+ 		display: flex;
+ 		gap: 4px;
+ 		align-items: center;
+ 	}
+-	.bindings-row.me {
++	:where(.dashboard) .bindings-row.me {
+ 		outline: 1px solid #1e3a5f;
+ 		border-radius: 4px;
+ 		padding: 2px;
+ 	}
+-	.bindings-fp-small {
++	:where(.dashboard) .bindings-fp-small {
+ 		font-size: 10px;
+ 		color: #93c5fd;
+ 		font-family: ui-monospace, Menlo, monospace;
+ 		flex: 0 0 60px;
+ 	}
+-	.bindings-row .select { flex: 0 0 70px; padding: 6px 8px; font-size: 12px; }
+-	.input-sm { padding: 6px 8px; font-size: 12px; flex: 1; min-width: 0; }
+-	.btn-x {
++	:where(.dashboard) .bindings-row .select { flex: 0 0 70px; padding: 6px 8px; font-size: 12px; }
++	:where(.dashboard) .input-sm { padding: 6px 8px; font-size: 12px; flex: 1; min-width: 0; }
++	:where(.dashboard) .btn-x {
+ 		background: transparent;
+ 		border: 1px solid #3f3f46;
+ 		color: var(--muted);
+@@ -769,7 +771,7 @@
+ 		align-items: center;
+ 		justify-content: center;
+ 	}
+-	.btn-x:hover { border-color: #7f1d1d; color: var(--error-text); }
++	:where(.dashboard) .btn-x:hover { border-color: #7f1d1d; color: var(--error-text); }
+ 
+ 	@media (max-width: 1100px) {
+ 		.dashboard .controls {
+diff --git a/aero-1/src/routes/wiki/wiki.css b/aero-1/src/routes/wiki/wiki.css
+index 031b282d..65dcff1f 100644
+--- a/aero-1/src/routes/wiki/wiki.css
++++ b/aero-1/src/routes/wiki/wiki.css
+@@ -1,8 +1,11 @@
+ /* Wiki shared styles — extracted verbatim from +page.svelte <style>.
+- * Plain CSS import = global scope; selectors unchanged except the
+- * Svelte scoping class is gone (negligible: standalone SSR page).
++ * Plain CSS import = global scope, so every rule is scoped under the page
++ * root with `:where(.arch-doc)` (zero added specificity) and `body` becomes
++ * `body:has(.arch-doc)`. The page is ssr=true/csr=false (full loads), so the
++ * bare `body`/`h2`/`section` rules never leaked in practice; scoping just
++ * makes that true by construction.
+  */
+-body {
++body:has(.arch-doc) {
+ 		margin: 0;
+ 		padding: 0;
+ 		background: #0a0a14;
+@@ -19,14 +22,14 @@ body {
+ 
+ 	/* ── Hero ──────────────────────────────────────────────────────── */
+ 
+-	.hero {
++	:where(.arch-doc) .hero {
+ 		text-align: center;
+ 		padding: 60px 0 40px;
+ 		border-bottom: 1px solid rgba(255,255,255,0.08);
+ 		margin-bottom: 48px;
+ 	}
+ 
+-	.hero h1 {
++	:where(.arch-doc) .hero h1 {
+ 		font-size: 48px;
+ 		font-weight: 700;
+ 		margin: 0 0 8px;
+@@ -36,21 +39,21 @@ body {
+ 		background-clip: text;
+ 	}
+ 
+-	.subtitle {
++	:where(.arch-doc) .subtitle {
+ 		font-size: 20px;
+ 		font-weight: 300;
+ 		color: #8890b0;
+ 		margin: 0 0 16px;
+ 	}
+ 
+-	.deck {
++	:where(.arch-doc) .deck {
+ 		font-size: 15px;
+ 		color: #8890b0;
+ 		max-width: 560px;
+ 		margin: 0 auto 24px;
+ 	}
+ 
+-	.wiki-toc {
++	:where(.arch-doc) .wiki-toc {
+ 		display: flex;
+ 		flex-wrap: wrap;
+ 		gap: 10px 18px;
+@@ -59,7 +62,7 @@ body {
+ 		max-width: 560px;
+ 	}
+ 
+-	.wiki-toc a {
++	:where(.arch-doc) .wiki-toc a {
+ 		color: #a8b0d0;
+ 		font-size: 13px;
+ 		letter-spacing: 0.04em;
+@@ -69,23 +72,23 @@ body {
+ 		padding-bottom: 2px;
+ 	}
+ 
+-	.wiki-toc a:hover {
++	:where(.arch-doc) .wiki-toc a:hover {
+ 		color: #ffbf27;
+ 	}
+ 
+-	.credit-inline {
++	:where(.arch-doc) .credit-inline {
+ 		color: #8890b0;
+ 		font-size: 14px;
+ 	}
+ 
+-	.hero-meta {
++	:where(.arch-doc) .hero-meta {
+ 		display: flex;
+ 		gap: 12px;
+ 		justify-content: center;
+ 		flex-wrap: wrap;
+ 	}
+ 
+-	.hero-meta span {
++	:where(.arch-doc) .hero-meta span {
+ 		background: rgba(48,76,178,0.15);
+ 		border: 1px solid rgba(48,76,178,0.25);
+ 		color: #8898cc;
+@@ -96,7 +99,7 @@ body {
+ 
+ 	/* Amber, not the meta chips' blue: the stage badge is a status, not another
+ 	   spec. It should be the one thing in the row that reads as "note this". */
+-	.hero-meta span.stage-badge {
++	:where(.arch-doc) .hero-meta span.stage-badge {
+ 		background: rgba(214,158,46,0.16);
+ 		border-color: rgba(214,158,46,0.42);
+ 		color: #d69e2e;
+@@ -107,11 +110,11 @@ body {
+ 
+ 	/* ── Sections ──────────────────────────────────────────────────── */
+ 
+-	section {
++	:where(.arch-doc) section {
+ 		margin-bottom: 64px;
+ 	}
+ 
+-	h2 {
++	:where(.arch-doc) h2 {
+ 		font-size: 28px;
+ 		font-weight: 600;
+ 		margin: 0 0 28px;
+@@ -119,14 +122,14 @@ body {
+ 		letter-spacing: -0.3px;
+ 	}
+ 
+-	h3 {
++	:where(.arch-doc) h3 {
+ 		font-size: 18px;
+ 		font-weight: 600;
+ 		margin: 0 0 6px;
+ 		color: #b0b8d8;
+ 	}
+ 
+-	h4 {
++	:where(.arch-doc) h4 {
+ 		font-size: 14px;
+ 		font-weight: 600;
+ 		margin: 0 0 6px;
+@@ -137,7 +140,7 @@ body {
+ 
+ 	/* ── Engine Architecture Stack ─────────────────────────────────── */
+ 
+-	.arch-stack {
++	:where(.arch-doc) .arch-stack {
+ 		display: flex;
+ 		flex-direction: column;
+ 		gap: 4px;
+@@ -147,7 +150,7 @@ body {
+ 		border: 1px solid rgba(255,255,255,0.06);
+ 	}
+ 
+-	.arch-layer {
++	:where(.arch-doc) .arch-layer {
+ 		display: flex;
+ 		flex-direction: column;
+ 		padding: 14px 18px;
+@@ -156,33 +159,33 @@ body {
+ 		color: #b0c0e8;
+ 	}
+ 
+-	.arch-layer.title {
++	:where(.arch-doc) .arch-layer.title {
+ 		background: rgba(255,255,255,0.03);
+ 		color: #c8d0e8;
+ 		font-size: 16px;
+ 	}
+ 
+-	.arch-layer.svelte {
++	:where(.arch-doc) .arch-layer.svelte {
+ 		background: rgba(48,76,178,0.18);
+ 		border-left: 3px solid #6080cc;
+ 	}
+ 
+-	.arch-layer.cesium {
++	:where(.arch-doc) .arch-layer.cesium {
+ 		background: rgba(255,191,39,0.10);
+ 		border-left: 3px solid #ffbf27;
+ 	}
+ 
+-	.arch-layer.data {
++	:where(.arch-doc) .arch-layer.data {
+ 		background: rgba(192,132,252,0.10);
+ 		border-left: 3px solid #c084fc;
+ 	}
+ 
+-	.arch-layer.gpu {
++	:where(.arch-doc) .arch-layer.gpu {
+ 		background: rgba(213,21,46,0.08);
+ 		border-left: 3px solid #d5152e;
+ 	}
+ 
+-	.arch-sub {
++	:where(.arch-doc) .arch-sub {
+ 		font-size: 11px;
+ 		font-weight: 400;
+ 		color: #8890b0;
+@@ -190,38 +193,38 @@ body {
+ 		font-family: "JetBrains Mono", monospace;
+ 	}
+ 
+-	.ownership-grid {
++	:where(.arch-doc) .ownership-grid {
+ 		display: grid;
+ 		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+ 		gap: 12px;
+ 		margin-bottom: 24px;
+ 	}
+ 
+-	.ownership-card {
++	:where(.arch-doc) .ownership-card {
+ 		background: rgba(255,255,255,0.03);
+ 		border: 1px solid rgba(255,255,255,0.06);
+ 		border-radius: 10px;
+ 		padding: 14px 16px;
+ 	}
+ 
+-	.ownership-card h4 {
++	:where(.arch-doc) .ownership-card h4 {
+ 		margin-bottom: 4px;
+ 	}
+ 
+-	.ownership-card p {
++	:where(.arch-doc) .ownership-card p {
+ 		font-size: 12px;
+ 		color: #7780a0;
+ 		margin: 0;
+ 		line-height: 1.5;
+ 	}
+ 
+-	.arch-footer-line {
++	:where(.arch-doc) .arch-footer-line {
+ 		font-size: 13px;
+ 		color: #8890b0;
+ 		margin-top: 16px;
+ 	}
+ 
+-	.arch-footer-line code {
++	:where(.arch-doc) .arch-footer-line code {
+ 		font-family: "JetBrains Mono", monospace;
+ 		font-size: 12px;
+ 		color: #8098cc;
+@@ -229,13 +232,13 @@ body {
+ 
+ 	/* ── Pillar Grid ───────────────────────────────────────────────── */
+ 
+-	.pillar-grid {
++	:where(.arch-doc) .pillar-grid {
+ 		display: grid;
+ 		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+ 		gap: 16px;
+ 	}
+ 
+-	.pillar-card {
++	:where(.arch-doc) .pillar-card {
+ 		background: rgba(255,255,255,0.03);
+ 		border: 1px solid rgba(255,255,255,0.06);
+ 		border-radius: 12px;
+@@ -243,12 +246,12 @@ body {
+ 		position: relative;
+ 	}
+ 
+-	.pillar-card.built { border-left: 3px solid #304cb2; }
+-	.pillar-card.hidden { border-left: 3px solid #c084fc; background: rgba(192, 132, 252, 0.04); }
+-	.pillar-card.hidden .badge { background: rgba(192, 132, 252, 0.15); color: #c084fc; }
+-	.pillar-card.hidden .pillar-num { color: #a078d8; }
++	:where(.arch-doc) .pillar-card.built { border-left: 3px solid #304cb2; }
++	:where(.arch-doc) .pillar-card.hidden { border-left: 3px solid #c084fc; background: rgba(192, 132, 252, 0.04); }
++	:where(.arch-doc) .pillar-card.hidden .badge { background: rgba(192, 132, 252, 0.15); color: #c084fc; }
++	:where(.arch-doc) .pillar-card.hidden .pillar-num { color: #a078d8; }
+ 
+-	.hidden-intro {
++	:where(.arch-doc) .hidden-intro {
+ 		font-size: 14px;
+ 		color: #8890b0;
+ 		max-width: 720px;
+@@ -258,20 +261,20 @@ body {
+ 		background: rgba(192, 132, 252, 0.04);
+ 		border-radius: 0 6px 6px 0;
+ 	}
+-	.hidden-h3 {
++	:where(.arch-doc) .hidden-h3 {
+ 		font-size: 18px;
+ 		font-weight: 600;
+ 		color: #e0e0e8;
+ 		margin: 40px 0 8px;
+ 	}
+-	.hidden-blurb {
++	:where(.arch-doc) .hidden-blurb {
+ 		font-size: 14px;
+ 		color: #a8b0c8;
+ 		margin: 0 0 16px;
+ 		max-width: 760px;
+ 	}
+ 
+-	.pillar-num {
++	:where(.arch-doc) .pillar-num {
+ 		font-size: 13px;
+ 		font-weight: 700;
+ 		color: #8494c0;
+@@ -279,10 +282,10 @@ body {
+ 		margin-bottom: 6px;
+ 	}
+ 
+-	.pillar-card h3 { font-size: 16px; margin: 0 0 4px; }
+-	.pillar-card p { font-size: 13px; color: #7780a0; margin: 0; }
++	:where(.arch-doc) .pillar-card h3 { font-size: 16px; margin: 0 0 4px; }
++	:where(.arch-doc) .pillar-card p { font-size: 13px; color: #7780a0; margin: 0; }
+ 
+-	.badge {
++	:where(.arch-doc) .badge {
+ 		position: absolute;
+ 		top: 20px;
+ 		right: 20px;
+@@ -293,11 +296,11 @@ body {
+ 		border-radius: 10px;
+ 	}
+ 
+-	.built .badge { background: rgba(48,76,178,0.2); color: #6080cc; }
++	:where(.arch-doc) .built .badge { background: rgba(48,76,178,0.2); color: #6080cc; }
+ 
+ 	/* ── Flow Diagram ──────────────────────────────────────────────── */
+ 
+-	.flow-diagram {
++	:where(.arch-doc) .flow-diagram {
+ 		display: flex;
+ 		flex-direction: column;
+ 		align-items: center;
+@@ -305,7 +308,7 @@ body {
+ 		margin-bottom: 24px;
+ 	}
+ 
+-	.flow-node {
++	:where(.arch-doc) .flow-node {
+ 		background: rgba(48,76,178,0.12);
+ 		border: 1px solid rgba(48,76,178,0.3);
+ 		border-radius: 10px;
+@@ -316,36 +319,36 @@ body {
+ 		color: #b0c0e8;
+ 	}
+ 
+-	.flow-node.root {
++	:where(.arch-doc) .flow-node.root {
+ 		background: rgba(48,76,178,0.2);
+ 		border-color: rgba(48,76,178,0.5);
+ 	}
+ 
+-	.flow-sub {
++	:where(.arch-doc) .flow-sub {
+ 		font-size: 11px;
+ 		font-weight: 400;
+ 		color: #8890b0;
+ 		margin-top: 2px;
+ 	}
+ 
+-	.flow-arrow {
++	:where(.arch-doc) .flow-arrow {
+ 		font-size: 13px;
+ 		color: #8494c0;
+ 		padding: 4px 0;
+ 	}
+ 
+-	.flow-row {
++	:where(.arch-doc) .flow-row {
+ 		display: flex;
+ 		gap: 12px;
+ 		align-items: center;
+ 	}
+ 
+-	.flow-row .flow-node { flex: 1; }
+-	.flow-plus { color: #8494c0; font-weight: 700; font-size: 18px; }
++	:where(.arch-doc) .flow-row .flow-node { flex: 1; }
++	:where(.arch-doc) .flow-plus { color: #8494c0; font-weight: 700; font-size: 18px; }
+ 
+ 	/* ── State Diagram ─────────────────────────────────────────────── */
+ 
+-	.state-diagram {
++	:where(.arch-doc) .state-diagram {
+ 		display: flex;
+ 		flex-direction: column;
+ 		align-items: center;
+@@ -353,7 +356,7 @@ body {
+ 		margin-bottom: 24px;
+ 	}
+ 
+-	.state-box {
++	:where(.arch-doc) .state-box {
+ 		background: rgba(255,255,255,0.03);
+ 		border: 1px solid rgba(255,255,255,0.08);
+ 		border-radius: 10px;
+@@ -361,31 +364,31 @@ body {
+ 		text-align: center;
+ 	}
+ 
+-	.state-box.root-state {
++	:where(.arch-doc) .state-box.root-state {
+ 		background: rgba(48,76,178,0.1);
+ 		border-color: rgba(48,76,178,0.3);
+ 	}
+ 
+-	.state-box.small {
++	:where(.arch-doc) .state-box.small {
+ 		padding: 8px 16px;
+ 		font-size: 12px;
+ 	}
+ 
+-	.state-label {
++	:where(.arch-doc) .state-label {
+ 		font-weight: 600;
+ 		font-size: 14px;
+ 		color: #b0c0e8;
+ 		margin-bottom: 8px;
+ 	}
+ 
+-	.state-namespaces {
++	:where(.arch-doc) .state-namespaces {
+ 		display: flex;
+ 		gap: 8px;
+ 		flex-wrap: wrap;
+ 		justify-content: center;
+ 	}
+ 
+-	.state-namespaces span {
++	:where(.arch-doc) .state-namespaces span {
+ 		background: rgba(48,76,178,0.15);
+ 		border-radius: 6px;
+ 		padding: 3px 10px;
+@@ -394,7 +397,7 @@ body {
+ 		font-family: "JetBrains Mono", monospace;
+ 	}
+ 
+-	.state-row {
++	:where(.arch-doc) .state-row {
+ 		display: flex;
+ 		gap: 8px;
+ 		flex-wrap: wrap;
+@@ -403,7 +406,7 @@ body {
+ 
+ 	/* ── Z-Stack ───────────────────────────────────────────────────── */
+ 
+-	.z-stack {
++	:where(.arch-doc) .z-stack {
+ 		display: flex;
+ 		flex-direction: column;
+ 		gap: 2px;
+@@ -413,7 +416,7 @@ body {
+ 		border: 1px solid rgba(255,255,255,0.06);
+ 	}
+ 
+-	.z-layer {
++	:where(.arch-doc) .z-layer {
+ 		display: flex;
+ 		align-items: center;
+ 		gap: 12px;
+@@ -424,7 +427,7 @@ body {
+ 		position: relative;
+ 	}
+ 
+-	.z-layer::before {
++	:where(.arch-doc) .z-layer::before {
+ 		content: '';
+ 		position: absolute;
+ 		left: 0; top: 0; bottom: 0;
+@@ -432,9 +435,9 @@ body {
+ 		background: linear-gradient(180deg, rgba(48,76,178,0.6), rgba(48,76,178,0.1));
+ 	}
+ 
+-	.z-layer:last-child { border-bottom: none; }
++	:where(.arch-doc) .z-layer:last-child { border-bottom: none; }
+ 
+-	.z-num {
++	:where(.arch-doc) .z-num {
+ 		font-family: "JetBrains Mono", monospace;
+ 		font-size: 11px;
+ 		font-weight: 700;
+@@ -443,28 +446,28 @@ body {
+ 		padding-left: calc(var(--z) * 1.5px + 8px);
+ 	}
+ 
+-	.z-name {
++	:where(.arch-doc) .z-name {
+ 		font-weight: 600;
+ 		min-width: 120px;
+ 		color: #b0b8d0;
+ 	}
+ 
+-	.z-desc {
++	:where(.arch-doc) .z-desc {
+ 		color: #8890b0;
+ 		font-size: 12px;
+ 		flex: 1;
+ 	}
+ 
+-	.z-layer.cesium { background: rgba(48,76,178,0.18); }
+-	.z-layer.wing { background: rgba(255,255,255,0.04); }
+-	.z-layer.frost { background: rgba(200,220,255,0.06); }
+-	.z-layer.micro { background: rgba(255,191,39,0.04); }
+-	.z-layer.storm { background: rgba(213,21,46,0.05); }
+-	.z-layer.clouds { background: rgba(255,255,255,0.05); }
++	:where(.arch-doc) .z-layer.cesium { background: rgba(48,76,178,0.18); }
++	:where(.arch-doc) .z-layer.wing { background: rgba(255,255,255,0.04); }
++	:where(.arch-doc) .z-layer.frost { background: rgba(200,220,255,0.06); }
++	:where(.arch-doc) .z-layer.micro { background: rgba(255,191,39,0.04); }
++	:where(.arch-doc) .z-layer.storm { background: rgba(213,21,46,0.05); }
++	:where(.arch-doc) .z-layer.clouds { background: rgba(255,255,255,0.05); }
+ 
+ 	/* ── Camera Compare ────────────────────────────────────────────── */
+ 
+-	.camera-compare {
++	:where(.arch-doc) .camera-compare {
+ 		display: grid;
+ 		grid-template-columns: 1fr auto 1fr;
+ 		gap: 20px;
+@@ -472,20 +475,20 @@ body {
+ 		margin-bottom: 28px;
+ 	}
+ 
+-	.camera-mode {
++	:where(.arch-doc) .camera-mode {
+ 		background: rgba(255,255,255,0.03);
+ 		border: 1px solid rgba(255,255,255,0.06);
+ 		border-radius: 12px;
+ 		padding: 20px;
+ 	}
+ 
+-	.camera-mode h3 {
++	:where(.arch-doc) .camera-mode h3 {
+ 		font-size: 16px;
+ 		text-align: center;
+ 		margin-bottom: 16px;
+ 	}
+ 
+-	.camera-viz {
++	:where(.arch-doc) .camera-viz {
+ 		width: 100%;
+ 		height: 100px;
+ 		position: relative;
+@@ -494,11 +497,11 @@ body {
+ 		overflow: hidden;
+ 	}
+ 
+-	.orbit-viz {
++	:where(.arch-doc) .orbit-viz {
+ 		background: radial-gradient(ellipse at center, rgba(48,76,178,0.15) 0%, transparent 70%);
+ 	}
+ 
+-	.orbit-ring {
++	:where(.arch-doc) .orbit-ring {
+ 		position: absolute;
+ 		inset: 15%;
+ 		border: 1px dashed rgba(48,76,178,0.3);
+@@ -506,7 +509,7 @@ body {
+ 		animation: orbit-spin 8s linear infinite;
+ 	}
+ 
+-	.orbit-dot {
++	:where(.arch-doc) .orbit-dot {
+ 		position: absolute;
+ 		width: 6px; height: 6px;
+ 		background: #6080cc;
+@@ -517,18 +520,18 @@ body {
+ 
+ 	@keyframes orbit-spin { to { transform: rotate(360deg); } }
+ 
+-	.cruise-viz {
++	:where(.arch-doc) .cruise-viz {
+ 		background: linear-gradient(90deg, transparent 0%, rgba(48,76,178,0.1) 50%, rgba(255,191,39,0.1) 100%);
+ 	}
+ 
+-	.cruise-trail {
++	:where(.arch-doc) .cruise-trail {
+ 		position: absolute;
+ 		top: 50%; left: 20%; right: 20%;
+ 		height: 2px;
+ 		background: linear-gradient(90deg, transparent, #ffbf27, transparent);
+ 	}
+ 
+-	.cruise-dot {
++	:where(.arch-doc) .cruise-dot {
+ 		position: absolute;
+ 		width: 8px; height: 8px;
+ 		background: #ffbf27;
+@@ -543,13 +546,13 @@ body {
+ 		100% { left: calc(80% - 8px); transform: scale(1); opacity: 0.4; }
+ 	}
+ 
+-	.camera-mode ul {
++	:where(.arch-doc) .camera-mode ul {
+ 		list-style: none;
+ 		padding: 0;
+ 		margin: 0;
+ 	}
+ 
+-	.camera-mode li {
++	:where(.arch-doc) .camera-mode li {
+ 		font-size: 12px;
+ 		color: #8890b0;
+ 		padding: 3px 0;
+@@ -557,14 +560,14 @@ body {
+ 		position: relative;
+ 	}
+ 
+-	.camera-mode li::before {
++	:where(.arch-doc) .camera-mode li::before {
+ 		content: '·';
+ 		position: absolute;
+ 		left: 4px;
+ 		color: #5568a0;
+ 	}
+ 
+-	.camera-arrow {
++	:where(.arch-doc) .camera-arrow {
+ 		display: flex;
+ 		align-items: center;
+ 		justify-content: center;
+@@ -576,13 +579,13 @@ body {
+ 
+ 	/* ── Motion Grid ───────────────────────────────────────────────── */
+ 
+-	.motion-grid {
++	:where(.arch-doc) .motion-grid {
+ 		display: grid;
+ 		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+ 		gap: 12px;
+ 	}
+ 
+-	.motion-card {
++	:where(.arch-doc) .motion-card {
+ 		background: rgba(255,255,255,0.03);
+ 		border: 1px solid rgba(255,255,255,0.05);
+ 		border-radius: 10px;
+@@ -590,12 +593,12 @@ body {
+ 		text-align: center;
+ 	}
+ 
+-	.motion-card h4 { margin-bottom: 4px; }
+-	.motion-card p { font-size: 12px; color: #7780a0; margin: 0; line-height: 1.5; }
++	:where(.arch-doc) .motion-card h4 { margin-bottom: 4px; }
++	:where(.arch-doc) .motion-card p { font-size: 12px; color: #7780a0; margin: 0; line-height: 1.5; }
+ 
+ 	/* ── Input Focus ───────────────────────────────────────────────── */
+ 
+-	.input-hero {
++	:where(.arch-doc) .input-hero {
+ 		text-align: center;
+ 		padding: 32px;
+ 		background: rgba(48,76,178,0.08);
+@@ -604,15 +607,15 @@ body {
+ 		margin-bottom: 20px;
+ 	}
+ 
+-	.big-gesture { font-size: 18px; font-weight: 500; color: #c0d0f0; margin: 0; }
++	:where(.arch-doc) .big-gesture { font-size: 18px; font-weight: 500; color: #c0d0f0; margin: 0; }
+ 
+-	.input-details {
++	:where(.arch-doc) .input-details {
+ 		display: grid;
+ 		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+ 		gap: 8px;
+ 	}
+ 
+-	.input-item {
++	:where(.arch-doc) .input-item {
+ 		background: rgba(255,255,255,0.02);
+ 		border: 1px solid rgba(255,255,255,0.04);
+ 		border-radius: 8px;
+@@ -621,11 +624,11 @@ body {
+ 		color: #8890b0;
+ 	}
+ 
+-	.input-item strong { color: #b0b8d0; }
++	:where(.arch-doc) .input-item strong { color: #b0b8d0; }
+ 
+ 	/* ── Content Split ─────────────────────────────────────────────── */
+ 
+-	.content-split {
++	:where(.arch-doc) .content-split {
+ 		display: grid;
+ 		grid-template-columns: 1fr auto 1fr;
+ 		gap: 16px;
+@@ -633,7 +636,7 @@ body {
+ 		margin-bottom: 24px;
+ 	}
+ 
+-	.content-side {
++	:where(.arch-doc) .content-side {
+ 		background: rgba(255,255,255,0.03);
+ 		border: 1px solid rgba(255,255,255,0.06);
+ 		border-radius: 12px;
+@@ -641,18 +644,18 @@ body {
+ 		text-align: center;
+ 	}
+ 
+-	.content-side h3 { margin-bottom: 14px; }
++	:where(.arch-doc) .content-side h3 { margin-bottom: 14px; }
+ 
+-	.file-tree { text-align: left; }
++	:where(.arch-doc) .file-tree { text-align: left; }
+ 
+-	.ft-item {
++	:where(.arch-doc) .ft-item {
+ 		font-size: 12px;
+ 		font-family: "JetBrains Mono", monospace;
+ 		color: #8890b0;
+ 		padding: 3px 0;
+ 	}
+ 
+-	.content-divider {
++	:where(.arch-doc) .content-divider {
+ 		display: flex;
+ 		align-items: center;
+ 		justify-content: center;
+@@ -661,7 +664,7 @@ body {
+ 		padding-top: 40px;
+ 	}
+ 
+-	.split-label {
++	:where(.arch-doc) .split-label {
+ 		display: inline-block;
+ 		margin-top: 14px;
+ 		font-size: 11px;
+@@ -675,14 +678,14 @@ body {
+ 
+ 	/* ── Night Stages ──────────────────────────────────────────────── */
+ 
+-	.night-stages {
++	:where(.arch-doc) .night-stages {
+ 		display: flex;
+ 		flex-direction: column;
+ 		gap: 0;
+ 		margin-bottom: 24px;
+ 	}
+ 
+-	.night-stage {
++	:where(.arch-doc) .night-stage {
+ 		display: flex;
+ 		gap: 16px;
+ 		padding: 14px 0;
+@@ -690,7 +693,7 @@ body {
+ 		align-items: flex-start;
+ 	}
+ 
+-	.stage-num {
++	:where(.arch-doc) .stage-num {
+ 		width: 28px; height: 28px;
+ 		background: rgba(48,76,178,0.2);
+ 		border: 1px solid rgba(48,76,178,0.4);
+@@ -705,19 +708,19 @@ body {
+ 		margin-top: 2px;
+ 	}
+ 
+-	.night-stage h4 { font-size: 14px; margin: 0 0 2px; }
+-	.night-stage p { font-size: 13px; color: #7780a0; margin: 0; }
++	:where(.arch-doc) .night-stage h4 { font-size: 14px; margin: 0 0 2px; }
++	:where(.arch-doc) .night-stage p { font-size: 13px; color: #7780a0; margin: 0; }
+ 
+ 	/* ── Audio Map ─────────────────────────────────────────────────── */
+ 
+-	.audio-map {
++	:where(.arch-doc) .audio-map {
+ 		display: flex;
+ 		flex-direction: column;
+ 		gap: 6px;
+ 		margin-bottom: 20px;
+ 	}
+ 
+-	.audio-pair {
++	:where(.arch-doc) .audio-pair {
+ 		display: flex;
+ 		gap: 12px;
+ 		align-items: center;
+@@ -727,24 +730,24 @@ body {
+ 		border-radius: 8px;
+ 	}
+ 
+-	.audio-source {
++	:where(.arch-doc) .audio-source {
+ 		font-family: "JetBrains Mono", monospace;
+ 		font-size: 12px;
+ 		color: #8898cc;
+ 		min-width: 180px;
+ 	}
+ 
+-	.audio-arrow {
++	:where(.arch-doc) .audio-arrow {
+ 		color: #ffbf27;
+ 		font-weight: 700;
+ 	}
+ 
+-	.audio-target {
++	:where(.arch-doc) .audio-target {
+ 		font-size: 13px;
+ 		color: #b0b8d0;
+ 	}
+ 
+-	.audio-note {
++	:where(.arch-doc) .audio-note {
+ 		font-size: 13px;
+ 		color: #8890b0;
+ 		font-style: italic;
+@@ -767,33 +770,33 @@ body {
+ 
+ 	/* ── Detail Boxes ──────────────────────────────────────────────── */
+ 
+-	.pillar-detail {
++	:where(.arch-doc) .pillar-detail {
+ 		margin-top: 16px;
+ 	}
+ 
+-	.detail-box {
++	:where(.arch-doc) .detail-box {
+ 		border-radius: 10px;
+ 		padding: 16px 20px;
+ 		margin-bottom: 10px;
+ 	}
+ 
+-	.detail-box.good {
++	:where(.arch-doc) .detail-box.good {
+ 		background: rgba(48,76,178,0.06);
+ 		border: 1px solid rgba(48,76,178,0.15);
+ 	}
+ 
+-	.detail-box.note {
++	:where(.arch-doc) .detail-box.note {
+ 		background: rgba(255,191,39,0.04);
+ 		border: 1px solid rgba(255,191,39,0.1);
+ 	}
+ 
+-	.detail-box ul {
++	:where(.arch-doc) .detail-box ul {
+ 		list-style: none;
+ 		padding: 0;
+ 		margin: 0;
+ 	}
+ 
+-	.detail-box li {
++	:where(.arch-doc) .detail-box li {
+ 		font-size: 13px;
+ 		color: #8890b0;
+ 		padding: 2px 0;
+@@ -801,7 +804,7 @@ body {
+ 		position: relative;
+ 	}
+ 
+-	.detail-box li::before {
++	:where(.arch-doc) .detail-box li::before {
+ 		content: '·';
+ 		position: absolute;
+ 		left: 4px;
+@@ -810,19 +813,19 @@ body {
+ 
+ 	/* ── Verdict ───────────────────────────────────────────────────── */
+ 
+-	.verdict-section {
++	:where(.arch-doc) .verdict-section {
+ 		border-top: 1px solid rgba(255,255,255,0.08);
+ 		padding-top: 48px;
+ 	}
+ 
+-	.verdict-grid {
++	:where(.arch-doc) .verdict-grid {
+ 		display: grid;
+ 		grid-template-columns: repeat(3, 1fr);
+ 		gap: 16px;
+ 		margin-bottom: 28px;
+ 	}
+ 
+-	.verdict-stat {
++	:where(.arch-doc) .verdict-stat {
+ 		text-align: center;
+ 		padding: 20px;
+ 		background: rgba(255,255,255,0.03);
+@@ -830,7 +833,7 @@ body {
+ 		border-radius: 12px;
+ 	}
+ 
+-	.big-num {
++	:where(.arch-doc) .big-num {
+ 		font-size: 36px;
+ 		font-weight: 700;
+ 		display: block;
+@@ -840,42 +843,42 @@ body {
+ 		background-clip: text;
+ 	}
+ 
+-	.stat-label {
++	:where(.arch-doc) .stat-label {
+ 		font-size: 12px;
+ 		color: #8890b0;
+ 		text-transform: uppercase;
+ 		letter-spacing: 0.5px;
+ 	}
+ 
+-	.verdict-body p {
++	:where(.arch-doc) .verdict-body p {
+ 		font-size: 14px;
+ 		color: #8890b0;
+ 		margin: 0 0 10px;
+ 	}
+ 
+-	.verdict-body strong { color: #b0b8d0; }
++	:where(.arch-doc) .verdict-body strong { color: #b0b8d0; }
+ 
+ 	/* ── Footer ────────────────────────────────────────────────────── */
+ 
+-	.arch-footer {
++	:where(.arch-doc) .arch-footer {
+ 		text-align: center;
+ 		padding-top: 40px;
+ 		border-top: 1px solid rgba(255,255,255,0.05);
+ 	}
+ 
+-	.arch-footer p {
++	:where(.arch-doc) .arch-footer p {
+ 		font-size: 12px;
+ 		color: #556080;
+ 		margin: 0 0 4px;
+ 	}
+-	.arch-footer .arch-footer-sub {
++	:where(.arch-doc) .arch-footer .arch-footer-sub {
+ 		font-size: 11px;
+ 		color: #556080;
+ 	}
+ 
+ 	/* ── Trade-off Table ───────────────────────────────────────────── */
+ 
+-	.tradeoff-table {
++	:where(.arch-doc) .tradeoff-table {
+ 		display: flex;
+ 		flex-direction: column;
+ 		gap: 0;
+@@ -885,7 +888,7 @@ body {
+ 		margin-bottom: 8px;
+ 	}
+ 
+-	.tradeoff-row {
++	:where(.arch-doc) .tradeoff-row {
+ 		display: grid;
+ 		grid-template-columns: 100px 1fr 1fr 1.6fr;
+ 		gap: 8px;
+@@ -896,9 +899,9 @@ body {
+ 		align-items: center;
+ 	}
+ 
+-	.tradeoff-row:last-child { border-bottom: none; }
++	:where(.arch-doc) .tradeoff-row:last-child { border-bottom: none; }
+ 
+-	.tradeoff-row.header {
++	:where(.arch-doc) .tradeoff-row.header {
+ 		background: rgba(48,76,178,0.1);
+ 		font-weight: 700;
+ 		font-size: 11px;
+@@ -907,12 +910,12 @@ body {
+ 		color: #6080cc;
+ 	}
+ 
+-	.tradeoff-row span:first-child {
++	:where(.arch-doc) .tradeoff-row span:first-child {
+ 		font-weight: 600;
+ 		color: #b0b8d0;
+ 	}
+ 
+-	.tr-note {
++	:where(.arch-doc) .tr-note {
+ 		font-size: 10px;
+ 		color: #8890b0;
+ 		font-style: italic;
+@@ -920,24 +923,24 @@ body {
+ 
+ 	/* ── Constraint Grid ──────────────────────────────────────────── */
+ 
+-	.constraint-grid {
++	:where(.arch-doc) .constraint-grid {
+ 		display: grid;
+ 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+ 		gap: 12px;
+ 	}
+ 
+-	.constraint-card {
++	:where(.arch-doc) .constraint-card {
+ 		background: rgba(255,255,255,0.03);
+ 		border: 1px solid rgba(255,255,255,0.06);
+ 		border-radius: 10px;
+ 		padding: 16px;
+ 	}
+ 
+-	.constraint-card h4 {
++	:where(.arch-doc) .constraint-card h4 {
+ 		margin-bottom: 6px;
+ 	}
+ 
+-	.constraint-card p {
++	:where(.arch-doc) .constraint-card p {
+ 		font-size: 13px;
+ 		color: #7780a0;
+ 		margin: 0;
+@@ -946,13 +949,13 @@ body {
+ 
+ 	/* ── Omission List ────────────────────────────────────────────── */
+ 
+-	.omission-list {
++	:where(.arch-doc) .omission-list {
+ 		display: grid;
+ 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+ 		gap: 12px;
+ 	}
+ 
+-	.omission-item {
++	:where(.arch-doc) .omission-item {
+ 		background: rgba(213,21,46,0.03);
+ 		border: 1px solid rgba(213,21,46,0.08);
+ 		border-left: 3px solid rgba(213,21,46,0.2);
+@@ -960,13 +963,13 @@ body {
+ 		padding: 14px;
+ 	}
+ 
+-	.omission-item h4 {
++	:where(.arch-doc) .omission-item h4 {
+ 		font-size: 13px;
+ 		color: #d07080;
+ 		margin-bottom: 4px;
+ 	}
+ 
+-	.omission-item p {
++	:where(.arch-doc) .omission-item p {
+ 		font-size: 12px;
+ 		color: #8890b0;
+ 		margin: 0;
+@@ -976,16 +979,16 @@ body {
+ 	/* ── Responsive ────────────────────────────────────────────────── */
+ 
+ 	@media (max-width: 720px) {
+-		.hero h1 { font-size: 32px; }
+-		.camera-compare { grid-template-columns: 1fr; }
+-		.camera-arrow { padding-top: 0; transform: rotate(90deg); }
+-		.content-split { grid-template-columns: 1fr; }
+-		.content-divider { transform: rotate(90deg); padding-top: 0; }
+-		.verdict-grid { grid-template-columns: repeat(2, 1fr); }
+-		.z-name { min-width: 80px; }
+-		.z-desc { display: none; }
+-		.tradeoff-row { grid-template-columns: 80px 1fr 1fr; }
+-		.tradeoff-row span:last-child { grid-column: 1 / -1; }
+-		.audio-source { min-width: 120px; }
+-		.flow-row { flex-direction: column; }
++		:where(.arch-doc) .hero h1 { font-size: 32px; }
++		:where(.arch-doc) .camera-compare { grid-template-columns: 1fr; }
++		:where(.arch-doc) .camera-arrow { padding-top: 0; transform: rotate(90deg); }
++		:where(.arch-doc) .content-split { grid-template-columns: 1fr; }
++		:where(.arch-doc) .content-divider { transform: rotate(90deg); padding-top: 0; }
++		:where(.arch-doc) .verdict-grid { grid-template-columns: repeat(2, 1fr); }
++		:where(.arch-doc) .z-name { min-width: 80px; }
++		:where(.arch-doc) .z-desc { display: none; }
++		:where(.arch-doc) .tradeoff-row { grid-template-columns: 80px 1fr 1fr; }
++		:where(.arch-doc) .tradeoff-row span:last-child { grid-column: 1 / -1; }
++		:where(.arch-doc) .audio-source { min-width: 120px; }
++		:where(.arch-doc) .flow-row { flex-direction: column; }
+ 	}
+\ No newline at end of file
