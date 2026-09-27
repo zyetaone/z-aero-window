@@ -31,6 +31,30 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 });
 
+describe('pinned roster (AERO_PEERS)', () => {
+	it('unset: discovery is open', () => {
+		vi.stubEnv('AERO_PEERS', '');
+		handleResponse(srvAnswer('aero-display-09'));
+		expect(listPeers()).toHaveLength(1);
+	});
+
+	it('set: only listed device ids enter the peer map', () => {
+		vi.stubEnv('AERO_PEERS', ' aero-display-01, aero-display-02 ,');
+		handleResponse(srvAnswer('aero-display-01'));
+		handleResponse(srvAnswer('aero-display-02'));
+		handleResponse(srvAnswer('aero-display-03'));
+		handleResponse(srvAnswer('rogue-box'));
+		expect(listPeers().map((p) => p.deviceId).sort()).toEqual(['aero-display-01', 'aero-display-02']);
+	});
+
+	it('set: a listed id still refreshes its own entry', () => {
+		vi.stubEnv('AERO_PEERS', 'aero-display-01');
+		handleResponse(srvAnswer('aero-display-01', 3000));
+		handleResponse(srvAnswer('aero-display-01', 4000));
+		expect(listPeers()[0]?.port).toBe(4000);
+	});
+});
+
 describe('handleResponse ingestion', () => {
 	it('registers a well-formed peer announcement', () => {
 		handleResponse(srvAnswer('aero-display-01'));

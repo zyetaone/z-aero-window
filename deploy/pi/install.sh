@@ -419,7 +419,12 @@ AERO_MEDIA_MAX_MB=50
 AERO_USB_DIR=/media/aero
 AERO_MEDIA_ORIGINS=
 PUBLIC_WALL_ORIGIN=
+AERO_PEERS=
 EOF
+# AERO_PEERS is seeded EMPTY (open discovery, the pre-existing behaviour).
+# Fill it with the wall's device ids, comma-separated, on each Pi and restart
+# aero-app: from then on only those ids can appear in /api/devices or be sent
+# admin commands, whatever else answers mDNS on the LAN.
 
 # ─── Step 6: Systemd units + cron jobs ────────────────────────────────────────
 

@@ -128,6 +128,14 @@ git config --global --get-all safe.directory 2>/dev/null | command grep -qxF "${
 # release` on any laptop — updates a Pi with no network at all. Same build,
 # probe and rollback pipeline below; only where the commits come from changes.
 USB_DIR="${AERO_USB_DIR:-/media/aero}"
+# Trust model, accepted 2026-09-27: `git bundle verify` proves the bundle is
+# well-formed, NOT who made it. Anyone with physical access to a Pi's USB port
+# can hand it a bundle that is newer than HEAD and it will be built and run
+# (then probed and rolled back only if it fails to serve). That is the same
+# person who can pull the SD card, so the stick adds no privilege the port
+# does not already grant. If the fleet ever leaves a locked cabinet, the
+# upgrade path is a signed tag on the release branch and
+# `git verify-tag` here before is_newer.
 # $1 strictly later committer time than $2. Equal seconds → not newer, so two
 # builds in one second never flip-flop; the next real release is later anyway.
 is_newer() {
