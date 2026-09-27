@@ -56,9 +56,16 @@
 	/**
 	 * Scheduling. Reads `wallSec` UNTRACKED: `view` is replaced every frame,
 	 * and a tracked read here would abort and reschedule the poll 60×/s.
-	 * The fetch second is re-read at fire time and floored, because a timer
-	 * fires late after a stall and the apply boundary is keyed on the second
-	 * the fetch actually went out, which is what every pane agrees on.
+	 *
+	 * The apply boundary is keyed on the second a fetch was SCHEDULED for,
+	 * and that second is threaded through the timer chain rather than
+	 * re-read when it fires: `view.wallSec` is written by the RAF loop, so
+	 * at fire time it can lag the timer by a frame (839.99 for a fetch
+	 * scheduled at 840), and flooring that would move the boundary by a
+	 * whole minute on the strength of one pane's RAF phase. A timer that
+	 * fires late after a stall still names the neighbours' boundary; its
+	 * reading applies late, to the same value. The clock is read only for
+	 * the delay to the next scheduled second, and on the mount fast path.
 	 */
 	$effect(() => {
 		const place = display.config.place;
@@ -67,19 +74,20 @@
 		let controller: AbortController | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 
-		const poll = () => {
+		const poll = (scheduledSec: number | null) => {
 			const now = untrack(() => display.view.wallSec);
-			const fetchSec = Math.floor(now);
+			const fetchSec = scheduledSec ?? Math.floor(now);
 			controller?.abort();
 			const c = new AbortController();
 			controller = c;
 			void fetchReading(place.lat, place.lon, c.signal).then((w) => {
 				if (w && !c.signal.aborted) sync.receive(w, fetchSec);
 			});
-			timer = setTimeout(poll, (nextLiveWeatherFetch(now) - now) * 1000);
+			const next = nextLiveWeatherFetch(scheduledSec ?? now);
+			timer = setTimeout(() => poll(next), Math.max(0, next - now) * 1000);
 		};
 		// Mount fast path: fetch now, land at the next minute (live-weather.ts).
-		poll();
+		poll(null);
 
 		return () => {
 			clearTimeout(timer);
