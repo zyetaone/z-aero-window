@@ -257,6 +257,22 @@ window of mixed builds. A pane that finishes building after the boundary
 restarts immediately. `AERO_APPLY_LEAD_SEC=0` in `/etc/aero/config.env`
 disables the hold on a bench unit.
 
+**The hold is bounded by the unit's start timeout, and that is load-bearing.**
+`aero-updater.service` is `Type=oneshot` with `TimeoutStartSec=3600`, so
+systemd kills the whole update if the start outruns it — and the kill lands
+after `git reset --hard` and `bun run build` but before the restart, leaving a
+pane serving old in-memory code over a new on-disk build that the next poll
+skips because the tree already matches `release`. The wall then runs mixed
+builds permanently, with a reassuring log line as the only evidence. So the
+updater caps the hold at `AERO_APPLY_BUDGET_SEC` (default 2700) and takes the
+immediate-restart path when the boundary is further out than that. The natural
+hold is 1200–2099 s, so the cap never engages in normal operation; it exists
+for a pane whose clock disagrees with the commit's by more than the budget
+(an offline Pi with a dead RTC), which would otherwise sleep for months and
+stop applying updates. The log line for that case reports the skew. If you
+change one of the three numbers — lead, budget, `TimeoutStartSec` — keep
+`TimeoutStartSec` > `AERO_APPLY_BUDGET_SEC` + build headroom.
+
 `release` is fast-forwarded by CI only after check + tests + build pass on
 `main` (`.github/workflows/ci.yml`), so a red commit never reaches a Pi. On
 each real update the updater pulls → `bun install` → `bun run build` (compiles

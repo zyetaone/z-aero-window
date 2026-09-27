@@ -173,7 +173,28 @@ fi
 # The device's own wall clock, ms. The admin subtracts it from its receive
 # time; the spread across panes is the only number that says whether the
 # wall actually shares a clock (every pane derives its picture from it).
-CLOCK_MS="$(date +%s%3N 2>/dev/null || echo $(( $(date +%s) * 1000 )))"
+#
+# %3N is a GNU coreutils extension. BSD/macOS date does not support it — and it
+# does NOT fail, which is the trap: it prints the format string literally and
+# exits 0, so the `||` fallback below never fires and the value arrives as
+# `17905367853N`. Unquoted into the payload that is `"clockMs":17905367853N`,
+# which is not valid JSON, so the admin's 400 drops the ENTIRE heartbeat from
+# this pane — fps, temp, commit and clock skew all of it, not just the new
+# field. A telemetry feature that silences the telemetry when it is broken.
+# Hence validate the SHAPE rather than trusting the exit status, which is the
+# same idiom the rest of this file uses (FPS="${FPS:-0}").
+CLOCK_MS=""
+if CLOCK_RAW="$(date +%s%3N 2>/dev/null)" && [[ "${CLOCK_RAW}" =~ ^[0-9]+$ ]]; then
+    CLOCK_MS="${CLOCK_RAW}"
+elif [[ "$(date +%s 2>/dev/null)" =~ ^[0-9]+$ ]]; then
+    # Second resolution is 1000x coarser, which is still enough to catch a
+    # pane whose clock is minutes off. A skewed wall is what this is for.
+    CLOCK_MS="$(( $(date +%s) * 1000 ))"
+else
+    # Emit a valid number so one unreadable clock cannot cost the whole
+    # heartbeat. 0 reads as "unknown" to the admin, which is the truth.
+    CLOCK_MS=0
+fi
 PAYLOAD=$(cat <<EOF
 {"deviceId":"${DEVICE_ID}","role":"${AERO_ROLE}","groupId":"${AERO_GROUP}","fps":${FPS},"temp":${TEMP_C},"uptime":${UPTIME},"crashCount":${CRASH_COUNT},"commit":"${COMMIT}","lastError":"${LAST_ERROR}","mode":"${MODE}","throttledRaw":${THROTTLED_RAW},"thermalAction":"${THERMAL_ACTION}","clockSynced":${CLOCK_SYNCED},"clockMs":${CLOCK_MS}}
 EOF

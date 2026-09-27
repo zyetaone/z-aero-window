@@ -378,15 +378,65 @@ fi
 # Everything above (fetch, install, build, units) is local and invisible to
 # the passenger; only the restart changes the picture. See apply_boundary().
 # AERO_APPLY_LEAD_SEC=0 disables the hold for bench work.
+#
+# THE HOLD IS BUDGETED, and it has to be, because this script is the
+# ExecStart of a Type=oneshot under TimeoutStartSec. systemd SIGKILLs the whole
+# unit when the start exceeds it, and that kill lands in the worst possible
+# place: `git reset --hard` and `bun run build` have already run, but
+# restart_services() has not. The pane is left serving OLD in-memory code over
+# a NEW on-disk build, and because the tree is already at REMOTE the next timer
+# fire takes the LOCAL == REMOTE path, logs "Already up to date" and exits 0
+# without ever restarting into the build it just made. The other two panes did
+# restart, so the wall runs mixed builds PERMANENTLY — and the last line anyone
+# sees is "Built. Holding restart …", which reads like success.
+#
+# So the budget is not advisory. Worst case is a pane that fetches the instant
+# the commit lands: apply_boundary puts the boundary 1200..2099 s after the
+# commit, and the work runs INSIDE that window rather than before it, so total
+# elapsed = apply_at - service_start, not "build then hold". AERO_APPLY_BUDGET_SEC
+# must therefore exceed the 2099 s worst case with room for the build, and
+# TimeoutStartSec in pi/aero-updater.service must exceed it again. Measured
+# before this clamp: 91.3% of (commit-position x poll-lag) pairs were killed.
+#
+# The clamp is also the only thing standing between a wrong clock and a wedged
+# pane. apply_at is derived from the COMMIT's clock; this pane compares it
+# against its OWN. An offline Pi with a dead RTC and no network to correct it
+# computes a boundary six months in its own past or future, and unclamped that
+# is a 182-day sleep — the pane silently stops applying updates forever. Over
+# budget is therefore the STRAGGLER branch: restart now. A late restart is
+# what that branch already meant, and it is recoverable; a pane wedged for half
+# a year is not.
 APPLY_LEAD_SEC="${AERO_APPLY_LEAD_SEC:-1200}"
+# Validate as digits. In an arithmetic context bash parses "20min" as an
+# expression and errors, and inside an `if` condition that is not fatal under
+# set -e — so a typo silently took the ELSE and disabled the hold outright,
+# with one stderr line nobody reads on a headless Pi.
+if [[ ! "${APPLY_LEAD_SEC}" =~ ^[0-9]+$ ]]; then
+    log "AERO_APPLY_LEAD_SEC='${APPLY_LEAD_SEC}' is not a whole number of seconds — ignoring it and using the 1200s default"
+    APPLY_LEAD_SEC=1200
+fi
+APPLY_BUDGET_SEC="${AERO_APPLY_BUDGET_SEC:-2700}"
+if [[ ! "${APPLY_BUDGET_SEC}" =~ ^[0-9]+$ ]] || (( APPLY_BUDGET_SEC < 2100 )); then
+    # 2100 is the smallest value that can hold the 2099 s worst case.
+    log "AERO_APPLY_BUDGET_SEC='${AERO_APPLY_BUDGET_SEC}' must be a whole number >= 2100 — using 2700"
+    APPLY_BUDGET_SEC=2700
+fi
 if (( APPLY_LEAD_SEC > 0 )); then
     apply_at=$(apply_boundary "$(git log -1 --format=%ct HEAD)" "${APPLY_LEAD_SEC}")
     now_ts=$(date +%s)
-    if (( now_ts < apply_at )); then
-        log "Built. Holding restart $(( apply_at - now_ts ))s until the wall-wide boundary $(date -d "@${apply_at}" '+%H:%M:%S' 2>/dev/null || echo "${apply_at}")"
-        sleep $(( apply_at - now_ts ))
-    else
+    hold_sec=$(( apply_at - now_ts ))
+    if (( hold_sec <= 0 )); then
         log "Boundary $(date -d "@${apply_at}" '+%H:%M:%S' 2>/dev/null || echo "${apply_at}") already passed — restarting now (straggler)"
+    elif (( hold_sec > APPLY_BUDGET_SEC )); then
+        # Not a formatting concern. Either this pane's clock is far from the
+        # commit's, or the budget was set below the worst case. Say which,
+        # because "restarting now" looks identical to a normal straggler and
+        # the clock skew is the thing an operator has to go and fix.
+        skew=$(( now_ts - $(git log -1 --format=%ct HEAD) ))
+        log "Boundary is ${hold_sec}s away, past the ${APPLY_BUDGET_SEC}s service budget — restarting now (straggler). Local clock is ${skew}s from the release commit; check this pane's NTP/fake-hwclock if that is large."
+    else
+        log "Built. Holding restart ${hold_sec}s until the wall-wide boundary $(date -d "@${apply_at}" '+%H:%M:%S' 2>/dev/null || echo "${apply_at}")"
+        sleep "${hold_sec}"
     fi
 fi
 

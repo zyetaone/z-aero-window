@@ -20,7 +20,22 @@ ExecStart=/bin/bash __AERO_INSTALL_DIR__/deploy/aero-updater.sh
 StandardOutput=journal
 StandardError=journal
 # A stuck update (e.g. a hung build) must not run forever.
-TimeoutStartSec=600
+#
+# This has to cover the wall-wide apply hold, not just the build. The updater
+# sleeps until the quarter-hour boundary every pane computes from the release
+# commit's committer time, and that boundary is 1200..2099 s after the commit;
+# a pane that fetches the instant the commit lands starts this unit with the
+# full 2099 s ahead of it, and the build runs inside that window rather than
+# before it. So 600 s killed 91.3% of updates mid-sleep — after `git reset
+# --hard` and `bun run build`, before restart_services, which left the pane
+# serving old code over a new build that the next timer fire would then skip
+# because the tree already matched origin. A silent, permanent mixed wall.
+#
+# 3600 s = AERO_APPLY_BUDGET_SEC (2700) + ~15 min of build/install headroom.
+# The script clamps the hold to that budget and takes the straggler branch if
+# the boundary is further out, so raising this without the clamp would only
+# raise the ceiling on the hold. Keep the two in step.
+TimeoutStartSec=3600
 
 [Install]
 WantedBy=multi-user.target
