@@ -396,7 +396,45 @@ export class FlightCamera {
 	}
 }
 
-export function calculateCameraView(wallSec: number, params: CameraParams): CameraView {
+/** The visit's track and its downtown gate — see `slotTrack`. */
+export interface SlotTrack {
+	track: FlightTrack;
+	/** 0..1, how far the downtown pass engages this visit. 0 for features. */
+	gate: number;
+}
+
+/**
+ * Single-slot memo for `slotTrack`, keyed on every input the track and gate
+ * are built from. One entry, replaced wholesale, like `#sunLast` in
+ * display.svelte.ts: a pane flies one place at a time, and a test that
+ * interleaves places just misses and rebuilds.
+ */
+let slotMemo: {
+	lat: number;
+	lon: number;
+	floorM: number;
+	ceilingM: number;
+	direction: 1 | -1;
+	phase: number;
+	slot: number;
+	isFeature: boolean;
+	value: SlotTrack;
+} | null = null;
+
+/**
+ * The FlightTrack flown this visit, and the downtown gate read off it.
+ *
+ * Both are pure functions of (place, floor, ceiling, direction, slot, day)
+ * — nothing in them moves within a slot — yet `calculateCameraView` built
+ * a fresh track and read three `altitudeAt` gates on EVERY frame. Memoised
+ * on the exact constructor inputs: the per-slot ceiling draw, the
+ * direction after the place's mood, and the phase (`phaseFor` buckets by
+ * UTC day, not by slot, so it is part of the key rather than implied by
+ * it). Determinism is untouched — the memo only skips rebuilding an object
+ * whose inputs are proven equal — and `FlightTrack` is all `readonly`, so
+ * sharing one instance across frames is safe.
+ */
+export function slotTrack(wallSec: number, params: CameraParams): SlotTrack {
 	/**
 	 * Each visit cruises at its own level. The ceiling drops by up to 30% of
 	 * the climb band on a per-slot draw (never the floor: every clearance
@@ -410,25 +448,30 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 		params.floorM + band * 0.5,
 		params.ceilingM - band * 0.3 * slotNoise(slot, 11)
 	);
-	const track = new FlightTrack(
-		params.place.lat,
-		params.place.lon,
-		params.floorM,
-		ceilingM,
-		((params.direction ?? 1) * look.direction) as 1 | -1,
-		// Derived here, from the same second as the pose. See `phaseFor`.
-		phaseFor(params.place, wallSec)
-	);
-	const speed = params.speed ?? 1.0;
-	const effectiveSec = wallSec * speed;
-	/**
-	 * One flight clock for the whole slot: the downtown pass runs it faster
-	 * (downtownWarpSec), and the big loop keeps flying from wherever the pass
-	 * left it. Two clocks -- warped inside the pass, plain outside -- put the
-	 * aircraft in two places at the moment the pass let go.
-	 */
-	const slotStart = Math.floor(wallSec / DWELL_SEC) * DWELL_SEC;
-	const gate = params.place.isFeature
+	const direction = ((params.direction ?? 1) * look.direction) as 1 | -1;
+	// Derived here, from the same second as the pose. See `phaseFor`.
+	const phase = phaseFor(params.place, wallSec);
+	const isFeature = params.place.isFeature === true;
+	const { lat, lon } = params.place;
+	const { floorM } = params;
+
+	const m = slotMemo;
+	if (
+		m &&
+		m.lat === lat &&
+		m.lon === lon &&
+		m.floorM === floorM &&
+		m.ceilingM === ceilingM &&
+		m.direction === direction &&
+		m.phase === phase &&
+		m.slot === slot &&
+		m.isFeature === isFeature
+	)
+		return m.value;
+
+	const track = new FlightTrack(lat, lon, floorM, ceilingM, direction, phase);
+	const slotStart = slot * DWELL_SEC;
+	const gate = isFeature
 		? 0
 		: downtownGateAt(
 				// The HIGHEST climb across the whole pass window, not the midpoint
@@ -441,6 +484,22 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 					track.altitudeAt(slotStart + DOWNTOWN_PASS_END_SEC + DOWNTOWN_HANDOFF_SEC)
 				)
 			);
+	const value: SlotTrack = { track, gate };
+	slotMemo = { lat, lon, floorM, ceilingM, direction, phase, slot, isFeature, value };
+	return value;
+}
+
+export function calculateCameraView(wallSec: number, params: CameraParams): CameraView {
+	const look = Location.moodFor(params.place.id ?? '');
+	const { track, gate } = slotTrack(wallSec, params);
+	const speed = params.speed ?? 1.0;
+	const effectiveSec = wallSec * speed;
+	/**
+	 * One flight clock for the whole slot: the downtown pass runs it faster
+	 * (downtownWarpSec), and the big loop keeps flying from wherever the pass
+	 * left it. Two clocks -- warped inside the pass, plain outside -- put the
+	 * aircraft in two places at the moment the pass let go.
+	 */
 	const flightSec = downtownWarpSec(effectiveSec, wallSec, speed, gate);
 	/**
 	 * Altitude keys on the WALL second, unscaled and unwarped. The speed knob

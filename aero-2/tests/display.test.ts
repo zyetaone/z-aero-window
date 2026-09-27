@@ -7,9 +7,15 @@ import {
 	BREATHE_PERIOD_SEC,
 	FlightTrack,
 	daySeed,
-	CLIMB_PERIOD_SEC
+	CLIMB_PERIOD_SEC,
+	DWELL_SEC
 } from '#lib/display/flight/flight-path.js';
-import { calculateCameraView, FlightCamera, WORLD_ROLL_GAIN } from '#lib/display/flight/view.js';
+import {
+	calculateCameraView,
+	slotTrack,
+	FlightCamera,
+	WORLD_ROLL_GAIN
+} from '#lib/display/flight/view.js';
 import { resolveAtmosphere, weatherLightLoss, cloudedRgb } from '#lib/display/world/atmosphere.js';
 import { DOWNTOWN_MIN_AGL_M } from '#lib/display/flight/downtown.js';
 import { slotNoise, phaseFor } from '#lib/display/flight/flight-path.js';
@@ -190,6 +196,23 @@ describe('Flight Pose', () => {
 	 * the three panes disagreed outright. Negative control: drop the grid rounding
 	 * in atmosphericTurbulence and this fails at the storm intensity.
 	 */
+	it('hands consecutive frames in one slot the same track object', () => {
+		const p = paramsFor();
+		const t = 1_787_650_000;
+		const a = slotTrack(t, p);
+		const b = slotTrack(t + 1, p);
+		expect(b.track).toBe(a.track);
+		expect(b.gate).toBe(a.gate);
+		// A new slot is a new draw: the memo must miss, not carry the old track.
+		const nextSlot = (Math.floor(t / DWELL_SEC) + 1) * DWELL_SEC;
+		expect(slotTrack(nextSlot, p).track).not.toBe(a.track);
+		// And a miss rebuilds to the SAME numbers: the memo skips work, never changes it.
+		const again = slotTrack(t, p);
+		expect(again.track).not.toBe(a.track);
+		expect(again.track).toEqual(a.track);
+		expect(again.gate).toBe(a.gate);
+	});
+
 	it('gives three out-of-phase panes the same pose, storm included', () => {
 		const t = 1_787_650_000.0;
 		const p = paramsFor('?weather=storm');
