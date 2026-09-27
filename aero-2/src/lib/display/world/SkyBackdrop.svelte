@@ -31,6 +31,19 @@
 	const display = useDisplay();
 
 	let program: WebGLProgram | null = null;
+	/**
+	 * Uniform and attribute locations, looked up ONCE after link. They are
+	 * fixed for the program's lifetime, and `getUniformLocation` is a
+	 * string-keyed driver call: five of them per frame on a Pi is a cost
+	 * with no return. Nulled with `program` in onRemove.
+	 */
+	let locs: {
+		top: WebGLUniformLocation | null;
+		horizon: WebGLUniformLocation | null;
+		horizonY: WebGLUniformLocation | null;
+		topY: WebGLUniformLocation | null;
+		aPos: number;
+	} | null = null;
 	let triBuffer: WebGLBuffer | null = null;
 	let failed = false;
 	let warned = false;
@@ -108,6 +121,13 @@ void main() {
 			return null;
 		}
 		program = prog;
+		locs = {
+			top: gl.getUniformLocation(prog, 'u_top'),
+			horizon: gl.getUniformLocation(prog, 'u_horizon'),
+			horizonY: gl.getUniformLocation(prog, 'u_horizon_y'),
+			topY: gl.getUniformLocation(prog, 'u_top_y'),
+			aPos: gl.getAttribLocation(prog, 'a_pos')
+		};
 		return prog;
 	}
 
@@ -133,6 +153,7 @@ void main() {
 			if (program) gl.deleteProgram(program);
 			if (triBuffer) gl.deleteBuffer(triBuffer);
 			program = null;
+			locs = null;
 			triBuffer = null;
 			failed = false;
 			warned = false;
@@ -142,7 +163,7 @@ void main() {
 			if (failed || !triBuffer) return;
 			try {
 				const prog = getProgram(gl);
-				if (!prog) {
+				if (!prog || !locs) {
 					failOnce('program compile/link failed');
 					return;
 				}
@@ -164,15 +185,14 @@ void main() {
 				const topY = 1 - skyGradientTopPct(horizonPct) / 100;
 
 				gl.useProgram(prog);
-				gl.uniform3f(gl.getUniformLocation(prog, 'u_top'), top[0], top[1], top[2]);
-				gl.uniform3f(gl.getUniformLocation(prog, 'u_horizon'), horizon[0], horizon[1], horizon[2]);
-				gl.uniform1f(gl.getUniformLocation(prog, 'u_horizon_y'), horizonY);
-				gl.uniform1f(gl.getUniformLocation(prog, 'u_top_y'), topY);
+				gl.uniform3f(locs.top, top[0], top[1], top[2]);
+				gl.uniform3f(locs.horizon, horizon[0], horizon[1], horizon[2]);
+				gl.uniform1f(locs.horizonY, horizonY);
+				gl.uniform1f(locs.topY, topY);
 
 				gl.bindBuffer(gl.ARRAY_BUFFER, triBuffer);
-				const aPos = gl.getAttribLocation(prog, 'a_pos');
-				gl.enableVertexAttribArray(aPos);
-				gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+				gl.enableVertexAttribArray(locs.aPos);
+				gl.vertexAttribPointer(locs.aPos, 2, gl.FLOAT, false, 0, 0);
 
 				// Fullscreen backstop: no depth test (the ground covers us
 				// where it stands), and the same stale-scissor guard as
