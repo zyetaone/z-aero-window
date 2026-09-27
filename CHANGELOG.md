@@ -4,7 +4,10 @@ All notable changes to Sky Portal (Aero Dynamic Window) are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+> **Frozen at 0.6.0 (2026-05-22).** This file is no longer maintained and
+> is not backfilled. History since then lives in `docs/PHASE-HISTORY.md`
+> (aero-1 phases) and `git log`; the fleet tracks the `release` branch, not
+> version tags.
 
 ## [0.6.0] - 2026-05-22
 
