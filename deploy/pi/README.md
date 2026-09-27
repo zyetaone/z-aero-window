@@ -116,8 +116,11 @@ were dropped (2026-09-28). What ships is open data, built offline:
 ```sh
 # terrain, all packed cities (docker + gdal on the workstation, ~1 GB of DEM download)
 python3 aero-1/tools/build-terrain.py --all --out data/tiles/cesium-terrain
-# imagery: the sentinel2/ tree aero-2 already builds is byte-compatible
+# imagery: the sentinel2/ tree aero-2 already builds is byte-compatible (z8-13)
 cp -R aero-2/data/tiles/sentinel2 data/tiles/sentinel2
+# below z8 the Sentinel pack has nothing; aero-2's NASA GIBS MODIS pack (public
+# domain, same {z}/{y}/{x} layout) fills the ascent/descent views — merge it in
+for z in 0 1 2 3 4 5 6 7; do cp -R aero-2/data/tiles/gibs/$z data/tiles/sentinel2/$z; done
 ```
 
 Two settings, both written by `install.sh`:
