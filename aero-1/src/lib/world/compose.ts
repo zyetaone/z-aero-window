@@ -23,6 +23,7 @@ import { syncCamera, type CameraRead, type CameraSyncSlice } from './camera';
 import { COLOR_GRADE_STAGE, nightPostFxOn, qualityPaintGates } from './shaders';
 import { VIEWER_OPTIONS, applySceneDefaults, CESIUM_QUALITY_PRESETS, localTilesAvailable } from './cesium-setup';
 import { mountLightning, tickLightning } from './lightning-stage';
+import { wallDeltaSec } from '$lib/model/aero-window-context';
 import { mountCesiumClouds, updateCesiumClouds } from './clouds/billboard-layer';
 import { teardownViewerState } from './viewer-lifecycle';
 import { initImagery, setupImagery, syncImagery } from './imagery';
@@ -95,7 +96,7 @@ export class CesiumManager {
 	#lastTimeOfDay = -1;
 	#lastClockLon = -999;
 
-	#lastPostRenderTime = performance.now();
+	#lastWallMs = 0;
 	#boundTick: (() => void) | null = null;
 	#started = false;
 
@@ -206,17 +207,22 @@ export class CesiumManager {
 	// ── Render Loop ──────────────────────────────────────────────────────────
 
 	#tick(): void {
-		const now = performance.now();
-		const dt = Math.min((now - this.#lastPostRenderTime) / 1000, 0.1);
-		this.#lastPostRenderTime = now;
+		// The fleet clock, once per frame. Everything downstream that keeps a
+		// phase reads wallSec; the one thing that still decays (the lightning
+		// flash) steps by the WALL delta, so a slow pane decays at the same
+		// rate as its neighbours.
+		const nowMs = Date.now();
+		const wallSec = nowMs / 1000;
+		const wallDt = wallDeltaSec(nowMs, this.#lastWallMs);
+		this.#lastWallMs = nowMs;
 
 		this.#syncCamera();
 		this.#syncClockCheck();
 		syncTerrain(this.#model.terrainExaggeration);
 		this.#syncImagery();
 		this.#syncCloudBillboards();
-		this.#syncLightning(dt);
-		this.#syncBuildings(dt);
+		this.#syncLightning(wallDt, wallSec);
+		this.#syncBuildings(wallSec);
 		this.#syncQuality();
 	}
 
@@ -288,12 +294,12 @@ export class CesiumManager {
 		}
 	}
 
-	#syncBuildings(dt: number): void {
+	#syncBuildings(wallSec: number): void {
 		const m = this.#model;
 		// Same civil-twilight gate as wing nav lights (curves.ts cityLightAmount).
 		const cityLightAmount = lightingState(m.timeOfDay, m.nightFactor).cityLightAmount;
 		syncBuildings(
-			dt, m.nightFactor, m.nightLightScale, m.flight.altitude,
+			wallSec, m.nightFactor, m.nightLightScale, m.flight.altitude,
 			m.config.world.buildingsEnabled, m.config.world.windowLightIntensity,
 			this.#getBootFade(),
 			cityLightAmount,
@@ -325,15 +331,15 @@ export class CesiumManager {
 		);
 	}
 
-	#syncLightning(dt: number): void {
+	#syncLightning(wallDt: number, wallSec: number): void {
 		// Shared wall clock, not an accumulator: strike instants must agree
 		// across Pis within NTP drift (same doctrine as flight.svelte.ts).
-		tickLightning(dt, {
+		tickLightning(wallDt, {
 			hasLightning: this.#model.config.atmosphere.weather.hasLightning,
 			lightningDecayRate: this.#model.config.atmosphere.weather.lightningDecayRate,
 			lightningMinInterval: this.#model.config.atmosphere.weather.lightningMinInterval,
 			lightningMaxInterval: this.#model.config.atmosphere.weather.lightningMaxInterval,
-		}, Date.now() / 1000);
+		}, wallSec);
 	}
 
 	// ── Camera ───────────────────────────────────────────────────────────────

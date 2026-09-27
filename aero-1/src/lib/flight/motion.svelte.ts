@@ -85,15 +85,14 @@ export function motionStep(delta: number, ctx: SimulationContext): void {
 	untrack(() => tickInternal(delta, ctx));
 }
 
-function tickInternal(delta: number, ctx: SimulationContext): void {
+function tickInternal(_delta: number, ctx: SimulationContext): void {
 	const { time: t, heading, altitude, turbulenceLevel, camera, warpFactor } = ctx;
 	const m = camera.motion;
 	const turbMult = m.turbulenceMultipliers[turbulenceLevel];
 	// Wall-clock step when available (same class as orbit/director): flight
 	// advances heading on wallDeltaSec, so bank turnRate must use the same
 	// clock or a slow Pi (dt clamped 0.1 s, wall ~0.3 s) over-banks.
-	const w = ctx.wallDeltaSec;
-	const dt = typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : delta;
+	const dt = ctx.wallDeltaSec;
 
 	const altFactor = altitude > 40000
 		? clamp(1 - (altitude - 40000) / 10000, 0.05, 1)

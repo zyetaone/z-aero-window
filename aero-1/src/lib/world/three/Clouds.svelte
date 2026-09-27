@@ -77,6 +77,8 @@
 	import { createSeededRng, daySeed } from '$lib/world/prng';
 	import { spriteOffset, spriteScale } from '$lib/world/clouds/sprite-placement';
 	import { clusterCountsForDensity, drawCluster } from '../clouds/cluster-budget';
+	import { gustAt, windMagAt } from '../clouds/wind';
+	import { wallDeltaSec } from '$lib/model/aero-window-context';
 	import { lightingState } from '$lib/world/curves';
 
 	let {
@@ -504,26 +506,23 @@
 	// Reading anchorMatrix here makes it a live tick-path dependency so
 	// the autofixer cannot dead-code-eliminate the anchor scaffolding.
 	//
-	// Wind gusts: two slow, mutually irrational sinusoids multiplied
-	// together produce a quasi-random envelope in [0.45, 1.55] that
-	// modulates both the per-sprite spin and the cluster drift. The
-	// irrational ratios (0.137, 0.273) prevent the gusts from cycling
-	// — passenger never sees the same gust pattern twice in a window.
-	let _windT = 0;
-	useTask((dt) => {
+	// Wind gusts and wind speed are pure functions of the wall second
+	// (clouds/wind.ts), so every pane sees the same gust at the same
+	// instant. The drift and spin they modulate are integrals of a
+	// time-varying rate, so those step by the WALL delta — the local
+	// frame delta from useTask is ignored on purpose: it is clamped by the
+	// renderer and runs slow on a slow pane. 0.007: drift genuinely visible
+	// at the default 0.4 driftSpeed (0.004 gave ~0.09 °/s, below notice).
+	let _lastWallMs = 0;
+	useTask(() => {
 		void anchorMatrix;
 		if (!model.config.world.showClouds || !driftGroup.parent) return;
-		_windT += dt;
-		const gust = 1 + 0.55 * Math.sin(_windT * 0.137) * Math.cos(_windT * 0.273);
-		// Slow wind-speed modulation. Range [0.6, 1.6] — ALWAYS positive
-		// so clouds never freeze. The variance gives wind that ebbs and
-		// surges over ~6 min but doesn't reverse direction. Reversal looked
-		// broken in practice (drift went to net-zero for long stretches);
-		// real wind ebbs and flows but doesn't flip 180° within minutes.
-		// Also bumped 0.004 → 0.007 so drift is genuinely visible at the
-		// default 0.4 driftSpeed — previous coefficient gave ~0.09 °/sec
-		// which is below the noticeability threshold.
-		const windMag = 1.1 + 0.5 * Math.sin(_windT * 0.017) * Math.cos(_windT * 0.041);
+		const nowMs = Date.now();
+		const dt = wallDeltaSec(nowMs, _lastWallMs);
+		_lastWallMs = nowMs;
+		const wallSec = nowMs / 1000;
+		const gust = gustAt(wallSec);
+		const windMag = windMagAt(wallSec);
 		const driftDelta = dt * driftSpeed * 0.007 * gust * windMag;
 		const children = driftGroup.children;
 		for (let i = 0; i < children.length; i++) {

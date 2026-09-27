@@ -10,7 +10,7 @@ import type { SimulationContext } from '$lib/types';
 
 function makeCtx(overrides: Partial<SimulationContext> = {}): SimulationContext {
 	return {
-		time: 0, lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
+		time: 0, wallTimeSec: 0, wallDeltaSec: 0, lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
 		bankAngle: 0, weather: 'cloudy', skyState: 'day',
 		nightFactor: 0, dawnDuskFactor: 0, locationId: 'hyderabad',
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,
@@ -50,7 +50,7 @@ function makeCtx(overrides: Partial<SimulationContext> = {}): SimulationContext 
 
 describe('directorTick — gates', () => {
 	it('returns empty patch when not leader', () => {
-		const patch = directorTick(100, makeCtx({ isLeader: false }));
+		const patch = directorTick(100, makeCtx({ isLeader: false, wallDeltaSec: 100 }));
 		expect(patch.configs).toBeUndefined();
 		expect(patch.nextLocation).toBeUndefined();
 	});
@@ -58,7 +58,7 @@ describe('directorTick — gates', () => {
 	it('runs randomisation on the leader once the interval lapses', () => {
 		// Two ticks: first seeds lazy timers, second fires past the (1s) interval.
 		directorTick(0, makeCtx());
-		const patch = directorTick(5, makeCtx());
+		const patch = directorTick(5, makeCtx({ wallDeltaSec: 5 }));
 		expect(patch.configs).toBeDefined();
 		expect(patch.configs!.length).toBeGreaterThan(0);
 	});

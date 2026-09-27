@@ -34,7 +34,8 @@ function makeCtx(departureDurationSec: number, transitDurationSec: number): Simu
 		},
 	} as typeof cameraConfig;
 	return {
-		time: 0, lat: 0, lon: 0, altitude: 35000, heading: 0, pitch: 0, bankAngle: 0,
+		time: 0, wallTimeSec: 0, wallDeltaSec: 1 / 60,
+		lat: 0, lon: 0, altitude: 35000, heading: 0, pitch: 0, bankAngle: 0,
 		weather: 'clear', skyState: 'day', nightFactor: 0, dawnDuskFactor: 0,
 		locationId: HOME,
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,
@@ -57,6 +58,9 @@ function runUntil(
 	let t = 0;
 	const patches = [];
 	while (t < maxSec) {
+		// The wall clock is the contract now: no fallback to `dt` exists.
+		ctx.wallDeltaSec = dt;
+		ctx.wallTimeSec = t;
 		patches.push(engine.tick(dt, ctx));
 		t += dt;
 		if (pred()) return { elapsed: t, patches };

@@ -21,7 +21,8 @@ const CITY = 'dubai';
 
 function makeCtx(): SimulationContext {
 	return {
-		time: 0, lat: 0, lon: 0, altitude: 28000, heading: 45, pitch: 60, bankAngle: 0,
+		time: 0, wallTimeSec: 0, wallDeltaSec: 0.1,
+		lat: 0, lon: 0, altitude: 28000, heading: 45, pitch: 60, bankAngle: 0,
 		weather: 'clear', skyState: 'dusk', nightFactor: 0, dawnDuskFactor: 0,
 		locationId: CITY,
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,
@@ -53,6 +54,7 @@ function sustainedVerticalRateFtPerMin(seconds: number): number {
 	for (let t = 0; t < seconds; t += dt) {
 		engine.tick(dt, ctx);
 		ctx.time += dt;
+		ctx.wallTimeSec += dt;
 		rates.push((Math.abs(engine.altitude - prevAlt) / dt) * 60);
 		prevAlt = engine.altitude;
 	}

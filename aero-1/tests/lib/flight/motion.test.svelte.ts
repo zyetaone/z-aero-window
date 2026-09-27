@@ -16,9 +16,9 @@ import type { SimulationContext } from '$lib/types';
 
 const BOOT_HEADING = 45; // FlightSimEngine's boot heading
 
-function makeCtx(heading: number, wallDeltaSec?: number): SimulationContext {
+function makeCtx(heading: number, wallDeltaSec: number = 1 / 60): SimulationContext {
 	return {
-		time: 0, lat: 0, lon: 0, altitude: 35000, heading, pitch: 60, bankAngle: 0,
+		time: 0, wallTimeSec: 0, lat: 0, lon: 0, altitude: 35000, heading, pitch: 60, bankAngle: 0,
 		weather: 'clear', skyState: 'day', nightFactor: 0, dawnDuskFactor: 0,
 		locationId: 'dubai',
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,
@@ -27,7 +27,7 @@ function makeCtx(heading: number, wallDeltaSec?: number): SimulationContext {
 		camera: cameraConfig,
 		director: directorConfig,
 		isLeader: true,
-		...(wallDeltaSec !== undefined ? { wallDeltaSec } : {}),
+		wallDeltaSec,
 	} as unknown as SimulationContext;
 }
 

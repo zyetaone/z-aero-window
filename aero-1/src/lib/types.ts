@@ -63,13 +63,22 @@ export interface SimulationContext {
 	 *  within NTP drift. `time` is boot-relative and advanced by the dt-clamped
 	 *  delta, so on slow Pis it runs slower than wall clock and cross-pane
 	 *  oscillators (orbit breathe/wander) decorrelate within minutes. Anything
-	 *  that must stay position-locked across the fleet reads this instead. */
-	wallTimeSec?: number;
-	/** Wall-clock frame delta in seconds (capped at 5 s). `delta` is clamped to
-	 *  100 ms, so at low frame rates ∫delta < wall-elapsed and per-pane
-	 *  integrators (orbit angle, scenario progress) diverge. Integrators that
-	 *  must track wall elapsed time advance by this. */
-	wallDeltaSec?: number;
+	 *  that must stay position-locked across the fleet reads this instead.
+	 *
+	 *  REQUIRED, not optional. Both wall fields used to be `?:` with every
+	 *  consumer falling back to the local frame delta when they were absent —
+	 *  so a tick function could quietly integrate on the wrong clock and the
+	 *  type system had nothing to say. Making them required deleted every one
+	 *  of those fallbacks; a context without a wall clock is now a type error,
+	 *  which is the only guard that survives a rewrite. (aero-2 wrote the same
+	 *  rule as prose, ADR-007, and regressed it within a week.) */
+	wallTimeSec: number;
+	/** Wall-clock frame delta in seconds (floored at 0, capped at 5 s; 0 on the
+	 *  first frame). `delta` is clamped to 100 ms, so at low frame rates
+	 *  ∫delta < wall-elapsed and per-pane integrators (orbit angle, scenario
+	 *  progress, camera filters) diverge. Anything that accumulates advances by
+	 *  this; anything that can be a pure function of time reads wallTimeSec. */
+	wallDeltaSec: number;
 	lat: number;
 	lon: number;
 	altitude: number;
