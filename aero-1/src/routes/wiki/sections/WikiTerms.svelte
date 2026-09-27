@@ -52,26 +52,24 @@
 				<p>
 					Map tiles, terrain and night-light imagery are packaged offline before install, so
 					a fielded device runs on a dark LAN. When a tile is missing it falls back to its
-					origin CDN. The full outbound list is Cesium Ion (build-time packaging only when
-					possible), EOX Sentinel-2, NASA GIBS / VIIRS, CartoDB basemaps, OpenStreetMap-
-					derived buildings, and — only when configured — the operator's own update worker.
+					origin CDN. The full outbound list is NASA GIBS / VIIRS and — only when
+					configured — the operator's own update worker. Imagery and terrain have no
+					remote fallback on a fielded device: they are packed from open data before
+					install (Copernicus Sentinel-2 COGs, AWS terrain tiles) and served from disk.
 				</p>
 			</div>
 			<div class="omission-item">
 				<h4>5. Third-party data carries attribution</h4>
 				<p>
-					Terrain and imagery are licensed, not owned. Cesium Ion terrain is used under
-					Cesium's terms; Sentinel-2 Cloudless (the <em>s2cloudless-2024</em> layer) is
-					© EOX IT Services under CC BY-NC-SA 4.0 — a NonCommercial licence, which a paid
-					installation needs EOX's separate commercial licence to satisfy; the road mask is
-					© CARTO, whose basemaps are documented as available <em>exclusively</em> with an
-					Enterprise licence — free use is limited to non-commercial and grantee projects,
-					so a paid install needs that licence too — with map data © OpenStreetMap
-					contributors;
-					VIIRS night-lights radiance is NASA public-domain; road and building geometry is ©
-					OpenStreetMap contributors under ODbL. Attribution travels with any install or
-					screenshot that shows them. Software stack credits: Svelte / SvelteKit, CesiumJS,
-					Three.js (optional overlay), Bun, Raspberry Pi OS / Chromium.
+					Terrain and imagery are open data, not owned. Day imagery contains modified
+					Copernicus Sentinel data (2026), which permits commercial use and requires this
+					attribution; terrain is built from Mapzen / AWS Open Data elevation tiles
+					(public domain); VIIRS night-lights radiance is NASA public-domain; road and
+					building geometry is © OpenStreetMap contributors under ODbL. The earlier EOX
+					Sentinel-2 Cloudless mosaic (CC BY-NC-SA) and CARTO basemaps are no longer
+					packaged or fielded. Attribution travels with any install or screenshot that
+					shows the data. Software stack credits: Svelte / SvelteKit, CesiumJS, Three.js
+					(optional overlay), Bun, Raspberry Pi OS / Chromium.
 				</p>
 				<p>
 					<strong>Audio carries no third-party licence at all.</strong> The cabin bed is

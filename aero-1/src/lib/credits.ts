@@ -23,6 +23,13 @@ export const ENGINEERED_BY = 'rdtect';
 export const PRODUCT_PARTNERS = ['Zyeta', 'SWA'] as const;
 
 export const PRODUCT_YEAR = 2026;
+/**
+ * Data credit for the boot lockup. Copernicus terms require attribution
+ * wherever Sentinel-2 pixels are shown; the terrain and night-light sources
+ * ask for it too. One line, once, at boot — the glass itself stays a window.
+ */
+export const DATA_CREDIT =
+	'Contains modified Copernicus Sentinel data 2026 · Elevation: Mapzen / AWS Open Data · Night lights: NASA GIBS';
 
 /**
  * Release stage, shown on OPERATOR surfaces only (admin, wiki) — never on the

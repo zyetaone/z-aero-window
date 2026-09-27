@@ -37,7 +37,7 @@ describe('getSatelliteImagery — local vs remote', () => {
 	it('uses the packaged cache when it is available', async () => {
 		const { getSatelliteImagery } = await load();
 		const cfg = getSatelliteImagery(true);
-		expect(cfg.label).toBe('local-eox-sentinel2');
+		expect(cfg.label).toBe('local-sentinel2');
 		expect(cfg.url).toContain(TILE_URL);
 	});
 
@@ -46,7 +46,7 @@ describe('getSatelliteImagery — local vs remote', () => {
 		const cfg = getSatelliteImagery(false);
 		// The regression: this used to key on VITE_TILE_SERVER_URL alone, so a
 		// device with the flag set but no tiles rendered nothing at all.
-		expect(cfg.label).not.toBe('local-eox-sentinel2');
+		expect(cfg.label).not.toBe('local-sentinel2');
 		expect(cfg.url).toMatch(/^https?:\/\//);
 	});
 });
@@ -60,14 +60,14 @@ describe('checkLocalTileServer', () => {
 	}
 
 	it('reports available when the cache holds layers', async () => {
-		stubHealth({ status: 'ok', hasTiles: true, layers: ['eox-sentinel2'] });
+		stubHealth({ status: 'ok', hasTiles: true, layers: ['sentinel2'] });
 		const { checkLocalTileServer } = await load();
 		expect(await checkLocalTileServer()).toBe(true);
 	});
 
 	it('exposes the probed layer list for layer-specific decisions', async () => {
 		// Health probe still reports viirs-roads for legacy caches; runtime uses vector roads.
-		stubHealth({ status: 'ok', hasTiles: true, layers: ['eox-sentinel2', 'viirs-roads'] });
+		stubHealth({ status: 'ok', hasTiles: true, layers: ['sentinel2', 'viirs-roads'] });
 		const { checkLocalTileServer, localTileLayerAvailable } = await load();
 		await checkLocalTileServer();
 		expect(localTileLayerAvailable('viirs-roads')).toBe(true);

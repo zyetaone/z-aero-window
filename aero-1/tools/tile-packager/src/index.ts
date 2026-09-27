@@ -10,7 +10,7 @@
  *   bun run start -- --estimate            # dry-run: show storage estimate only
  *   bun run start -- --output ./data/tiles # custom output dir
  *   bun run start -- --locations dubai,himalayas  # subset
- *   bun run start -- --sources eox-sentinel2,viirs-night-lights  # subset
+ *   bun run start -- --sources viirs-night-lights  # subset
  */
 
 import { mkdir, writeFile, copyFile, stat } from 'node:fs/promises';
@@ -20,7 +20,7 @@ import { join, dirname, resolve } from 'node:path';
 import { LOCATIONS } from '../../../content/locations';
 import type { LocationId } from '../../../content/locations';
 import { enumerateTiles, estimateBytes, formatBytes, type TileSource } from './rules';
-import { SOURCES, tileFilePath, fetchIonLayerJson, BUILDINGS_CONFIG, overpassToGeoJson } from './sources';
+import { SOURCES, tileFilePath, BUILDINGS_CONFIG, overpassToGeoJson } from './sources';
 import { ROADS_CONFIG, radiusGroups, fetchRoadGroupFeatures, OVERPASS_HEADERS } from './roads';
 import { STATIC_ASSETS, type AssetCategory } from './assets';
 
@@ -72,7 +72,7 @@ function parseArgs(): Args {
   bun run start -- --estimate                    Dry-run: storage estimate only
   bun run start -- --output ./data/tiles         Custom output directory
   bun run start -- --locations dubai,himalayas   Subset of locations
-  bun run start -- --sources eox-sentinel2       Subset of tile sources (default: all)
+  bun run start -- --sources viirs-night-lights  Subset of tile sources (default: all)
   bun run start -- --concurrency 6               Parallel downloads (default 6)
   bun run start -- --skip-buildings              Don't run Overpass buildings pass
   bun run start -- --skip-roads                  Don't run Overpass roads pass
@@ -81,16 +81,15 @@ function parseArgs(): Args {
   bun run start -- --force-roads                 Re-fetch roads even if on disk
 
 Tile sources:
-  eox-sentinel2     Sentinel-2 cloudless imagery (free, no auth)
-  viirs-night-lights  NASA VIIRS night lights (free, unused in app)
-  cesium-terrain    Ion quantized-mesh terrain (requires CESIUM_ION_TOKEN env)
+  viirs-night-lights  NASA VIIRS night lights (public domain)
+
+Not here on purpose (open data, built offline, no token):
+  sentinel2/        day imagery — aero-2/tools builds it from Copernicus COGs
+  cesium-terrain/   quantized mesh — tools/build-terrain.py from AWS elevation
 
 Static assets (copied from repo static/, no network):
   water-normals.jpg, cloud sprites, sky backdrops, weather map, optional
   SWA brand LUT. See src/assets.ts for the full manifest.
-
-Environment:
-  CESIUM_ION_TOKEN  Required for cesium-terrain source. Build-time only.
 `);
 				process.exit(0);
 		}
@@ -166,20 +165,6 @@ async function main() {
 				// Mark as unusable — worker will skip jobs for this source.
 				headersBySource[cfg.source] = null as unknown as Record<string, string>;
 			}
-		}
-	}
-
-	// Ion terrain needs its layer.json metadata alongside the tile tree for
-	// CesiumTerrainProvider.fromUrl() to succeed at runtime.
-	if (sources.some((s) => s.source === 'cesium-terrain') && headersBySource['cesium-terrain']) {
-		try {
-			const layerJson = await fetchIonLayerJson();
-			const layerPath = join(args.output, 'cesium-terrain', 'layer.json');
-			await mkdir(dirname(layerPath), { recursive: true });
-			await Bun.write(layerPath, layerJson);
-			console.log('📝 Wrote cesium-terrain/layer.json');
-		} catch (e) {
-			console.warn(`⚠️  Failed to fetch Ion layer.json: ${(e as Error).message}`);
 		}
 	}
 

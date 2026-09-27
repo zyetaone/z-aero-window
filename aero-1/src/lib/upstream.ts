@@ -75,6 +75,17 @@ export const GIBS_VIIRS: UpstreamSource = {
  * replacement is the same Sentinel-2 data from the public AWS `sentinel-cogs`
  * bucket under the Copernicus licence, which does permit commercial use.
  */
+export const COPERNICUS_SENTINEL2: UpstreamSource = {
+  // Not a tile URL: the pack is BUILT from Level-2A COGs (aero-2/tools) and
+  // served from disk as `sentinel2/{z}/{y}/{x}.jpg`. Nothing fetches this
+  // at runtime.
+  url: "s3://sentinel-cogs/sentinel-s2-l2a-cogs/{mgrs}/{date}/",
+  licence: "Copernicus Sentinel data — commercial use permitted, attribution required",
+  commercial: true,
+  attribution: "Contains modified Copernicus Sentinel data 2026",
+};
+
+/** Dev-machine fallback only. Never packaged, never fielded. */
 export const EOX_SENTINEL2: UpstreamSource = {
   url: "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg",
   licence: "CC BY-NC-SA 4.0 — NON-COMMERCIAL",

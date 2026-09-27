@@ -119,14 +119,12 @@ export async function setupImagery(): Promise<void> {
 		// terrain well past its native 0.46, so this is closer to the source.
 		// EOX is flatter than Mapbox/Esri, hence still a boost, just not one
 		// that clips. Re-measure before raising either number.
-		// ⚠ includes, NOT startsWith: the local cache labels itself
-		// 'local-eox-sentinel2' (cesium-setup getSatelliteImagery), so a
-		// startsWith test is FALSE for the packaged path — the same Sentinel-2
-		// pixels would take the non-eox branch purely because they came off
-		// disk instead of the network, quietly undoing both the measured
-		// purple-ocean values and the day gamma lift the moment the ~2.7 GB of
-		// tiles land on a Pi.
-		const isEox = cfg.label.includes('eox');
+		// Keyed on the DATA, not the host: the remote EOX mosaic (dev only) and
+		// the packaged Copernicus `sentinel2` tree are the same Sentinel-2
+		// pixels, so both take this branch. A vendor-name test here once sent
+		// the packaged path down the Mapbox branch and quietly undid the
+		// measured purple-ocean values the moment the tiles landed on a Pi.
+		const isEox = /eox|sentinel2/.test(cfg.label);
 
 		_baseDaySaturation = isEox ? 1.3 : 1.25;
 		_baseLayer.saturation = _baseDaySaturation;

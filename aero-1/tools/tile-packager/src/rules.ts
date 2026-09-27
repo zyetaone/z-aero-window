@@ -52,12 +52,13 @@ export function enumerateTiles(
 
 /** Average bytes per tile by source — calibrated against real samples. */
 export const TILE_AVG_BYTES = {
-	'eox-sentinel2': 25_000,
 	'viirs-night-lights': 11_000,
-	// Cesium Ion quantized-mesh terrain — tiles contain only the mesh
-	// fragment for that square; lossy compressed. Small at low zoom.
-	'cesium-terrain': 8_000,
 } as const;
+// Removed 2026-09-28: 'eox-sentinel2' (CC BY-NC-SA, cannot ship on a paid
+// install) and 'cesium-terrain' from Cesium ion (tokened, online). Day imagery
+// is now the Copernicus `sentinel2/` tree aero-2/tools builds from Level-2A
+// COGs; terrain is tools/build-terrain.py from AWS Open Data elevation. Both
+// are open data, both are built offline, neither needs a token.
 
 export type TileSource = keyof typeof TILE_AVG_BYTES;
 

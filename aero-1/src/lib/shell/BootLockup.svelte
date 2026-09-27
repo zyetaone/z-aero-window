@@ -16,7 +16,7 @@
 	 *   - video/slideshow: displayMode itself (globe is parked; no FPS)
 	 */
 	import { useAeroWindow } from '$lib/model/aero-window.svelte';
-	import { ENGINEERED_BY, PRODUCT_PARTNERS, PRODUCT_SHORT } from '$lib/credits';
+	import { DATA_CREDIT, ENGINEERED_BY, PRODUCT_PARTNERS, PRODUCT_SHORT } from '$lib/credits';
 
 	const model = useAeroWindow();
 
@@ -102,6 +102,7 @@
 			<span class="hair right"></span>
 		</div>
 		<p class="engineered">{PRODUCT_SHORT} · engineered by {ENGINEERED_BY}</p>
+		<p class="engineered data-credit">{DATA_CREDIT}</p>
 	</div>
 </div>
 

@@ -185,15 +185,17 @@ export function getSatelliteImagery(localAvailable = true): ImageryConfig {
 	// so the caller must resolve availability first. Defaults true so the
 	// meaning of a bare call is unchanged for existing callers/tests.
 	if (TILE_SERVER_URL && localAvailable) {
-		// Local cache populated by tools/tile-packager. Sentinel-2 path layout
-		// matches the packager's storagePath: `eox-sentinel2/{z}/{y}/{x}.jpg`.
-		// When the cache misses, the device just shows the base color for that
-		// tile until the next user-initiated load fills it.
+		// Local pack: Sentinel-2 built from the public `sentinel-cogs` bucket
+		// under the Copernicus licence (commercial use permitted, attribution
+		// required — see $lib/upstream COPERNICUS_SENTINEL2). Layout is WMTS
+		// `sentinel2/{z}/{y}/{x}.jpg`, the same tree aero-2 ships; the EOX
+		// mosaic is NOT packaged any more because CC BY-NC-SA does not cover a
+		// paid install. When the pack misses, the tile shows the base colour.
 		return {
-			url: `${TILE_SERVER_URL}/eox-sentinel2/{z}/{y}/{x}.jpg`,
-			maxZoom: 12,
+			url: `${TILE_SERVER_URL}/sentinel2/{z}/{y}/{x}.jpg`,
+			maxZoom: 13,
 			webMercator: true,
-			label: 'local-eox-sentinel2',
+			label: 'local-sentinel2',
 		};
 	}
 	if (MAPBOX_TOKEN) {

@@ -16,7 +16,7 @@
  * GET /api/tiles/health                   → status
  */
 
-import { createReadStream, statSync, readdirSync } from 'node:fs';
+import { createReadStream, statSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
 import type { RequestHandler } from './$types';
 import { lanCorsHeaders, corsPreflight } from '$lib/http/cors';
 import { safeResolveWithin } from '$lib/server/fs-guard';
@@ -63,6 +63,23 @@ function tileHealth(): { status: string; hasTiles: boolean; layers: string[] } {
 	return { status: 'ok', hasTiles: layers.length > 0, layers };
 }
 
+/**
+ * ctb-tile writes quantized-mesh tiles gzipped on disk (the format's
+ * convention), and CesiumTerrainProvider decodes the body it receives as
+ * raw mesh — without this header every terrain tile is a parse failure and
+ * the globe silently falls back to the ellipsoid. Sniffed per file rather
+ * than assumed, so a pack of plain tiles keeps working.
+ */
+function isGzipped(filePath: string): boolean {
+	const fd = openSync(filePath, 'r');
+	try {
+		const head = Buffer.alloc(2);
+		return readSync(fd, head, 0, 2, 0) === 2 && head[0] === 0x1f && head[1] === 0x8b;
+	} finally {
+		closeSync(fd);
+	}
+}
+
 function serveTile(filePath: string, cors: Record<string, string>): Response {
 	const ext = filePath.substring(filePath.lastIndexOf('.'));
 	const contentType = MIME[ext] ?? 'application/octet-stream';
@@ -73,14 +90,14 @@ function serveTile(filePath: string, cors: Record<string, string>): Response {
 	if (!stat.isFile()) return new Response('Not found', { status: 404, headers: cors });
 	const { size } = stat;
 	const stream = createReadStream(filePath);
-	return new Response(stream as any, {
-		headers: {
-			...cors,
-			'Content-Type': contentType,
-			'Content-Length': String(size),
-			'Cache-Control': 'public, max-age=31536000, immutable',
-		},
-	});
+	const headers: Record<string, string> = {
+		...cors,
+		'Content-Type': contentType,
+		'Content-Length': String(size),
+		'Cache-Control': 'public, max-age=31536000, immutable',
+	};
+	if (ext === '.terrain' && isGzipped(filePath)) headers['Content-Encoding'] = 'gzip';
+	return new Response(stream as any, { headers });
 }
 
 export const GET: RequestHandler = async ({ params, request }) => {

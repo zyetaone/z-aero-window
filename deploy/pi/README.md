@@ -101,9 +101,24 @@ should return 200, and 401 means the tokens differ.
 
 ## Offline tiles
 
-The Pi can serve its own imagery, terrain and night-lights from disk instead of
-streaming them from EOX / NASA GIBS / CartoDB. On a client site with unreliable
-WiFi this is the difference between a window and a bare globe.
+The Pi serves its own imagery, terrain and night-lights from disk. Imagery and
+terrain have NO remote fallback on a fielded device any more: the EOX mosaic
+was CC BY-NC-SA and Cesium ion terrain was a tokened online service, so both
+were dropped (2026-09-28). What ships is open data, built offline:
+
+| Layer dir | Built by | Source / licence |
+| --- | --- | --- |
+| `sentinel2/` | `aero-2/tools` Sentinel pipeline | Copernicus Sentinel-2 L2A COGs — commercial OK, attribution required |
+| `cesium-terrain/` | `aero-1/tools/build-terrain.py` | AWS Open Data elevation (Mapzen) — public domain |
+| `viirs-night-lights/` | `tools/tile-packager` | NASA GIBS — public domain |
+| `roads/`, `buildings/` | `tools/tile-packager` | OpenStreetMap — ODbL |
+
+```sh
+# terrain, all packed cities (docker + gdal on the workstation, ~1 GB of DEM download)
+python3 aero-1/tools/build-terrain.py --all --out data/tiles/cesium-terrain
+# imagery: the sentinel2/ tree aero-2 already builds is byte-compatible
+cp -R aero-2/data/tiles/sentinel2 data/tiles/sentinel2
+```
 
 Two settings, both written by `install.sh`:
 
@@ -168,14 +183,15 @@ ssh kiosk@<pi> 'sudo bash -s' < deploy/pi/audit.sh
 curl -s http://<pi>:3000/api/tiles/health | jq
 ```
 
-`{"status":"ok","hasTiles":true,"layers":["eox-sentinel2","cesium-terrain",…]}`
+`{"status":"ok","hasTiles":true,"layers":["sentinel2","cesium-terrain",…]}`
 
 **`hasTiles` is the field that matters.** Base imagery has no per-tile fallback
 — whatever source the client picks is the only one — so a populated-looking but
 empty `TILE_DIR` would render nothing. The client probes this endpoint on each
 load and uses the remote hosts whenever `hasTiles` is false, which is why the
 setting is safe to leave enabled on a device with no tiles yet. Terrain
-degrades separately and on its own: local → Cesium Ion → flat ellipsoid.
+degrades separately and on its own: local → flat ellipsoid (the ion path
+remains in code for a dev machine with a token, and is never fielded).
 
 Adding tiles later needs only a restart, not a rebuild — the probe is runtime.
 
