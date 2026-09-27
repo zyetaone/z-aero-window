@@ -33,6 +33,7 @@
 	 * per-location box on top of a global wash degrades at the edge instead of
 	 * punching a hole.
 	 */
+	import { untrack } from 'svelte';
 	import { GeoJSONSource, LineLayer } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
 	import {
@@ -169,13 +170,22 @@
 	 * costs a re-parse. Same syntax, opposite economics — the question is always
 	 * whether the mounted-but-invisible thing is doing WORK.
 	 */
-	// Latched against twilight dither, but TRACKED: `untrack` here evaluated
-	// the gate once at mount and froze it, so a dusk boot never mounted the
-	// source no matter how dark it got. The hysteresis thresholds (not the
-	// untrack) are what stop the blinking; same-value writes don't notify.
+	// Latched against twilight dither. The lightUpUT is tracked — an earlier
+	// `untrack` around the whole call evaluated the gate once at mount and
+	// froze it, so a dusk boot never mounted the source no matter how dark it
+	// got. Only the LATCH read is untracked: the effect writes `latched`, and
+	// an effect that reads what it writes re-runs on its own write (a
+	// same-value write does not notify, so it settled, but only by the gate
+	// happening to be idempotent). The hysteresis thresholds are what stop
+	// the blinking.
 	let latched = $state(false);
 	$effect(() => {
-		latched = hysteresisGate(lightUp, latched, NIGHT_MOUNT_ON, NIGHT_MOUNT_OFF);
+		latched = hysteresisGate(
+			lightUp,
+			untrack(() => latched),
+			NIGHT_MOUNT_ON,
+			NIGHT_MOUNT_OFF
+		);
 	});
 	const mounted = $derived(hasRoads && latched);
 
