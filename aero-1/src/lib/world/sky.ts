@@ -11,8 +11,24 @@
 
 type Vec3 = [number, number, number];
 
-/** Earth's axial tilt (radians) — gives the sun an arc across the year. */
-const SUN_TILT = 0.4;
+/**
+ * Solar declination (radians) for the UTC day `nowMs` falls in — Earth's
+ * axial tilt swung through the year, zero at the March equinox (~day 81).
+ * Was a constant 0.4 rad (22.9°, a permanent June solstice): Chicago in
+ * December got a 47° noon sun. Memoised per day; every pane shares the
+ * date, so this stays 3-Pi deterministic.
+ */
+const _declMemo = { day: NaN, rad: 0 };
+export function solarDeclinationRad(nowMs = Date.now()): number {
+	const day = Math.floor(nowMs / 86_400_000);
+	if (day !== _declMemo.day) {
+		const d = new Date(nowMs);
+		const doy = (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(d.getUTCFullYear(), 0, 0)) / 86_400_000;
+		_declMemo.rad = (23.44 * Math.PI / 180) * Math.sin(((360 / 365) * (doy - 81) * Math.PI) / 180);
+		_declMemo.day = day;
+	}
+	return _declMemo.rad;
+}
 
 /**
  * World-space unit vector toward the sun for the given camera longitude
@@ -37,22 +53,25 @@ const SUN_TILT = 0.4;
  * it later — by then another call may have rewritten _sunMemo.result.
  * Don't capture; always read-and-derive in the same synchronous block.
  */
-const _sunMemo: { camLonDeg: number; timeOfDay: number; result: Vec3 } = {
+const _sunMemo: { camLonDeg: number; timeOfDay: number; decl: number; result: Vec3 } = {
 	camLonDeg: Infinity,
 	timeOfDay: Infinity,
+	decl: Infinity,
 	result: [0, 0, 0],
 };
-export function computeSunDirection(camLonDeg: number, timeOfDay: number): Vec3 {
-	if (camLonDeg === _sunMemo.camLonDeg && timeOfDay === _sunMemo.timeOfDay) {
+export function computeSunDirection(camLonDeg: number, timeOfDay: number, nowMs = Date.now()): Vec3 {
+	const decl = solarDeclinationRad(nowMs);
+	if (camLonDeg === _sunMemo.camLonDeg && timeOfDay === _sunMemo.timeOfDay && decl === _sunMemo.decl) {
 		return _sunMemo.result;
 	}
 	const sunLonRad = ((camLonDeg + 180 - timeOfDay * 15) * Math.PI) / 180;
-	const cosTilt = Math.cos(SUN_TILT);
+	const cosTilt = Math.cos(decl);
 	_sunMemo.result[0] = cosTilt * Math.cos(sunLonRad);
-	_sunMemo.result[1] = Math.sin(SUN_TILT);
+	_sunMemo.result[1] = Math.sin(decl);
 	_sunMemo.result[2] = -cosTilt * Math.sin(sunLonRad);
 	_sunMemo.camLonDeg = camLonDeg;
 	_sunMemo.timeOfDay = timeOfDay;
+	_sunMemo.decl = decl;
 	return _sunMemo.result;
 }
 
@@ -63,8 +82,8 @@ export function computeSunDirection(camLonDeg: number, timeOfDay: number): Vec3 
  *
  *   sin(elev) = sin(lat)·sin(decl) + cos(lat)·cos(decl)·cos(hourAngle)
  *
- * with declination fixed at SUN_TILT (matching the simplified seasonal model
- * computeSunDirection uses) and hourAngle = (timeOfDay − 12)/24 · 2π.
+ * with the day's declination (solarDeclinationRad, shared with
+ * computeSunDirection) and hourAngle = (timeOfDay − 12)/24 · 2π.
  *
  * WHY THIS EXISTS: computeSunDirection's Y component is the sun's projection
  * onto the WORLD polar axis (CameraMirror's frame has +Y = north pole), which
@@ -80,12 +99,13 @@ export function computeSunDirection(camLonDeg: number, timeOfDay: number): Vec3 
  */
 export const DEG2RAD = Math.PI / 180;
 
-export function sunElevationSin(latDeg: number, timeOfDay: number): number {
+export function sunElevationSin(latDeg: number, timeOfDay: number, nowMs = Date.now()): number {
 	const lat = latDeg * DEG2RAD;
+	const decl = solarDeclinationRad(nowMs);
 	const hourAngle = ((timeOfDay - 12) / 24) * Math.PI * 2;
 	return (
-		Math.sin(lat) * Math.sin(SUN_TILT)
-		+ Math.cos(lat) * Math.cos(SUN_TILT) * Math.cos(hourAngle)
+		Math.sin(lat) * Math.sin(decl)
+		+ Math.cos(lat) * Math.cos(decl) * Math.cos(hourAngle)
 	);
 }
 
