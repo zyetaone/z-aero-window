@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gustAt, windMagAt } from '$lib/world/clouds/wind';
+import { gustAt, gustPhaseAt, windMagAt, windPhaseAt } from '$lib/world/clouds/wind';
 import { swayDeg, strobeOn, STROBE_PERIOD_S, STROBE_PULSE_S, STROBE_GAP_S } from '$lib/world/three/wing-motion';
 
 /**
@@ -43,5 +43,28 @@ describe('wall-second helpers agree across frame rates', () => {
 		const t = T0 + 12345.678;
 		expect(strobeOn(t)).toBe(strobeOn(t));
 		expect(swayDeg(t)).toBe(1.7 * Math.sin(t * 0.52) + 0.8 * Math.sin(t * 0.97 + 1.3));
+	});
+});
+
+describe('wind phases are the integrals of the rates', () => {
+	// Central difference of the closed-form phase must equal the rate it
+	// claims to integrate — the sprites set their pose from the phase, so a
+	// wrong antiderivative is a wrong wind, not a test failure elsewhere.
+	it('d/dt gustPhaseAt == gustAt, d/dt windPhaseAt == windMagAt', () => {
+		const h = 1e-3;
+		for (let t = 1_700_000_000; t < 1_700_000_600; t += 7.3) {
+			// Precision 3: the phases are ~1e9, so a 2e-3 difference quotient
+			// carries ~5e-5 of double round-off on its own.
+			expect((gustPhaseAt(t + h) - gustPhaseAt(t - h)) / (2 * h)).toBeCloseTo(gustAt(t), 3);
+			expect((windPhaseAt(t + h) - windPhaseAt(t - h)) / (2 * h)).toBeCloseTo(windMagAt(t), 3);
+		}
+	});
+	it('never runs backwards (rates are strictly positive)', () => {
+		let g = gustPhaseAt(1_700_000_000), w = windPhaseAt(1_700_000_000);
+		for (let t = 1_700_000_001; t < 1_700_003_600; t += 1) {
+			const g2 = gustPhaseAt(t), w2 = windPhaseAt(t);
+			expect(g2).toBeGreaterThan(g); expect(w2).toBeGreaterThan(w);
+			g = g2; w = w2;
+		}
 	});
 });

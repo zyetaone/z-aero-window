@@ -113,6 +113,26 @@ export interface LightingState {
 let _lastT = NaN;
 let _lastNf = NaN;
 let _lastSunY = NaN;
+/** Palette ambient before the horizon boost — the boost re-applies from here. */
+const _baseAmbient: [number, number, number] = [0, 0, 0];
+
+// Ambient horizon boost + cool night shift — reproduces the legacy
+// environmentAmbient() formula. airMass is derived from the real local sun
+// elevation when the caller provides sunElevSin (ThreeOverlay / Clouds do);
+// omitted → the legacy sin(0.4) constant keeps old behaviour.
+function applyHorizonBoost(sunY: number, nf: number): void {
+	_lastSunY = sunY;
+	const elev = Math.max(-0.12, Math.min(1, sunY));
+	const am = 1.0 / Math.max(0.12, elev + 0.12);
+	const horizonBoost = 1 + Math.min(0.8, (am - 1) * 0.25);
+	const coolShift = nf * 0.15;
+	_state.ambientColor[0] = Math.max(0, _baseAmbient[0] * horizonBoost);
+	_state.ambientColor[1] = Math.max(0, _baseAmbient[1] * horizonBoost * (1 - coolShift * 0.6));
+	_state.ambientColor[2] = Math.max(
+		0,
+		_baseAmbient[2] * horizonBoost * (1 - coolShift * 0.4) + coolShift * 0.1
+	);
+}
 
 // Shared, mutated-in-place return value. Consumers only read.
 const _state: LightingState = {
@@ -196,12 +216,17 @@ function blendPhase(out: Vec3, layer: keyof typeof SKY_PALETTE, t: number): void
  */
 export function lightingState(timeOfDay: number, nightFactor: number, sunElevSin?: number): LightingState {
 	const sunY = sunElevSin ?? Math.sin(0.4);
-	if (timeOfDay === _lastT && nightFactor === _lastNf && sunY === _lastSunY) {
+	// Two-stage memo. The palette blend depends on (timeOfDay, nightFactor)
+	// only; the horizon boost is three multiplies on top. Keying the whole
+	// thing on sunY too meant every caller that omits it (compose, Wing,
+	// atmosphere) alternated the key against Clouds/ThreeOverlay and the
+	// full blend ran several times per frame.
+	if (timeOfDay === _lastT && nightFactor === _lastNf) {
+		if (sunY !== _lastSunY) applyHorizonBoost(sunY, clamp(nightFactor, 0, 1));
 		return _state;
 	}
 	_lastT = timeOfDay;
 	_lastNf = nightFactor;
-	_lastSunY = sunY;
 
 	const nf = clamp(nightFactor, 0, 1);
 
@@ -291,22 +316,8 @@ export function lightingState(timeOfDay: number, nightFactor: number, sunElevSin
 	// Continuous palette — no hard phase seam (fixes day banding).
 	blendPhase(_state.skyTint, 'veil', timeOfDay);
 	blendPhase(_state.horizonTint, 'sunCore', timeOfDay);
-	blendPhase(_state.ambientColor, 'ambient', timeOfDay);
-
-	// Ambient horizon boost + cool night shift — reproduces the legacy
-	// environmentAmbient() formula. airMass is derived from the real local sun
-	// elevation when the caller provides sunElevSin (ThreeOverlay / Clouds do);
-	// omitted → the legacy sin(0.4) constant keeps old behaviour.
-	const elev = Math.max(-0.12, Math.min(1, sunY));
-	const am = 1.0 / Math.max(0.12, elev + 0.12);
-	const horizonBoost = 1 + Math.min(0.8, (am - 1) * 0.25);
-	const coolShift = nf * 0.15;
-	_state.ambientColor[0] = Math.max(0, _state.ambientColor[0] * horizonBoost);
-	_state.ambientColor[1] = Math.max(0, _state.ambientColor[1] * horizonBoost * (1 - coolShift * 0.6));
-	_state.ambientColor[2] = Math.max(
-		0,
-		_state.ambientColor[2] * horizonBoost * (1 - coolShift * 0.4) + coolShift * 0.1
-	);
+	blendPhase(_baseAmbient, 'ambient', timeOfDay);
+	applyHorizonBoost(sunY, nf);
 	// Intensity floor 0.12 (deep night) → 0.90 (full day). Unchanged from legacy.
 	_state.ambientIntensity = 0.12 + (1 - nf) * 0.78;
 

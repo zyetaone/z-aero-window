@@ -60,7 +60,6 @@
 	import { T, useTask, useThrelte } from '@threlte/core';
 	import { useTexture } from '@threlte/extras';
 	import {
-		Matrix4,
 		Group,
 		Sprite,
 		SpriteMaterial,
@@ -77,8 +76,7 @@
 	import { createSeededRng, daySeed } from '$lib/world/prng';
 	import { spriteOffset, spriteScale } from '$lib/world/clouds/sprite-placement';
 	import { clusterCountsForDensity, drawCluster } from '../clouds/cluster-budget';
-	import { gustAt, windMagAt } from '../clouds/wind';
-	import { wallDeltaSec } from '$lib/model/aero-window-context';
+	import { gustPhaseAt, windPhaseAt } from '../clouds/wind';
 	import { lightingState } from '$lib/world/curves';
 
 	let {
@@ -130,11 +128,21 @@
 	// the actual fragment-level blur on cloud peaks; texture-side
 	// softening is deferred until we move clouds to a custom shader.
 
-	let anchorMatrix = $state.raw<Matrix4 | null>(null);
+	// ENU basis at the city's lat/lon, at cloud-deck altitude. Derived, not
+	// an effect writing state: nothing else may set it.
+	const anchorMatrix = $derived.by(() => {
+		const loc = LOCATION_MAP.get(location);
+		return loc ? enuAnchorMatrix(loc.lat, loc.lon, CLOUD_DECK_M) : null;
+	});
 	let anchorGroup: ThreeGroup | undefined = $state.raw();
 
+	const TWO_PI = Math.PI * 2;
 	const driftGroup = new Group();
 	const rotSpeeds: number[] = [];
+	// Build-time pose per sprite. The per-frame task sets rotation and
+	// position FROM these and the wall-clock phase — it never accumulates.
+	const baseRot: number[] = [];
+	const basePos: number[] = []; // x, z pairs
 	// Per-cluster wind-shear factors stored at sprite granularity (so
 	// each cluster's sprites share a single shear value picked at build
 	// time). Range [-0.15, +0.15] modulates the wind drift on that sprite
@@ -154,6 +162,8 @@
 		ownedMaterials.length = 0;
 		rotSpeeds.length = 0;
 		shearFactors.length = 0;
+		baseRot.length = 0;
+		basePos.length = 0;
 	}
 
 	function buildClusters(textures: Texture[], weatherKey: string, dens: number): void {
@@ -276,15 +286,10 @@
 
 			rotSpeeds.push((rng() - 0.5) * 0.08);
 			shearFactors.push(clusterShear);
+			baseRot.push(mat.rotation);
+			basePos.push(ox, oz);
 		}
 	}
-
-	// ENU basis at the city's lat/lon, at cloud-deck altitude.
-	$effect(() => {
-		const loc = LOCATION_MAP.get(location);
-		if (!loc) { anchorMatrix = null; return; }
-		anchorMatrix = enuAnchorMatrix(loc.lat, loc.lon, CLOUD_DECK_M);
-	});
 
 	$effect(() => {
 		if (!anchorGroup || !anchorMatrix) return;
@@ -310,6 +315,9 @@
 	$effect(() => {
 		const w = weather;
 		const d = density;
+		// buildClusters reads qualityMode (cluster counts) inside the timeout,
+		// where nothing is tracked — read it here so a tier change rebuilds.
+		void model.config.world.qualityMode;
 		let cancelled = false;
 		if (_rebuildTimeout !== null) clearTimeout(_rebuildTimeout);
 		_rebuildTimeout = setTimeout(() => {
@@ -344,6 +352,16 @@
 			// re-drifted every frame for an invisible group.
 			if (!model.config.world.showClouds || !driftGroup.parent) return;
 			const nf = nightFactor;
+			// Pose from the wall clock. Spin follows the gust phase, the deck
+			// drifts on the wind phase (clouds/wind.ts) — closed forms, so
+			// three panes at one instant hold one deck and no pane integrates.
+			// 0.007: drift genuinely visible at the default 0.4 driftSpeed.
+			// Phases are epoch-sized (~1e9); wrap AFTER the multiply, in double,
+			// so the float32 uniforms downstream never see a 1e7-radian angle.
+			const wallSec = Date.now() / 1000;
+			const gustPhase = gustPhaseAt(wallSec);
+			const driftRaw = windPhaseAt(wallSec) * driftSpeed * 0.007;
+			driftGroup.rotation.y = driftRaw % TWO_PI;
 			// Unified lighting SSOT — the cloud darkening / city-glow / moon-lift now
 			// read the same gates as every other Three layer (cityGlowAmount lights up
 			// at dusk in lock-step with the city-light bloom; moonContribution gates the grey
@@ -425,6 +443,20 @@
 			for (let i = 0; i < n; i++) {
 				const mat = ownedMaterials[i];
 				const sprite = children[i];
+				mat.rotation = baseRot[i] + ((rotSpeeds[i] * gustPhase) % TWO_PI);
+				// Per-cluster wind shear: the sprite's build position rotated
+				// about the group origin by a cluster-specific fraction of the
+				// drift, so adjacent clusters never drift in lockstep.
+				const shear = shearFactors[i] ?? 0;
+				if (sprite && shear !== 0) {
+					// Wrap AFTER the shear multiply: wrapping driftRaw first would
+					// snap every sheared cluster up to 54° each time the drift laps.
+					const a = (driftRaw * shear) % TWO_PI;
+					const c = Math.cos(a), sn = Math.sin(a);
+					const px = basePos[i * 2], pz = basePos[i * 2 + 1];
+					sprite.position.x = px * c - pz * sn;
+					sprite.position.z = px * sn + pz * c;
+				}
 				const baseB = (mat.userData.baseBrightness ?? 1) as number;
 				const baseO = (mat.userData.baseOpacity ?? 1) as number;
 	
@@ -500,53 +532,6 @@
 				);
 				mat.opacity = baseO * opaScale;
 			}
-	});
-
-	// Per-frame: rotate each sprite + wind-drift around city vertical.
-	// Reading anchorMatrix here makes it a live tick-path dependency so
-	// the autofixer cannot dead-code-eliminate the anchor scaffolding.
-	//
-	// Wind gusts and wind speed are pure functions of the wall second
-	// (clouds/wind.ts), so every pane sees the same gust at the same
-	// instant. The drift and spin they modulate are integrals of a
-	// time-varying rate, so those step by the WALL delta — the local
-	// frame delta from useTask is ignored on purpose: it is clamped by the
-	// renderer and runs slow on a slow pane. 0.007: drift genuinely visible
-	// at the default 0.4 driftSpeed (0.004 gave ~0.09 °/s, below notice).
-	let _lastWallMs = 0;
-	useTask(() => {
-		void anchorMatrix;
-		if (!model.config.world.showClouds || !driftGroup.parent) return;
-		const nowMs = Date.now();
-		const dt = wallDeltaSec(nowMs, _lastWallMs);
-		_lastWallMs = nowMs;
-		const wallSec = nowMs / 1000;
-		const gust = gustAt(wallSec);
-		const windMag = windMagAt(wallSec);
-		const driftDelta = dt * driftSpeed * 0.007 * gust * windMag;
-		const children = driftGroup.children;
-		for (let i = 0; i < children.length; i++) {
-			const s = children[i] as Sprite;
-			// Per-sprite spin × gust modulation.
-			s.material.rotation += rotSpeeds[i] * dt * gust;
-			// Per-cluster wind shear: each sprite's local position rotates
-			// around driftGroup origin at an angle modified by its cluster's
-			// shear factor. Clusters with positive shear drift faster than
-			// the base; negative-shear clusters drift slower / counter to
-			// the gust. Adjacent clusters NEVER drift in perfect lockstep.
-			const shear = shearFactors[i] ?? 0;
-			const localDelta = driftDelta * shear;
-			if (localDelta !== 0) {
-				const c = Math.cos(localDelta);
-				const sn = Math.sin(localDelta);
-				const px = s.position.x;
-				const pz = s.position.z;
-				s.position.x = px * c - pz * sn;
-				s.position.z = px * sn + pz * c;
-			}
-		}
-		// Base drift on the whole group — the shared wind direction.
-		driftGroup.rotation.y += driftDelta;
 	});
 
 	$effect(() => () => clearClusters());

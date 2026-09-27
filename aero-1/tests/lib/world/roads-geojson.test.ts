@@ -345,7 +345,7 @@ describe('cityRoadsAwaitingViirs', () => {
 describe('flicker breathes without reading as a rendering bug', () => {
 	it('stays within a few percent of unity', () => {
 		for (let phase = 0; phase < 18; phase++) {
-			for (let t = 0; t < 24; t += 0.01) {
+			for (let t = 1_700_000_000; t < 1_700_000_600; t += 0.37) {
 				const f = roadFlicker(phase, t);
 				expect(f).toBeGreaterThan(0.9);
 				expect(f).toBeLessThan(1.1);
@@ -356,7 +356,7 @@ describe('flicker breathes without reading as a rendering bug', () => {
 	it('is a pure function of the SYNCED clock, so all three Pis agree', () => {
 		// A local dt accumulator would pass "it varies" and still drift the wall
 		// apart within minutes. Same input must give the same output, always.
-		for (const t of [0, 6.5, 21.9999, 22, 23.75]) {
+		for (const t of [0, 1_700_000_000, 1_700_000_000.25, 1_759_000_000]) {
 			expect(roadFlicker(3, t)).toBe(roadFlicker(3, t));
 		}
 	});
@@ -385,13 +385,15 @@ describe('flicker breathes without reading as a rendering bug', () => {
 	it('does not put every bin in lockstep', () => {
 		// Bins breathing together is just a global brightness wobble, which
 		// reads as the whole layer pulsing rather than as lamps varying.
-		const t = 22.4;
+		const t = 1_700_000_022.4;
 		const vals = Array.from({ length: 8 }, (_, p) => roadFlicker(p, t));
 		expect(new Set(vals.map((v) => v.toFixed(4))).size).toBeGreaterThan(4);
 	});
 
 	it('actually varies over time', () => {
-		const vals = Array.from({ length: 40 }, (_, i) => roadFlicker(1, 22 + i * 0.0005));
+		// One frame apart at 60 Hz must already differ — the old hours-based
+		// input only moved once a minute, so the lamps froze between ticks.
+		const vals = Array.from({ length: 40 }, (_, i) => roadFlicker(1, 1_700_000_000 + i / 60));
 		expect(new Set(vals.map((v) => v.toFixed(4))).size).toBeGreaterThan(3);
 	});
 });

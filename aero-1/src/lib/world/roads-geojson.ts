@@ -292,9 +292,9 @@ export function roadBinPhase(cls: RoadClass, lamp: number): number {
 	return ROAD_CLASSES.indexOf(cls) * ROAD_LAMPS.length + lamp;
 }
 
-export function roadFlicker(binPhase: number, timeOfDayHours: number): number {
-	const t = timeOfDayHours * 3600;
-	return 1 + 0.04 * Math.sin(t * 0.7 + binPhase * 2.399963);
+/** Lamp breathing, ±4 %. Pure in the wall second: three panes, one phase. */
+export function roadFlicker(binPhase: number, wallSec: number): number {
+	return 1 + 0.04 * Math.sin(wallSec * 0.7 + binPhase * 2.399963);
 }
 
 /**
@@ -666,7 +666,7 @@ export function syncOfflineRoads(
 	nightFactor: number,
 	nightLightScale: number,
 	altitudeFt: number,
-	timeOfDayHours: number,
+	wallSec: number,
 	bootFade = 1,
 	exaggeration = 1,
 ): void {
@@ -692,7 +692,7 @@ export function syncOfflineRoads(
 				? clamp(
 					roadClassAlpha(bin.cls, base, altitudeFt)
 						* bin.viirsScale
-						* roadFlicker(bin.phase, timeOfDayHours),
+						* roadFlicker(bin.phase, wallSec),
 					0,
 					1,
 				)

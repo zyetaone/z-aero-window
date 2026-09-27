@@ -76,6 +76,16 @@ export class CesiumManager {
 	readonly #C: typeof CesiumType;
 	readonly #model: CesiumModelView;
 	readonly #viewer: CesiumType.Viewer;
+	// Per-frame contexts, filled in place (see #syncClockCheck / #syncImagery).
+	readonly #atmoCtx: Parameters<typeof syncAtmosphere>[0] = {
+		timeOfDay: 12, nightFactor: 0, dawnDuskFactor: 0,
+		flight: { lon: 0, camAlt: 0 }, config: { world: null as never },
+		hazeAmount: 0, sceneFog: null as never, filterBrightness: 1, warpFactor: 1,
+	};
+	// Inferred (mutable) shape — ImageryTickInput is readonly.
+	readonly #imgCtx = {
+		nightFactor: 0, nightLightScale: 1, altitude: 0, config: { world: null as unknown as WorldConfig },
+	};
 
 	// Lightning stage is module-level state in lightning-stage.ts (not tracked here).
 	// Cesium clouds are module-level state in clouds/billboard-layer.ts (not tracked here).
@@ -252,33 +262,28 @@ export class CesiumManager {
 		}
 		const skyFb = SKY_PALETTE[m.skyState]?.filterBrightness ?? 1;
 		const weatherFb = m.config.atmosphere.weather.filterBrightness ?? 1;
-		syncAtmosphere(
-			{
-				timeOfDay: m.timeOfDay, nightFactor: m.nightFactor, dawnDuskFactor: m.dawnDuskFactor,
-				flight: { lon: m.flight.lon, camAlt: m.flight.camAlt },
-				config: { world: m.config.world },
-				hazeAmount: m.config.atmosphere.haze.amount,
-				sceneFog: m.sceneFog,
-				// Was CSS filter on Pane — now multiplies Cesium exposure only.
-				filterBrightness: skyFb * weatherFb,
-				warpFactor: m.flight.warpFactor,
-			},
-			this.#viewer.clock.currentTime,
-		);
+		// One reused context object: this runs every frame and the literal
+		// allocated three objects a tick for the GC to sweep.
+		const a = this.#atmoCtx;
+		a.timeOfDay = m.timeOfDay; a.nightFactor = m.nightFactor; a.dawnDuskFactor = m.dawnDuskFactor;
+		a.flight.lon = m.flight.lon; a.flight.camAlt = m.flight.camAlt;
+		a.config.world = m.config.world;
+		a.hazeAmount = m.config.atmosphere.haze.amount;
+		a.sceneFog = m.sceneFog;
+		// Was CSS filter on Pane — now multiplies Cesium exposure only.
+		a.filterBrightness = skyFb * weatherFb;
+		a.warpFactor = m.flight.warpFactor;
+		syncAtmosphere(a, this.#viewer.clock.currentTime);
 	}
 
 	// ── Delegated syncs ──────────────────────────────────────────────────────
 
 	#syncImagery(): void {
 		const m = this.#model;
-		syncImagery(
-			{
-				nightFactor: m.nightFactor, nightLightScale: m.nightLightScale,
-				altitude: m.flight.altitude,
-				config: { world: m.config.world },
-			},
-			this.#getBootFade(),
-		);
+		const c = this.#imgCtx;
+		c.nightFactor = m.nightFactor; c.nightLightScale = m.nightLightScale;
+		c.altitude = m.flight.altitude; c.config.world = m.config.world;
+		syncImagery(c, this.#getBootFade());
 		// Latch the night post-FX decision for #syncQuality (called later in the
 		// same tick). Hysteresis lives in nightPostFxOn so the dusk crossing
 		// can't thrash the stage install.
@@ -315,9 +320,9 @@ export class CesiumManager {
 		// under. Hidden outright in daylight, so this costs nothing before dusk.
 		syncOfflineRoads(
 			m.location, m.nightFactor, m.nightLightScale, m.flight.altitude,
-			// timeOfDay drives the lamp flicker and is ALREADY fleet-synced —
-			// see roadFlicker on why a local dt accumulator would desync the wall.
-			m.timeOfDay,
+			// The fleet clock drives the lamp flicker — timeOfDay only moves once
+			// a minute, so the lamps froze between ticks and jumped on each one.
+			wallSec,
 			this.#getBootFade(), m.terrainExaggeration,
 		);
 	}

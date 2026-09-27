@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	/**
 	 * Aero Dynamic Window - Main Page
 	 *
@@ -64,19 +65,21 @@
 	// $effect re-ran 60×/sec, scheduling + cancelling a setTimeout each
 	// frame (no leak, but constant microtask + GC churn). Hash the
 	// snapshot and skip when nothing meaningful changed.
-	let _lastSnapHash = '';
+	// The hash is a $derived string, so the effect below only re-runs when
+	// the VALUE changes — not on every altitude tick that leaves it equal.
+	// Round altitude to 100 ft — sub-100 ft cruise jitter shouldn't
+	// trigger a re-save. Other fields are categorical/booleans. Ambient
+	// MUST be in the hash: a pure ambient admin push (haze, qualityMode…)
+	// changes no other field, and an unchanged hash would skip the save —
+	// the whole point of PersistedState.ambient. Key order is stable
+	// (AMBIENT_PERSIST_PATHS iteration order), so stringify is safe.
+	const snapHash = $derived.by(() => {
+		const d = model.getPersistedSnapshot();
+		return `${Math.round(d.altitude / 100)}|${d.cloudDensity}|${d.buildingsEnabled}|${d.showClouds}|${JSON.stringify(d.ambient)}`;
+	});
 	$effect(() => {
-		const data = model.getPersistedSnapshot();
-		// Round altitude to 100 ft — sub-100 ft cruise jitter shouldn't
-		// trigger a re-save. Other fields are categorical/booleans. Ambient
-		// MUST be in the hash: a pure ambient admin push (haze, qualityMode…)
-		// changes no other field, and an unchanged hash would skip the save —
-		// the whole point of PersistedState.ambient. Key order is stable
-		// (AMBIENT_PERSIST_PATHS iteration order), so stringify is safe.
-		const hash = `${Math.round(data.altitude / 100)}|${data.cloudDensity}|${data.buildingsEnabled}|${data.showClouds}|${JSON.stringify(data.ambient)}`;
-		if (hash === _lastSnapHash) return;
-		_lastSnapHash = hash;
-		const timeout = setTimeout(() => savePersistedState(data), 2000);
+		void snapHash;
+		const timeout = setTimeout(() => savePersistedState(untrack(() => model.getPersistedSnapshot())), 2000);
 		return () => clearTimeout(timeout);
 	});
 

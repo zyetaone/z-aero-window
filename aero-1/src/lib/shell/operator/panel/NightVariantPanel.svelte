@@ -215,7 +215,7 @@
 		if (variant !== 'B') return;
 		const bloom = activeCesium.manager?.getViewer().scene.postProcessStages?.bloom;
 		if (!bloom?.uniforms) return;
-		const prevNI = model.config.world.nightLightIntensity;
+		const prevNI = untrack(() => model.config.world.nightLightIntensity);
 		const prevEnabled = bloom.enabled;
 		const prevSigma = bloom.uniforms.sigma;
 		const prevContrast = bloom.uniforms.contrast;
@@ -274,7 +274,7 @@
 		const Cesium = mgr.getCesium();
 		const viewer = mgr.getViewer();
 		const tileset = findBuildingTileset(viewer);
-		const prevNI = model.config.world.nightLightIntensity;
+		const prevNI = untrack(() => model.config.world.nightLightIntensity);
 		const prevBlendMode = tileset?.colorBlendMode ?? null;
 		const prevStyle = tileset?.style ?? null;
 		if (tileset) (tileset as Record<string, unknown>).colorBlendMode = Cesium.Cesium3DTileColorBlendMode.HIGHLIGHT;
