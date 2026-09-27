@@ -90,11 +90,18 @@ function serveTile(filePath: string, cors: Record<string, string>): Response {
 	if (!stat.isFile()) return new Response('Not found', { status: 404, headers: cors });
 	const { size } = stat;
 	const stream = createReadStream(filePath);
+	// Tiles are content-addressed by their path and never change, so a year
+	// is right for them. layer.json is the OPPOSITE: it is rewritten every
+	// time a city is packed, and a browser that cached it as immutable keeps
+	// the old availability for a year — Cesium then believes the new city has
+	// no tiles and never requests one. Caught on the first re-pack (Denver
+	// after Hyderabad); a kiosk Chromium would have done the same after OTA.
+	const cacheControl = ext === '.json' ? 'no-cache' : 'public, max-age=31536000, immutable';
 	const headers: Record<string, string> = {
 		...cors,
 		'Content-Type': contentType,
 		'Content-Length': String(size),
-		'Cache-Control': 'public, max-age=31536000, immutable',
+		'Cache-Control': cacheControl,
 	};
 	if (ext === '.terrain' && isGzipped(filePath)) headers['Content-Encoding'] = 'gzip';
 	return new Response(stream as any, { headers });

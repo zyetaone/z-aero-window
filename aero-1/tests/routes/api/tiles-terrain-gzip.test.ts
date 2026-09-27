@@ -55,8 +55,12 @@ describe('tile route — terrain content encoding', () => {
 		expect(res.headers.get('Content-Encoding')).toBeNull();
 		expect(res.headers.get('Content-Type')).toBe('image/jpeg');
 	});
-	it('serves layer.json as JSON and lists both layers in health', async () => {
-		expect((await get('cesium-terrain/layer.json')).headers.get('Content-Type')).toBe('application/json');
+	it('serves layer.json as JSON, revalidated, and lists both layers in health', async () => {
+		const layer = await get('cesium-terrain/layer.json');
+		expect(layer.headers.get('Content-Type')).toBe('application/json');
+		// Rewritten on every pack; must never be cached as immutable.
+		expect(layer.headers.get('Cache-Control')).toBe('no-cache');
+		expect((await get('cesium-terrain/0/0/0.terrain')).headers.get('Cache-Control')).toContain('immutable');
 		const health = JSON.parse(await (await GET({ params: { path: 'health' }, request: new Request('http://localhost/api/tiles/health') })).text()) as { layers: string[] };
 		expect(health.layers.sort()).toEqual(['cesium-terrain', 'sentinel2']);
 	});
