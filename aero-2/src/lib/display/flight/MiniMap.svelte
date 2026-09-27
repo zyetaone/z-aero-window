@@ -59,11 +59,18 @@
 		Math.min(0.8, night ** NIGHT_LIGHT_RAMP * Location.moodFor(display.config.place.id).nightGlow)
 	);
 	// Latched like the main-map layers: the inset blinking at twilight reads
-	// as a fault on a wall of three. Tracked, not untracked — the untrack
-	// froze the latch at its mount-time value (see NightLights.svelte).
+	// as a fault on a wall of three. `miniNightOpacity` is tracked — an
+	// untrack around the whole call froze the gate at its mount-time value.
+	// Only the LATCH read is untracked (see NightLights.svelte): an effect
+	// that reads what it writes re-runs on its own write.
 	let nightLatched = $state(false);
 	$effect(() => {
-		nightLatched = hysteresisGate(miniNightOpacity, nightLatched, NIGHT_MOUNT_ON, NIGHT_MOUNT_OFF);
+		nightLatched = hysteresisGate(
+			miniNightOpacity,
+			untrack(() => nightLatched),
+			NIGHT_MOUNT_ON,
+			NIGHT_MOUNT_OFF
+		);
 	});
 
 	/**

@@ -18,6 +18,7 @@
 	 * hundreds of points breathing in unison reads as a faulty sensor,
 	 * and per-point phasing is beyond what a circle layer can do.
 	 */
+	import { untrack } from 'svelte';
 	import { GeoJSONSource, CircleLayer } from 'svelte-maplibre-gl';
 	import { useDisplay } from '../display.svelte.js';
 	import { hysteresisGate, NIGHT_LIGHT_RAMP, NIGHT_MOUNT_OFF, NIGHT_MOUNT_ON } from './sun.js';
@@ -36,11 +37,19 @@
 
 	// Night-gated mount, same hysteresis as the sibling layers: monotonic
 	// over hours (two transitions a day), so the source is not re-parsed
-	// on any faster cycle. Tracked, not untracked — see Roads.svelte.
+	// on any faster cycle. `lightUp` is tracked; only the LATCH read is
+	// untracked, exactly as in Roads.svelte and NightLights.svelte — an
+	// effect that reads what it writes re-runs on its own write, and this
+	// one only settled because the gate happens to be idempotent.
 	const hasTowns = $derived(!place.isFeature);
 	let latched = $state(false);
 	$effect(() => {
-		latched = hysteresisGate(lightUp, latched, NIGHT_MOUNT_ON, NIGHT_MOUNT_OFF);
+		latched = hysteresisGate(
+			lightUp,
+			untrack(() => latched),
+			NIGHT_MOUNT_ON,
+			NIGHT_MOUNT_OFF
+		);
 	});
 	const mounted = $derived(hasTowns && latched);
 
