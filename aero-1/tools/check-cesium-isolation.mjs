@@ -15,6 +15,7 @@
 
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { stripSource } from './lib/strip-comments.mjs';
 
 const APP = new URL('..', import.meta.url).pathname;
 const OWNER = join(APP, 'src/lib/world/CesiumViewer.svelte');
@@ -30,8 +31,13 @@ function walk(dir) {
 	return out;
 }
 
-/** Value (non-erased) references to the 'cesium' package in one file. */
-function runtimeCesiumRefs(src) {
+/**
+ * Value (non-erased) references to the 'cesium' package in one file.
+ * Scans comment-stripped source (tools/lib/strip-comments.mjs), so a comment
+ * that quotes `import ... from 'cesium'` is prose, not a violation.
+ */
+function runtimeCesiumRefs(raw, file) {
+	const src = stripSource(raw, file);
 	const hits = [];
 	// `import type ... from 'cesium'` is erased — skip it.
 	for (const m of src.matchAll(/\bimport\b(\s+type\b)?\s*([^;'"]*?)\bfrom\s*['"]cesium['"]/g)) {
@@ -55,7 +61,7 @@ function runtimeCesiumRefs(src) {
 const violations = [];
 for (const file of [...walk(join(APP, 'src')), ...walk(join(APP, 'content'))]) {
 	if (file === OWNER) continue;
-	const refs = runtimeCesiumRefs(readFileSync(file, 'utf8'));
+	const refs = runtimeCesiumRefs(readFileSync(file, 'utf8'), file);
 	if (refs.length > 0) violations.push({ file: file.slice(APP.length), refs });
 }
 

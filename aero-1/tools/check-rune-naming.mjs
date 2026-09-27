@@ -12,6 +12,7 @@
 
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { stripSource } from './lib/strip-comments.mjs';
 
 const APP = new URL('..', import.meta.url).pathname;
 
@@ -29,12 +30,12 @@ function walk(dir) {
 const violations = [];
 for (const file of walk(join(APP, 'src'))) {
 	const hits = [];
-	readFileSync(file, 'utf8')
+	// Comment-stripped (tools/lib/strip-comments.mjs) so a quoted example in a
+	// docblock is prose, not a hit.
+	stripSource(readFileSync(file, 'utf8'), file)
 		.split('\n')
 		.forEach((line, i) => {
-			const s = line.trim();
-			if (s.startsWith('*') || s.startsWith('//')) return;
-			if (/(let|const|var)\s+state\s*=\s*\$state/.test(s.split('//')[0])) hits.push(i + 1);
+			if (/(let|const|var)\s+state\s*=\s*\$state/.test(line)) hits.push(i + 1);
 		});
 	if (hits.length > 0) violations.push({ rel: file.slice(APP.length), hits });
 }
