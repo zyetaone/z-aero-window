@@ -74,7 +74,7 @@ describe('the world is a pure function of (wallclock, place, daySeed)', () => {
 		place: {
 			lat: place.lat,
 			lon: place.lon,
-			utcOffset: place.utcOffset,
+			utcOffsetAt: (s: number) => place.utcOffsetAt(s),
 			isFeature: place.isFeature
 		},
 		azimuthDeg: 0,

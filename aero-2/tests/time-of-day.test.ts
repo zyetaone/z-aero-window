@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCameraView } from '#lib/display/flight/view.js';
 import { Location } from '#lib/locations.js';
-import { sunPosition, nightAmount } from '#lib/display/world/sun.js';
+import { sunPosition, nightAmount, resolveLocalHours } from '#lib/display/world/sun.js';
 
 /**
  * Does the window show the RIGHT time, and does the clock offset mean what an
@@ -31,8 +31,10 @@ describe('real time vs the clock offset', () => {
 		const wallSec = Date.UTC(2026, 0, 15, 18, 0, 0) / 1000;
 		const denver = Location.byId('denver');
 		const v = calculateCameraView(wallSec, params('denver'));
-		// Denver in January is UTC-7, so 18:00 UTC is 11:00 local.
-		const expected = (18 + denver.utcOffset + 24) % 24;
+		// Denver in January is UTC-7, so 18:00 UTC is 11:00 local — at THAT
+		// second, not at whatever offset the suite happens to run under.
+		const expected = (18 + denver.utcOffsetAt(wallSec) + 24) % 24;
+		expect(denver.utcOffsetAt(wallSec)).toBe(-7);
 		expect(v.timeOfDay).toBeCloseTo(expected, 3);
 	});
 
@@ -66,9 +68,33 @@ describe('real time vs the clock offset', () => {
 		expect(new Set([...seen.values()].map((v) => Math.round(v))).size).toBeGreaterThan(1);
 		// And each must match its own declared UTC offset.
 		for (const [id, tod] of seen) {
-			const want = (((12 + Location.byId(id).utcOffset) % 24) + 24) % 24;
+			const want = (((12 + Location.byId(id).utcOffsetAt(wallSec)) % 24) + 24) % 24;
 			expect(tod, `${id} is not on its own clock`).toBeCloseTo(want, 3);
 		}
+	});
+
+	it('resolves the offset at the wall second, so a DST boundary gives one answer', () => {
+		// Same UTC clock time, January and July. Denver is -7 in one and -6 in
+		// the other; `Location.utcOffset` (a Date.now() getter) reports only
+		// whichever the host is in today, so the old code was right for at
+		// most half the year per instant. The sun already keys on
+		// `utcOffsetAt(wallSec)` (display.svelte.ts); the camera must agree.
+		const denver = Location.byId('denver');
+		const jan = Date.UTC(2026, 0, 15, 18, 0, 0) / 1000;
+		const jul = Date.UTC(2026, 6, 15, 18, 0, 0) / 1000;
+		expect(denver.utcOffsetAt(jan)).toBe(-7);
+		expect(denver.utcOffsetAt(jul)).toBe(-6);
+		for (const clockOffsetH of [0, 5]) {
+			for (const sec of [jan, jul]) {
+				const v = calculateCameraView(sec, params('denver', clockOffsetH));
+				const want = resolveLocalHours(sec, denver.utcOffsetAt(sec) + clockOffsetH);
+				expect(v.timeOfDay, `clock=${clockOffsetH} at ${sec}`).toBeCloseTo(want, 6);
+			}
+		}
+		// And the two seasons differ by exactly the DST hour.
+		const a = calculateCameraView(jan, params('denver')).timeOfDay;
+		const b = calculateCameraView(jul, params('denver')).timeOfDay;
+		expect((((b - a) % 24) + 24) % 24).toBeCloseTo(1, 6);
 	});
 
 	it('is dark at local midnight and light at local noon', () => {

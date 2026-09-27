@@ -33,7 +33,14 @@ export interface CameraParams {
 		id?: string;
 		lat: number;
 		lon: number;
-		utcOffset: number;
+		/**
+		 * Hours ahead of UTC AT a wall second, DST included. A function, not a
+		 * number: the render path may never read a second clock (ADR-007), and
+		 * `Location.utcOffset` is a `Date.now()` getter — a `clock=` preset that
+		 * crosses a DST boundary gave the sun (`utcOffsetAt`) and the camera
+		 * (`utcOffset`) two different answers for the same frame.
+		 */
+		utcOffsetAt(wallSec: number): number;
 		/** Feature locations are crossed, not orbited — see the aim below. */
 		isFeature?: boolean;
 	};
@@ -460,7 +467,7 @@ export function calculateCameraView(wallSec: number, params: CameraParams): Came
 	/**
 	 * Cities get an inward aim; features do not.
 	 */
-	const utcOffset = params.place.utcOffset + (params.clockOffsetH ?? 0);
+	const utcOffset = params.place.utcOffsetAt(wallSec) + (params.clockOffsetH ?? 0);
 	const weather = params.weather ?? 'clear';
 
 	if (params.place.isFeature)
