@@ -100,6 +100,9 @@
 		<div class="stat" class:warn-stat={(summary.throttledLive ?? 0) > 0 || (summary.shedding ?? 0) > 0}>
 			<strong>{loaded ? (summary.shedding ?? 0) : '—'}</strong> shedding
 		</div>
+		<div class="stat" class:warn-stat={(summary.maxClockSkewMs ?? 0) > 1000}>
+			<strong>{loaded && summary.maxClockSkewMs !== undefined ? `${summary.maxClockSkewMs} ms` : '—'}</strong> clock skew
+		</div>
 		<div class="stat" class:warn-stat={(summary.throttledLive ?? 0) > 0}>
 			<strong>{loaded ? (summary.throttledLive ?? 0) : '—'}</strong> throttle live
 		</div>

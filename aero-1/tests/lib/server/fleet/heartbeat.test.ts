@@ -108,3 +108,38 @@ describe('heartbeat statsAll — P8 rollup', () => {
 		expect(mod.statsAll()).toEqual([]);
 	});
 });
+
+describe('heartbeat clock skew', () => {
+	beforeEach(() => {
+		vi.stubEnv('AERO_HEARTBEAT_LOG', '');
+		vi.resetModules();
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		vi.useRealTimers();
+	});
+
+	it('records receivedAt minus the device clock when clockMs is reported', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(1_700_000_000_000);
+		const { recordHeartbeat } = await import('$lib/server/fleet/heartbeat');
+		const s = recordHeartbeat({ deviceId: 'pi-a', clockMs: 1_700_000_000_000 - 1500 });
+		expect(s?.clockSkewMs).toBe(1500);
+		const older = recordHeartbeat({ deviceId: 'pi-old' });
+		expect(older?.clockSkewMs).toBeUndefined();
+	});
+
+	it('summarises the largest pairwise skew across online panes, undefined below two clocks', async () => {
+		vi.useFakeTimers();
+		const t = 1_700_000_000_000;
+		vi.setSystemTime(t);
+		const { recordHeartbeat, summarize } = await import('$lib/server/fleet/heartbeat');
+		recordHeartbeat({ deviceId: 'left', clockMs: t - 100 });
+		expect(summarize(t).maxClockSkewMs).toBeUndefined();
+		recordHeartbeat({ deviceId: 'center', clockMs: t - 2600 });
+		recordHeartbeat({ deviceId: 'right', clockMs: t + 400 });
+		// skews: 100, 2600, -400 → spread 3000
+		expect(summarize(t).maxClockSkewMs).toBe(3000);
+	});
+});
+

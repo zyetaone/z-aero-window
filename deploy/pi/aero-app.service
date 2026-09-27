@@ -1,8 +1,13 @@
 [Unit]
 Description=Aero Window App Server (SvelteKit + Fleet hub)
 Documentation=https://github.com/zyetaone/z-aero-window
-After=network-online.target
-Wants=network-online.target
+# time-sync.target: the picture on all three panes is derived from the wall
+# clock, so a pane that renders before NTP steps its clock shows a different
+# moment for a minute after every boot. systemd-time-wait-sync (enabled by
+# install.sh) holds the target until the clock is set; on a Pi with no
+# network it times out rather than blocking the kiosk forever.
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
 
 # Bound any restart loop. Restart=always with no limit turns a permanent
 # failure — port already bound, bad EnvironmentFile, missing interpreter —

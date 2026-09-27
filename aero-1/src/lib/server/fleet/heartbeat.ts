@@ -67,6 +67,12 @@ export interface HeartbeatSample {
 	throttle?: ThrottleFlags;
 	/** Load-shed policy last computed on the device (ok | shed). */
 	thermalAction?: ThermalAction;
+	/**
+	 * receivedAt minus the device's reported clock, ms (optional — older
+	 * health-check.sh). Includes network latency (tens of ms on the LAN);
+	 * what matters is the SPREAD across panes, see FleetSummary.maxClockSkewMs.
+	 */
+	clockSkewMs?: number;
 }
 
 /** How many samples we keep per device. 500 × 60s ≈ 8.3h. */
@@ -179,6 +185,9 @@ export function recordHeartbeat(input: unknown): HeartbeatSample | null {
 			? o.thermalAction
 			: undefined,
 	};
+	if (typeof o.clockMs === 'number' && Number.isFinite(o.clockMs)) {
+		sample.clockSkewMs = Math.round(sample.receivedAt - o.clockMs);
+	}
 
 	// Thermal / power throttle (optional — older health-check omits the field).
 	if ('throttledRaw' in o) {
@@ -295,6 +304,10 @@ export function summarize(now: number = Date.now()): FleetSummary {
 	const totalCrashes = all.reduce((sum, s) => sum + s.crashCount, 0);
 	const shedding = online.filter((s) => s.thermalAction === 'shed').length;
 	const throttledLive = online.filter((s) => s.throttle?.livePressure).length;
+	// Largest pairwise clock difference among online panes. Latency cancels
+	// to first order (same LAN, same admin), so this is the wall's real skew.
+	const skews = online.map((s) => s.clockSkewMs).filter((v): v is number => v !== undefined);
+	const maxClockSkewMs = skews.length >= 2 ? Math.max(...skews) - Math.min(...skews) : undefined;
 	return {
 		total: all.length,
 		online: online.length,
@@ -304,6 +317,7 @@ export function summarize(now: number = Date.now()): FleetSummary {
 		totalCrashes,
 		shedding,
 		throttledLive,
+		maxClockSkewMs,
 	};
 }
 

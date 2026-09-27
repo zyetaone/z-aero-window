@@ -76,7 +76,7 @@ function scheduleReset(): boolean {
 	// (NetworkManager down) feeds the loop nothing, the pipeline exits 0,
 	// and the Pi reboots without purging.
 	return schedulePrivileged(
-		['sh', '-c', `nmcli -t -f UUID,TYPE c >/dev/null || exit 1; nmcli -t -f UUID,TYPE c | awk -F: '$2=="802-11-wireless"{print $1}' | while read -r u; do sudo -n nmcli c delete "$u" || exit 1; done && sudo -n /sbin/reboot`],
+		['sh', '-c', `nmcli -t -f UUID,TYPE c >/dev/null || exit 1; nmcli -t -f UUID,TYPE c | awk -F: '$2=="802-11-wireless"{print $1}' | while read -r u; do sudo -n nmcli connection delete "$u" || exit 1; done && sudo -n /sbin/reboot`],
 		2000,
 		'[wifi/reset]',
 	);

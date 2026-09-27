@@ -30,7 +30,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	requireAdminToken(request);
 	// Early-reject via Content-Length header when present — avoids reading the
 	// multipart body at all for obviously oversized requests.
-	const declaredLen = Number(request.headers.get('content-length') ?? 0);
+	// …and refuse a body with no length at all: `formData()` reads the whole
+	// stream before the per-file cap below can run, so a chunked upload had
+	// no bound until it was fully in memory.
+	const declaredHeader = request.headers.get('content-length');
+	if (declaredHeader === null) error(411, 'Content-Length required');
+	const declaredLen = Number(declaredHeader);
 	if (Number.isFinite(declaredLen) && declaredLen > MAX_BYTES) {
 		error(413, `asset too large: declared ${declaredLen} bytes, limit is ${MAX_BYTES} bytes`);
 	}

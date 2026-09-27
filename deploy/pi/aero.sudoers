@@ -5,6 +5,12 @@
 #   /api/wifi/reset  → nmcli connection delete + reboot
 #
 # Both endpoints preflight `sudo -n true` and fail closed with a 503 when
-# this file is missing, rather than reporting success and doing nothing.
+# this file is missing, rather than reporting success and doing nothing —
+# so `true` itself must be granted here. It was not: on stock Pi OS the
+# preflight passed only because the first user's blanket NOPASSWD file
+# (/etc/sudoers.d/010_pi-nopasswd) happened to exist. On any image without
+# it, both hatches 503'd on every Pi.
+# nmcli is granted for exactly the subcommand /api/wifi/reset runs, not the
+# whole binary (the old grant could add or modify connections).
 # /bin and /usr/bin are both listed because usrmerge systems resolve either.
-__AERO_USER__ ALL=(root) NOPASSWD: /usr/bin/systemctl start aero-updater.service, /bin/systemctl start aero-updater.service, /sbin/reboot, /usr/sbin/reboot, /usr/bin/nmcli, /bin/nmcli
+__AERO_USER__ ALL=(root) NOPASSWD: /usr/bin/true, /bin/true, /usr/bin/systemctl start aero-updater.service, /bin/systemctl start aero-updater.service, /sbin/reboot, /usr/sbin/reboot, /usr/bin/nmcli connection delete *, /bin/nmcli connection delete *

@@ -454,6 +454,13 @@ done
 # The updater timer has no placeholders — copy verbatim.
 install -m 644 "${SCRIPT_DIR}/aero-updater.timer" /etc/systemd/system/aero-updater.timer
 
+# aero-app.service is ordered after time-sync.target, which only means
+# anything when systemd-time-wait-sync is enabled — by default it is not,
+# and the target is reached immediately with an unsynced clock. Non-fatal:
+# an image without the unit just keeps today's behaviour.
+systemctl enable systemd-time-wait-sync.service >/dev/null 2>&1 \
+	|| echo "  WARN: systemd-time-wait-sync not available — app will not wait for NTP"
+
 # Passwordless sudo for exactly the commands the app's privileged endpoints
 # run (/api/update, /api/wifi/reset). Without this, `sudo -n` fails and — now
 # that both endpoints preflight it — the operator gets a truthful 503 instead
