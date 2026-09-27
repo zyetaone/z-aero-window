@@ -16,6 +16,8 @@
  */
 import { deflateSync } from 'node:zlib';
 
+import { mulberry32 } from '#lib/display/flight/flight-path.js';
+
 export const GRAIN_SIZE = 256;
 /** Lattice cells across the tile — features ~8 px, under the z8 block. */
 const CELLS = 32;
@@ -24,16 +26,6 @@ const MEAN = 128;
 const AMPLITUDE = 44;
 /** Fixed seed: the wall must agree, and "random per boot" would shimmer. */
 const SEED = 0x51ab3d;
-
-function mulberry32(seed: number): () => number {
-	let a = seed >>> 0;
-	return () => {
-		a = (a + 0x6d2b79f5) >>> 0;
-		let t = Math.imul(a ^ (a >>> 15), 1 | a);
-		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
-}
 
 const smooth = (t: number): number => t * t * (3 - 2 * t);
 

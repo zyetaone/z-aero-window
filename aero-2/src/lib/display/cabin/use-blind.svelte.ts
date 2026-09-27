@@ -8,15 +8,12 @@
 
 import type { Attachment } from 'svelte/attachments';
 import type { AeroDisplay } from '../display.svelte.js';
+import { clamp } from '#lib/angles.js';
 
 const SNAP_THRESHOLD = 0.3;
 const OPEN_Y = -105;
 const CLOSED_Y = 0;
 export const FLIGHT_COOLDOWN_MS = 45_000;
-
-function clamp(val: number, min: number, max: number): number {
-	return Math.max(min, Math.min(max, val));
-}
 
 export function useBlind(display: AeroDisplay) {
 	let clipEl: HTMLDivElement | null = null;

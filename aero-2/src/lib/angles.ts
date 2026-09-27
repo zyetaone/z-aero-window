@@ -40,3 +40,16 @@ export function signedDelta(fromDeg: number, toDeg: number): number {
 export function clamp01(n: number): number {
 	return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
 }
+
+/**
+ * Clamp to [min, max]. No finiteness guard, unlike `clamp01`: this is the
+ * body `use-blind` had, and a NaN in must stay a NaN out there.
+ */
+export function clamp(val: number, min: number, max: number): number {
+	return Math.max(min, Math.min(max, val));
+}
+
+/** Linear interpolation. One home; `atmosphere.ts` and `viirs-tint.ts` each had a copy. */
+export function lerp(a: number, b: number, t: number): number {
+	return a + (b - a) * t;
+}

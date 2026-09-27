@@ -32,15 +32,12 @@
 import { PNG } from 'pngjs';
 
 import { grainValue } from './grain.js';
+import { lerp } from '#lib/angles.js';
 
 type RGB = readonly [number, number, number];
 const DEEP: RGB = [120, 60, 20];
 const MID: RGB = [255, 150, 60];
 const TOP: RGB = [250, 170, 80];
-
-function lerp(a: number, b: number, t: number): number {
-	return a + (b - a) * t;
-}
 
 function ramp(t: number): RGB {
 	if (t < 0.5) {

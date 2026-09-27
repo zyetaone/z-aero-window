@@ -3,6 +3,8 @@
  * Pure deterministic mathematics — rune-free and renderer-free.
  */
 
+import { lerp } from '#lib/angles.js';
+
 /** Linear RGB, 0..1. */
 export type Rgb = readonly [number, number, number];
 
@@ -78,10 +80,6 @@ function anchorOf(i: number): number {
 	const band = ATMOSPHERE_BANDS[i];
 	const floor = i === 0 ? 0 : ATMOSPHERE_BANDS[i - 1].topM;
 	return Number.isFinite(band.topM) ? (floor + band.topM) / 2 : STRATOSPHERE_ANCHOR_M;
-}
-
-function lerp(a: number, b: number, t: number): number {
-	return a + (b - a) * t;
 }
 
 /**
