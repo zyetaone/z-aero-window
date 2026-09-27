@@ -169,11 +169,30 @@ if (!chromePath) {
  * 404s by design, so smoking it that way asserts the guard and abandons the
  * cockpit to the failure this tool exists to catch. The guard is checked
  * separately below, against a second server that omits the flag.
+ *
+ * AERO_WALL_PATH is the same kind of isolation, and it was found by a red run
+ * rather than by reading this. `data/wall.json` is gitignored OPERATOR state:
+ * the smoke run inherited a real push from a previous session (version 2,
+ * `displayMode: 'flight'`, denver), so `applyWallState` correctly overrode
+ * `?mode=screensaver` and the media route reported "no media element mounted".
+ *
+ * Nothing is wrong with the app there — a push newer than "never pushed" is
+ * SUPPOSED to beat a URL someone typed, and `readWall` says so in a comment
+ * ("a fresh wall runs on its own URL parameters"). The fault is that the test
+ * inherited a machine's history, so it asserted against whatever the last
+ * operator did rather than against the build. Pointing the wall at a path that
+ * does not exist reproduces the version-0 "nothing has ever been pushed"
+ * state the routes below are written for.
  */
 // AERO_ADMIN_UI=1 so /admin RENDERS here and the blank-cockpit check has
 // something to look at. The inverse — that it 404s WITHOUT the flag — is a
 // separate server at the bottom of this file.
-const kioskEnv = { ...process.env, PORT: String(PORT), AERO_ADMIN_UI: '1' };
+const kioskEnv = {
+	...process.env,
+	PORT: String(PORT),
+	AERO_ADMIN_UI: '1',
+	AERO_WALL_PATH: join(tmpdir(), `aero-wall-smoke-${process.pid}.json`)
+};
 // `NODE_ENV: undefined` inside the spread would still hand the child the key;
 // only deleting it reproduces an unprovisioned Pi.
 delete kioskEnv.NODE_ENV;
@@ -545,7 +564,11 @@ try {
 	 * failure: the cockpit shipping blank, or the cockpit shipping to a client
 	 * LAN.
 	 */
-	const guardEnv = { ...process.env, PORT: String(PORT + 1) };
+	const guardEnv = {
+		...process.env,
+		PORT: String(PORT + 1),
+		AERO_WALL_PATH: join(tmpdir(), `aero-wall-smoke-guard-${process.pid}.json`)
+	};
 	delete guardEnv.NODE_ENV;
 	delete guardEnv.AERO_ADMIN_UI;
 	const guardServer = spawn(process.execPath, ['build/index.js'], {

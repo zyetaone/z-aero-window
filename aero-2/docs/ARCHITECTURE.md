@@ -48,7 +48,7 @@ code it covers and confirming the run goes red.
 
 | #   | Invariant                                                                                  | Enforced by                                                                                    |
 | --- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| 1   | No import cycles                                                                           | `tools/check-repo.mjs`, in `check` and `test`                                                |
+| 1   | No import cycles                                                                           | `tools/check-repo.mjs`, in `check` and `test`                                                  |
 | 2   | The world is a pure function of (wall clock, place, `daySeed`)                             | `tests/integration.test.ts` — scans for `Math.random` and for `+= dt`                          |
 | 3   | Context DI: `createDisplay()` at the root, `useDisplay()` below                            | `tests/regressions.test.ts` — exactly one call site may construct the model                    |
 | 4   | The pure simulation modules import no renderer                                             | `tests/integration.test.ts`                                                                    |
@@ -468,6 +468,48 @@ Two lessons from getting it wrong first:
   the ocean at the call site. Declare the range every time.
 - **Altitude is metres above ground, and terrain is drawn at `exaggeration`×.**
   Mixing raw and drawn metres flies the camera through mountains.
+- **One buildings pack does not contain its own pin, and a comment nearly
+  hid it.** The downtown thread in `flight/downtown.ts` closes a ~2 x 3 km loop
+  on the `Location` pin, because the pin is the only place the flight code knows
+  about — it has no idea where the buildings are. Measured 2026-09-27 from the
+  pack bounding boxes against `locations.ts`:
+
+  | place            | buildings offset | span   | footprints | pin inside |
+  | ---------------- | ---------------- | ------ | ---------- | ---------- |
+  | `hyderabad`      | **10.9 km**      | 6.4 km | 600        | **no**     |
+  | `denver`         | 0.4 km           | 5.1 km | **190**    | yes        |
+  | `mumbai`         | 0.0 km           | 5.6 km | 600        | yes        |
+  | `dubai`          | 0.0 km           | 5.6 km | 600        | yes        |
+  | `dallas`         | 0.1 km           | 5.6 km | 600        | yes        |
+  | `phoenix`        | 0.0 km           | 5.6 km | 600        | yes        |
+  | `las_vegas`      | 0.0 km           | 5.6 km | 600        | yes        |
+  | `chicago_midway` | 0.3 km           | 4.9 km | 600        | yes        |
+
+  Hyderabad is the real defect, and the thread flies a correctly-formed circle
+  over bare ground there until the pack is refetched. Denver is a different
+  problem — 190 footprints against 600 everywhere else, so its pass is thinner
+  than the others rather than misplaced.
+
+  **The roads packs do not have this problem and must not be measured as if
+  they did.** They are metro-wide, 77–113 km across, so their centres sit up to
+  15.3 km from a pin that is comfortably inside the box. A "centroid offset"
+  check would fail all eight and mean nothing; the invariant is that the PIN is
+  CONTAINED, which is what the flight code actually aims at.
+
+  Two lessons from getting the number wrong first, both of which cost a
+  revision. The `tiles.ts` comment it replaced said "11 km" and was **correct**.
+  Re-measuring it against pins typed from memory rather than read from
+  `locations.ts` gave 5.8 km, and 5.8 km was written back as a correction. The
+  same pass reported Denver as 30 km off and the pack as sitting on Denver
+  International Airport — which is true of the _pin_, since the kiosk
+  deliberately flies over the airport, and false of the pack, which covers it
+  to within 0.4 km. A plausible-sounding correction to a measured comment is
+  worse than leaving it alone.
+
+  `tests/pack-coverage.test.ts` now measures containment against the catalogue
+  and fails when a pack stops covering its pin, so this cannot go stale quietly
+  again. It skips absent packs, because a pack that is not there cannot be
+  misplaced and a fresh clone has no `data/` at all.
 
 ## 6. Reactivity and memory — what was audited, and why there is no event bus
 

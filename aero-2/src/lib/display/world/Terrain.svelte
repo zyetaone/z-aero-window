@@ -23,6 +23,7 @@
 	import { PUBLIC_TILE_SERVER_URL } from '$app/env/public';
 	import { useDisplay } from '../display.svelte.js';
 	import { weatherLightLoss } from './atmosphere.js';
+	import { withSnowLine } from '#lib/world/terrain/snow.js';
 
 	const display = useDisplay();
 
@@ -126,10 +127,23 @@
 
 	<!-- Optional Hypsometric Color Relief Elevation Tint -->
 	{#if display.config.colorRelief}
+		<!--
+				Wrapped in the snow line, which is a function of LATITUDE. The
+				authored ramps stop at 3,000 m and an interpolate with no final
+				stop holds its last colour forever, so above that every mountain
+				rendered as the same bare grey: correct for Hyderabad, badly wrong
+				for the Alps. See terrain/snow.ts for why it is a cosine.
+
+				Free where there is nothing to draw — the expression collapses to
+				the plain ramp at a latitude whose line is above the local ground.
+			-->
 		<ColorReliefLayer
 			paint={{
 				'color-relief-opacity': 0.75 * dayFactor,
-				'color-relief-color': COLOR_RAMPS[display.config.reliefRamp ?? 'geographical']
+				'color-relief-color': withSnowLine(
+					COLOR_RAMPS[display.config.reliefRamp ?? 'geographical'],
+					display.config.place.lat
+				)
 			}}
 		/>
 	{/if}

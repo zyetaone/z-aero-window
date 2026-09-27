@@ -31,11 +31,21 @@
 import type { OrbitPose } from './flight-path.js';
 import { CLIMB_LOW_PHASE_SEC, DWELL_SEC } from './flight-path.js';
 
-/** Seconds into each dwell the pass starts and ends. Inside the slot with
- * margin both sides: the 3.5 s arrival glide is long over by 37 s, and 67 s
- * of big loop remain after the 173 s handoff before the next rotation. */
-// Centred on the climb's trough (flight-path.ts), so the gate opens on the
-// slots the climb is already low in and the pull down to the thread is small.
+/** Seconds into each dwell the pass starts and ends.
+ *
+ * Centred on the climb's trough (`CLIMB_LOW_PHASE_SEC` in flight-path.ts), so
+ * the gate opens on the slots the climb is already low in and the pull down to
+ * the thread is small. With `DWELL_SEC` 600 and the pass spanning 75-225, the
+ * margins are 75 s of big loop before the first ramp opens at 30 s and 330 s
+ * after the last one closes at 270 s — which is what leaves room for the
+ * arrival glide and the next rotation inside the same slot.
+ *
+ * The numbers in the previous version of this comment (a "3.5 s arrival
+ * glide ... 37 s", "67 s of big loop", a "173 s handoff") belonged to an
+ * earlier parameterisation of the pass and described no constant here. The
+ * timeline they claimed to be quoting is the one written out verbatim on
+ * `DOWNTOWN_HANDOFF_SEC` below, which is where a reader should have looked.
+ */
 export const DOWNTOWN_PASS_START_SEC = CLIMB_LOW_PHASE_SEC - 75;
 export const DOWNTOWN_PASS_END_SEC = CLIMB_LOW_PHASE_SEC + 75;
 /** Ease each side of the pass. A cut would teleport ~25 km; 8 s reads as the
@@ -48,10 +58,24 @@ export const DOWNTOWN_PASS_END_SEC = CLIMB_LOW_PHASE_SEC + 75;
  */
 export const DOWNTOWN_HANDOFF_SEC = 45;
 /** Big-loop offsets shrink to this fraction: ~2 km N-S, ~3.4 km E-W at the
- * equator (less up-latitude) — city-centre scale, still a loop, not a hover.
- * Sized against the downtown building packs (~5 km span); Hyderabad's pack
- * sits ~11 km off its pin, so the thread circles empty ground there until
- * that pack is repacked — the loop is right, the content is misplaced. */
+ *  equator (less up-latitude) — city-centre scale, still a loop, not a hover.
+ *  Sized against the building packs' ~5 km span, which is the only thing that
+ *  gives the thread a subject.
+ *
+ *  IT DOES NOT ASSUME THE PACKS ARE UNDER THE PIN, and one is not. Hyderabad's
+ *  pack is centred 10.9 km from its pin and spans 6.4 km, so the pin falls
+ *  OUTSIDE it entirely and the thread circles bare ground on that visit until
+ *  the pack is refetched — the loop is right, the content is 11 km away. The
+ *  other seven cities are within 0.4 km.
+ *
+ *  That figure was nearly deleted. An earlier revision of this comment said
+ *  "11 km" and was RIGHT; a review re-measured it against pins typed from
+ *  memory rather than read from `locations.ts`, got 5.8 km, and "corrected" a
+ *  correct number. The same pass also indicted Denver at 30 km — Denver's
+ *  catalogue pin is 39.856, -104.674, which IS the airport the kiosk flies
+ *  over, and its pack covers it to within 0.4 km. `tests/pack-coverage.test.ts`
+ *  now measures this against the catalogue and fails if a pack stops covering
+ *  its pin, so the number cannot go stale quietly again. */
 const DOWNTOWN_LOOP_SCALE = 0.08;
 /**
  * How much faster the thread traverses its small loop than the big loop
@@ -71,7 +95,12 @@ const DOWNTOWN_LOOP_SCALE = 0.08;
 export const DOWNTOWN_TIME_WARP = 3;
 
 /** Thread-clock second for a flight-clock second: identity at the anchor. */
-export function downtownWarpSec(effectiveSec: number, wallSec: number, speed = 1, gate = 1): number {
+export function downtownWarpSec(
+	effectiveSec: number,
+	wallSec: number,
+	speed = 1,
+	gate = 1
+): number {
 	if (!Number.isFinite(effectiveSec) || !Number.isFinite(wallSec)) return DOWNTOWN_PASS_START_SEC;
 	return effectiveSec + speed * (DOWNTOWN_TIME_WARP - 1) * gate * downtownWarpAdvanceSec(wallSec);
 }
