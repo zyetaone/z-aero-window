@@ -93,7 +93,8 @@ fi
 
 # ─── Thermal / power throttle (vcgencmd get_throttled) ───────────────────────
 # Bitfield: 0 under-voltage, 1 freq-capped, 2 throttled, 3 soft-temp (live);
-# 16–19 sticky "has occurred since boot". Policy matches src/lib/server/fleet/throttle.ts:
+# 16–19 sticky "has occurred since boot". Policy matches aero-2/src/lib/throttle.ts
+# (aero-1: aero-1/src/lib/fleet/throttle.ts):
 # shed GPU load at ≥78 °C or any live pressure bit; clear only ≤70 °C (hysteresis).
 THROTTLED_RAW=0
 if command -v vcgencmd >/dev/null 2>&1; then
