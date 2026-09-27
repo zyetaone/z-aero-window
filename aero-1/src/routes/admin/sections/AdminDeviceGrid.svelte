@@ -4,6 +4,7 @@
 	import { LOCATIONS } from '$content/locations';
 	import { formatUptime, formatAge } from '$lib/utils';
 	import { DISPLAY_MODE_LABELS, type DisplayMode } from '$lib/types';
+	import { subscribeWallClock, wallClockNow } from '$lib/shell/passenger/wall-clock.svelte';
 
 	let { store, selectedDevices, onToggleSelectAll, onToggleDevice }: {
 		store: RestAdminStore,
@@ -11,6 +12,13 @@
 		onToggleSelectAll: () => void,
 		onToggleDevice: (id: string) => void
 	} = $props();
+
+	// "Last: 3m ago" reads the same ticking clock as the header and the
+	// ambient-failure list (wall-clock.svelte.ts), not a Date.now() frozen at
+	// render — the previous version only refreshed when a device row changed.
+	// Own subscription: the ref-count keeps the interval alive even if the
+	// header unmounts.
+	$effect(() => subscribeWallClock());
 
 	let deviceTemps = $state<Record<string, number>>({});
 	$effect(() => {
@@ -119,7 +127,7 @@
 
 							<div class="card-footer">
 								<span class="last-seen">
-									{device.online ? 'Active' : `Last: ${formatAge(device.lastSeen, Date.now())}`}
+									{device.online ? 'Active' : `Last: ${formatAge(device.lastSeen, wallClockNow())}`}
 								</span>
 								{#if selected}
 									<span class="selected-badge">Selected</span>
