@@ -366,7 +366,25 @@ try {
 			// The canvas exists; give the first frames a moment to land.
 			await sleep(2_000);
 		} else {
-			await sleep(4_000);
+			/**
+			 * Same rule for the text routes. This was a flat 4 s, and it held
+			 * only while the kiosk routes before it crashed at map init: the
+			 * moment they actually flew under SwiftShader, /admin was graded
+			 * at 0 chars — the runner was still tearing down a software-GL
+			 * world when the sleep ran out. Poll for the text the assertion
+			 * wants; the assertion below still says what is missing on timeout.
+			 */
+			const need = Math.max(1, route.minChars);
+			await waitFor(
+				`${route.path} text`,
+				async () => {
+					const t = ((await evaluate('document.body.innerText')) ?? '').trim();
+					return t.length >= need && (!route.expect || t.includes(route.expect));
+				},
+				30_000
+			).catch(() => {
+				/* Fall through: the assertions below report what is actually wrong. */
+			});
 		}
 
 		/**
