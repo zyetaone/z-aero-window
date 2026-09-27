@@ -37,7 +37,19 @@ import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import CDP from 'chrome-remote-interface';
 
-const CHROME = `${homedir()}/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
+// Newest installed Playwright headless shell, or CHROME=/path to override.
+// A pinned revision rotted twice (1228 was uninstalled by a playwright bump).
+import { readdirSync } from 'node:fs';
+const CHROME =
+	process.env.CHROME ??
+	(() => {
+		const dir = `${homedir()}/Library/Caches/ms-playwright`;
+		const rev = readdirSync(dir)
+			.filter((d) => d.startsWith('chromium_headless_shell-'))
+			.sort()
+			.at(-1);
+		return `${dir}/${rev}/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
+	})();
 
 const arg = (name, dflt) => {
 	const i = process.argv.indexOf(`--${name}`);
