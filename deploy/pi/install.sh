@@ -95,17 +95,19 @@ fi
 # to build, and the updater's fallback chain then served aero-1 to a Pi that was
 # meant to run aero-2. Precedence: --app / AERO_APP_SUBDIR, then whatever this
 # Pi's config.env already says (so --units-only never flips a fielded Pi), then
-# aero-2 for a fresh install. The value is written into config.env by step 5
+# aero-1 for a fresh install — the app the fielded wall runs, free and offline
+# since the open-data pack (2026-09-28). aero-2 stays the explicit cutover:
+# `--app aero-2`, once its first Pi 5 frame has been measured. The value is written into config.env by step 5
 # and read by aero-updater.sh on every run; it is deliberately NOT in the
 # additive block below, so an OTA run cannot cut a fielded aero-1 Pi over.
 if [[ -z "${AERO_APP_SUBDIR:-}" && -f /etc/aero/config.env ]]; then
 	AERO_APP_SUBDIR="$(command grep -oP '^AERO_APP_SUBDIR=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 fi
 if [[ -z "${AERO_APP_SUBDIR:-}" ]]; then
-	if [[ -f "${INSTALL_DIR}/aero-1/build/index.js" && ! -f "${INSTALL_DIR}/aero-2/build/index.js" ]]; then
-		AERO_APP_SUBDIR="aero-1"   # fielded Pi with no record: keep what it runs; --app aero-2 is the cutover
+	if [[ -f "${INSTALL_DIR}/aero-2/build/index.js" && ! -f "${INSTALL_DIR}/aero-1/build/index.js" ]]; then
+		AERO_APP_SUBDIR="aero-2"   # a Pi already cut over with no record: keep what it runs
 	else
-		AERO_APP_SUBDIR="aero-2"
+		AERO_APP_SUBDIR="aero-1"
 	fi
 fi
 APP_DIR="${INSTALL_DIR}/${AERO_APP_SUBDIR}"

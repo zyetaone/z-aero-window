@@ -44,8 +44,8 @@ Environment=PORT=3000
 # exits 1 on a missing build, on the argument that a 503 keeps the unit green
 # while the kiosk shows an error page, so nothing ever restarts and nothing
 # ever reports. Both positions are defensible; they need different units.
-# install.sh now defaults AERO_APP_SUBDIR to aero-2, so the condition below
-# is in: systemd skips a start it knows will fail — a clean "Condition check
+# install.sh can select aero-2 (`--app aero-2`; the default is aero-1 again
+# since 2026-09-28), so the condition below is in: systemd skips a start it knows will fail — a clean "Condition check
 # failed" line rather than a crash loop with a dark kiosk. On v1 the build is
 # always present after install, so the condition is a no-op there.
 #
