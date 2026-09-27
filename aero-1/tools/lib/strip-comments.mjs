@@ -27,11 +27,17 @@
  *     terminator is not a stylistic choice: the first draft of it contained
  *     one and broke this very file.)
  *
- * Both were swept before being accepted: no regex literal in src/, content/ or
- * tools/ contains `//` or `/*`, and no block comment quotes its own terminator,
- * so all three checkers are correct over the current corpus. Record the sweep
- * date when re-checking after adding files, because the failure mode is silent
- * — a swallowed `//` means a pattern in a real comment is scanned as code.
+ * SWEPT, AND ONE REAL GAP FOUND. `src/lib/model/peer-sync-paths.ts` has
+ * `return /^https?:\/\//i.test(url) ? ...` — the `\//` tail contains a literal
+ * `//`, so the stripper blanks the rest of that line and `.test(url)` becomes
+ * invisible to all three checkers. So the sweep is NOT clean, and the comment
+ * that used to claim it was was itself wrong. Two options: teach the walker
+ * about regex literals, or accept the blind spot and say so. It is accepted
+ * here deliberately — the checkers look for a fixed set of patterns
+ * (Math.random, `import ... from 'cesium'`, a bare `$state` named `state`),
+ * none of which appears in a `? :` tail. But the day one of them does, this
+ * is the file that will hide it, so re-check peer-sync-paths.ts and any new
+ * `.test(`/`.match(`/`.replace(` line before trusting a clean scan.
  *
  * For `.svelte` files, JS comment syntax only applies inside `<script>`; in
  * markup an `https://` in text is not a comment, an HTML comment is, and `<style>`

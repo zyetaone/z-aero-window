@@ -416,9 +416,8 @@ Budget: ~1.2 GB per Pi. See `docs/ADR-002-zero-cost-caching-strategy.md`.
 Heuristic dev utilities — verify hits before deleting:
 
 **Run these from `aero-1/`, except `doc-path-scan`, which must run from the repo
-root.** They all shell out to `git ls-files`, whose pathspec is CWD-relative, so
-the wrong directory does not error — it silently scans a different (or empty)
-set of files and reports a clean result.
+root.** They all shell out to `git ls-files` with CWD-relative pathspecs, so the
+wrong directory does not reliably complain.
 
 | Command | Run from | Finds |
 |---|---|---|
@@ -427,13 +426,25 @@ set of files and reports a clean result.
 | `node tools/doc-path-scan.mjs` | **repo root** | file paths in docs that no longer exist |
 | `node tools/dead-export-scan.mjs` | `aero-1/` | exported symbols with no non-test, non-barrel consumer |
 
-The split is not arbitrary. The first, second and fourth use a bare
-`git ls-files`, so from `aero-1/` they see that app's 390 files and find real
-entrypoints — the same command from the root sees 736 files, finds 0
-entrypoints and reports everything vacuously clean. `doc-path-scan` is the
-opposite: it asks for `git ls-files docs AGENTS.md README.md`, and those paths
-only exist at the root, so from `aero-1/` it matches nothing and reports
-"0 stale, 0 excused" — a clean bill of health from having read no files at all.
+The split is not arbitrary, and the wrong directory fails in three different
+ways, only one of which is obvious:
+
+- `reachability-scan` and `dead-export-scan` ask for `src content server.ts`,
+  which matches 200 files from `aero-1/` and **0 from the repo root** (the
+  pathspec is CWD-relative and the root has no top-level `src/`). Run from the
+  root they report `entrypoints: 0 / UNREACHABLE: 0` — a clean bill of health
+  from having read nothing.
+- `config-key-scan` asks for `src content tests server.ts tools`, also 0 from
+  the root, and then crashes: `ENOENT … open 'src/lib/model/config-tree.svelte.ts'`.
+  Loud, but as a stack trace rather than a diagnostic.
+- `doc-path-scan` is the inverse: it asks for `docs AGENTS.md README.md`, which
+  only exist at the root. From `aero-1/` it matches nothing and prints
+  "0 stale, 0 excused" — reading no files at all.
+
+An earlier version of this note claimed all four "report everything vacuously
+clean" and quoted 390/736 file counts. Both were wrong: those are the trees'
+total tracked counts, not what any scanner's pathspec selects, and
+`config-key-scan` does not report clean, it throws.
 
 ## Route smoke test
 

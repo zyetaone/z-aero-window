@@ -129,14 +129,16 @@
 								<span class="last-seen">
 									<!--
 										lastSeen === 0 is the store's SENTINEL for "never heard
-										from", not a timestamp: the store seeds every row with it
-										and #pollStatus returns only {deviceId, online:false} when a
-										peer's /api/status is unreachable, so the field is never
-										overwritten. formatAge is a pure epoch-difference and
-										cannot know that, so it rendered "Last: 497115h ago" —
-										an age of 56 years, which reads as a bug and hides the
-										real state. formatAge(0, …) itself is tested as valid
-										epoch-0 arithmetic, so the guard belongs here.
+										from". formatAge is a pure epoch-difference and cannot know
+										that, so unguarded it rendered "Last: 497115h ago" — an
+										age of 56 years. formatAge(0, …) is itself tested as valid
+										epoch-0 arithmetic, so the guard belongs here and not in
+										formatAge.
+
+										Safe to call it "Never seen" only because the store carries
+										lastSeen forward across its 30 s re-seed; before that, a
+										device that dropped also read 0 and this label would have
+										been a confident falsehood.
 									-->
 									{device.online
 										? 'Active'

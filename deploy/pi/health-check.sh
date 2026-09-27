@@ -176,27 +176,35 @@ fi
 #
 # %3N is a GNU coreutils extension. BSD/macOS date does not support it — and it
 # does NOT fail, which is the trap: it prints the format string literally and
-# exits 0, so the `||` fallback below never fires and the value arrives as
+# exits 0, so a `||` fallback never fires and the value arrives as
 # `17905367853N`. Unquoted into the payload that is `"clockMs":17905367853N`,
 # which is not valid JSON, so the admin's 400 drops the ENTIRE heartbeat from
 # this pane — fps, temp, commit and clock skew all of it, not just the new
 # field. A telemetry feature that silences the telemetry when it is broken.
 # Hence validate the SHAPE rather than trusting the exit status, which is the
 # same idiom the rest of this file uses (FPS="${FPS:-0}").
-CLOCK_MS=""
+#
+# When no clock can be read the key is OMITTED rather than sent as 0. The
+# consumer tests `typeof o.clockMs === 'number' && Number.isFinite(...)`, and
+# 0 passes both — so a 0 does not read as "unknown", it reads as epoch, and
+# becomes a skew of receivedAt ≈ 1.8e12 ms. That is then folded into the
+# pane-to-pane spread and rendered as a permanently alarming figure, i.e. the
+# loudest possible lie instead of an honest gap. Omitting is the only encoding
+# the consumer already understands.
+CLOCK_FIELD=""
 if CLOCK_RAW="$(date +%s%3N 2>/dev/null)" && [[ "${CLOCK_RAW}" =~ ^[0-9]+$ ]]; then
-    CLOCK_MS="${CLOCK_RAW}"
-elif [[ "$(date +%s 2>/dev/null)" =~ ^[0-9]+$ ]]; then
-    # Second resolution is 1000x coarser, which is still enough to catch a
-    # pane whose clock is minutes off. A skewed wall is what this is for.
-    CLOCK_MS="$(( $(date +%s) * 1000 ))"
-else
-    # Emit a valid number so one unreadable clock cannot cost the whole
-    # heartbeat. 0 reads as "unknown" to the admin, which is the truth.
-    CLOCK_MS=0
+    CLOCK_FIELD="${CLOCK_RAW}"
+elif SEC_RAW="$(date +%s 2>/dev/null)" && [[ "${SEC_RAW}" =~ ^[0-9]+$ ]]; then
+    # Second resolution is 1000x coarser, which is still enough to catch a pane
+    # whose clock is minutes off. A skewed wall is what this is for. Reuses the
+    # value already validated rather than calling date again — a second call
+    # could disagree with the first (binary removed mid-run) and would assign an
+    # empty value, reintroducing the invalid-JSON body this replaced.
+    CLOCK_FIELD="$(( SEC_RAW * 1000 ))"
 fi
+# Empty CLOCK_FIELD expands the whole `,"clockMs":…` fragment away.
 PAYLOAD=$(cat <<EOF
-{"deviceId":"${DEVICE_ID}","role":"${AERO_ROLE}","groupId":"${AERO_GROUP}","fps":${FPS},"temp":${TEMP_C},"uptime":${UPTIME},"crashCount":${CRASH_COUNT},"commit":"${COMMIT}","lastError":"${LAST_ERROR}","mode":"${MODE}","throttledRaw":${THROTTLED_RAW},"thermalAction":"${THERMAL_ACTION}","clockSynced":${CLOCK_SYNCED},"clockMs":${CLOCK_MS}}
+{"deviceId":"${DEVICE_ID}","role":"${AERO_ROLE}","groupId":"${AERO_GROUP}","fps":${FPS},"temp":${TEMP_C},"uptime":${UPTIME},"crashCount":${CRASH_COUNT},"commit":"${COMMIT}","lastError":"${LAST_ERROR}","mode":"${MODE}","throttledRaw":${THROTTLED_RAW},"thermalAction":"${THERMAL_ACTION}","clockSynced":${CLOCK_SYNCED}${CLOCK_FIELD:+,"clockMs":${CLOCK_FIELD}}}
 EOF
 )
 

@@ -266,12 +266,25 @@ skips because the tree already matches `release`. The wall then runs mixed
 builds permanently, with a reassuring log line as the only evidence. So the
 updater caps the hold at `AERO_APPLY_BUDGET_SEC` (default 2700) and takes the
 immediate-restart path when the boundary is further out than that. The natural
-hold is 1200–2099 s, so the cap never engages in normal operation; it exists
-for a pane whose clock disagrees with the commit's by more than the budget
-(an offline Pi with a dead RTC), which would otherwise sleep for months and
-stop applying updates. The log line for that case reports the skew. If you
-change one of the three numbers — lead, budget, `TimeoutStartSec` — keep
-`TimeoutStartSec` > `AERO_APPLY_BUDGET_SEC` + build headroom.
+hold is 1200–2099 s, so the cap never engages in normal operation — verified
+against every commit-offset and poll-lag pair. It exists for a pane whose clock
+is behind the commit's: since `hold = (1200..2099) − skew`, the clamp fires
+when the local clock is roughly **600–1500 s behind**, depending on where the
+commit fell in the quarter hour — not when it is "more than the budget" out. An
+offline Pi with a dead RTC and nothing to correct it previously computed a
+boundary six months away and would have slept for 182 days, silently never
+updating again. That case now logs the skew so the operator knows to go and fix
+NTP, and restarts immediately instead. If you change one of the three numbers —
+lead, budget, `TimeoutStartSec` — keep `TimeoutStartSec` > `AERO_APPLY_BUDGET_SEC`
++ build headroom; the script warns if the budget leaves under ten minutes, or if
+a lead would put the boundary out of reach for every commit offset.
+
+**The first run after this lands is the one exception.** The run that installs
+the new `TimeoutStartSec` is itself the run that started under the old 600 s
+limit, and a `daemon-reload` does not re-arm a start deadline that is already
+running. That run therefore skips the hold and restarts immediately, one pane
+early; the run after it uses the new budget. Self-limiting: it can only happen
+on the poll that observes this diff, and the next poll has the new unit file.
 
 `release` is fast-forwarded by CI only after check + tests + build pass on
 `main` (`.github/workflows/ci.yml`), so a red commit never reaches a Pi. On

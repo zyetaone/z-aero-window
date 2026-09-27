@@ -364,11 +364,15 @@ fi
 # still starts. That is degraded, not broken — and far better than rolling back
 # a good build because a cron file could not be written.
 INSTALLER="${REPO_DIR}/deploy/pi/install.sh"
+UNITS_REINSTALLED=0
 if ! git diff --quiet "${LOCAL}" "${REMOTE}" -- deploy/ 2>/dev/null; then
     if [[ -f "${INSTALLER}" ]]; then
         log "deploy/ changed in this release — reinstalling units + cron"
-        bash "${INSTALLER}" --units-only 2>&1 | tee -a "${LOG_FILE}" \
-            || log "WARN: unit reinstall failed — keeping previous units"
+        if bash "${INSTALLER}" --units-only 2>&1 | tee -a "${LOG_FILE}"; then
+            UNITS_REINSTALLED=1
+        else
+            log "WARN: unit reinstall failed — keeping previous units"
+        fi
     fi
 else
     log "deploy/ unchanged — units left as-is"
@@ -411,28 +415,76 @@ APPLY_LEAD_SEC="${AERO_APPLY_LEAD_SEC:-1200}"
 # expression and errors, and inside an `if` condition that is not fatal under
 # set -e — so a typo silently took the ELSE and disabled the hold outright,
 # with one stderr line nobody reads on a headless Pi.
+#
+# The digit test is NOT sufficient on its own: "09" passes ^[0-9]+$ and is
+# then an invalid OCTAL constant, so `(( APPLY_LEAD_SEC > 0 ))` errors and
+# evaluates false — silently disabling the hold, which is the exact failure
+# the "20min" check was added to stop. Normalising through 10# is what
+# actually fixes it, and it also absorbs "007" rather than rejecting it.
 if [[ ! "${APPLY_LEAD_SEC}" =~ ^[0-9]+$ ]]; then
     log "AERO_APPLY_LEAD_SEC='${APPLY_LEAD_SEC}' is not a whole number of seconds — ignoring it and using the 1200s default"
     APPLY_LEAD_SEC=1200
+else
+    APPLY_LEAD_SEC=$(( 10#${APPLY_LEAD_SEC} ))
 fi
 APPLY_BUDGET_SEC="${AERO_APPLY_BUDGET_SEC:-2700}"
-if [[ ! "${APPLY_BUDGET_SEC}" =~ ^[0-9]+$ ]] || (( APPLY_BUDGET_SEC < 2100 )); then
-    # 2100 is the smallest value that can hold the 2099 s worst case.
-    log "AERO_APPLY_BUDGET_SEC='${AERO_APPLY_BUDGET_SEC}' must be a whole number >= 2100 — using 2700"
+if [[ ! "${APPLY_BUDGET_SEC}" =~ ^[0-9]+$ ]]; then
+    log "AERO_APPLY_BUDGET_SEC='${APPLY_BUDGET_SEC}' is not a whole number of seconds — using 2700"
+    APPLY_BUDGET_SEC=2700
+else
+    APPLY_BUDGET_SEC=$(( 10#${APPLY_BUDGET_SEC} ))
+fi
+# 2100 is the smallest value that can hold the 2099 s worst case, so a budget
+# below it makes the clamp fire on healthy panes and destroys the wall-sync
+# property while logging a clock fault the operator does not have.
+if (( APPLY_BUDGET_SEC < 2100 )); then
+    log "AERO_APPLY_BUDGET_SEC=${APPLY_BUDGET_SEC} is below the 2100s worst case — using 2700"
     APPLY_BUDGET_SEC=2700
 fi
-if (( APPLY_LEAD_SEC > 0 )); then
-    apply_at=$(apply_boundary "$(git log -1 --format=%ct HEAD)" "${APPLY_LEAD_SEC}")
+# The hold is (lead .. lead+899) after the commit, so a lead at or above the
+# budget puts the boundary out of reach for EVERY commit offset and every pane
+# straggles. That is wall-sync destroyed with a misleading log, so refuse it
+# rather than let an operator talk themselves into a bad value.
+if (( APPLY_LEAD_SEC > 0 && APPLY_LEAD_SEC + 899 >= APPLY_BUDGET_SEC )); then
+    log "AERO_APPLY_LEAD_SEC=${APPLY_LEAD_SEC} puts the boundary past the ${APPLY_BUDGET_SEC}s budget for most commit offsets — every pane would restart immediately. Lower the lead or raise the budget."
+fi
+if (( APPLY_BUDGET_SEC > 3000 )); then
+    # TimeoutStartSec is 3600. Above 3000 the install+build window shrinks
+    # toward nothing, which is how this whole class of bug started.
+    log "AERO_APPLY_BUDGET_SEC=${APPLY_BUDGET_SEC} leaves under 10 min of the 3600s TimeoutStartSec for install and build — expect a kill mid-update."
+fi
+# A run that just reinstalled the units is running under the PREVIOUS
+# TimeoutStartSec: systemd armed this start deadline when the unit began, and
+# `daemon-reload` re-reads config for FUTURE operations without re-arming a
+# deadline already in flight. So the very run that ships a larger budget is
+# governed by the old, smaller one — it would be SIGKILLed mid-sleep in exactly
+# the way the budget exists to prevent, and because the tree already matches
+# release the next poll would log "Already up to date" and never restart into
+# the build. Restart immediately instead: one pane early for one poll, which is
+# self-limiting and far cheaper than a mixed wall.
+if (( UNITS_REINSTALLED )); then
+    log "Units were just reinstalled, so this run still has the previous TimeoutStartSec — restarting now. The next poll uses the new budget."
+elif (( APPLY_LEAD_SEC > 0 )); then
+    # Resolved ONCE. A second `git log` here could come back empty (shallow
+    # clone, no commits), and `$(( now_ts - ))` is an arithmetic syntax error
+    # which, under set -e, would kill the script HERE — after reset+build and
+    # before restart_services, the precise failure this section exists to
+    # prevent. Empty commit_ts also makes the boundary land near the epoch, so
+    # hold_sec goes hugely negative and the straggler path takes over safely.
+    commit_ts=$(git log -1 --format=%ct HEAD 2>/dev/null || echo 0)
+    if [[ ! "${commit_ts}" =~ ^[0-9]+$ ]]; then commit_ts=0; fi
+    apply_at=$(apply_boundary "${commit_ts}" "${APPLY_LEAD_SEC}")
     now_ts=$(date +%s)
     hold_sec=$(( apply_at - now_ts ))
     if (( hold_sec <= 0 )); then
         log "Boundary $(date -d "@${apply_at}" '+%H:%M:%S' 2>/dev/null || echo "${apply_at}") already passed — restarting now (straggler)"
     elif (( hold_sec > APPLY_BUDGET_SEC )); then
-        # Not a formatting concern. Either this pane's clock is far from the
-        # commit's, or the budget was set below the worst case. Say which,
-        # because "restarting now" looks identical to a normal straggler and
-        # the clock skew is the thing an operator has to go and fix.
-        skew=$(( now_ts - $(git log -1 --format=%ct HEAD) ))
+        # Not a formatting concern. hold = (lead .. lead+899) − skew, so at the
+        # defaults this is reachable ONLY by a negative skew: a local clock
+        # behind the commit's. That is the whole point — "restarting now" is
+        # indistinguishable from a normal straggler, so name the cause and the
+        # magnitude an operator can go and check.
+        skew=$(( now_ts - commit_ts ))
         log "Boundary is ${hold_sec}s away, past the ${APPLY_BUDGET_SEC}s service budget — restarting now (straggler). Local clock is ${skew}s from the release commit; check this pane's NTP/fake-hwclock if that is large."
     else
         log "Built. Holding restart ${hold_sec}s until the wall-wide boundary $(date -d "@${apply_at}" '+%H:%M:%S' 2>/dev/null || echo "${apply_at}")"

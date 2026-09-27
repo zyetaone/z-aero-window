@@ -144,16 +144,33 @@ export class RestAdminStore {
 			const body = await res.json() as { devices: DiscoveredPeer[] };
 			this.#peers = body.devices;
 			// Seed device rows with placeholder status; #pollStatus will fill.
-			this.devices = this.#peers.map((p) => ({
-				deviceId: p.deviceId,
-				hostname: p.host,
-				currentMode: 'flight',
-				currentLocation: 'dubai' as LocationId,
-				fps: 0,
-				uptime: 0,
-				lastSeen: 0,
-				online: false,
-			}));
+			//
+			// The seed must CARRY FORWARD what we already knew about each device.
+			// This map is rebuilt wholesale every PEER_REFRESH_INTERVAL_MS (30 s),
+			// and it used to reset lastSeen to 0 for every row on each pass — so a
+			// device that had been online and then dropped lost its last real
+			// heartbeat time within 30 s and the grid rendered
+			// "Last: 497115h ago" (0 is epoch, not a timestamp). The sentinel 0 is
+			// only truthful for a device we have NEVER heard from; it must not also
+			// mean "we did hear from it, thirty seconds ago, and we threw that away".
+			//
+			// #pollStatus only overwrites lastSeen for peers whose /api/status
+			// answered; on failure it returns {deviceId, online: false} and leaves
+			// the field alone, which is what makes carrying it forward correct.
+			const prevById = new Map(this.devices.map((d) => [d.deviceId, d] as const));
+			this.devices = this.#peers.map((p) => {
+				const prev = prevById.get(p.deviceId);
+				return {
+					deviceId: p.deviceId,
+					hostname: p.host,
+					currentMode: 'flight',
+					currentLocation: 'dubai' as LocationId,
+					fps: 0,
+					uptime: 0,
+					lastSeen: prev?.lastSeen ?? 0,
+					online: prev?.online ?? false,
+				};
+			});
 			await this.#pollStatus();
 			this.#connection = this.devices.some((d) => d.online) ? 'connected' : 'degraded';
 		} catch (e) {

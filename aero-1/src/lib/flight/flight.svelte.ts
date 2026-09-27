@@ -257,12 +257,14 @@ export class FlightSimEngine {
 			// 3 fps.
 			//
 			// The consequence is that a 3-fps pane DOES still settle in wall
-			// time more slowly than its neighbours — 0.3 per frame at 3 fps is
-			// ~0.9/s against ~18/s at 60 — which is the drift the original
-			// comment claimed to fix. It is inherent to a per-frame cap, not to
-			// the delta, so removing the cap (or scaling it by frame time) is
-			// what would actually fix it, and that is a change to camera feel on
-			// hardware we cannot bench here. Left alone deliberately, not
+			// time more slowly than its neighbours. Measured as k per real
+			// second: 60 fps applies 0.13 x 60 = 7.8/s, 3 fps applies the
+			// capped 0.30 x 3 = 0.9/s — an 8.6x gap, and the slow pane is the
+			// one looking wrong. That is the drift the original comment
+			// claimed to fix. It is inherent to a per-frame cap, not to the
+			// delta, so removing the cap (or scaling it by frame time) is
+			// what would actually fix it, and that is a change to camera feel
+			// on hardware we cannot bench here. Left alone deliberately, not
 			// overlooked. See #tickAltitude, which is wall-scaled properly and
 			// does behave differently below 10 fps.
 			this.#tickSmoothing(ctx.wallDeltaSec);

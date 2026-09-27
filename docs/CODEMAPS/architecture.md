@@ -90,7 +90,7 @@ Pane.svelte $effect → model.tick(delta)
     ├── motionStep(delta, ctx)             untrack() → void
     │     (turbulence, banking, breathing, vibe)
     │
-    └── directorTick(delta, ctx)           untrack() → WorldPatch
+    └── directorTick(ctx)                  untrack() → WorldPatch
           early-return if !ctx.isLeader
           ├── tickRandomize → AtmospherePatch
           └── tickDirector  → LocationId
@@ -174,7 +174,7 @@ LWW with sourceId tiebreak guarantees deterministic convergence across peers wit
 ## Key interfaces
 
 ### `SimulationContext` (`src/lib/types.ts`)
-The per-frame snapshot every engine tick receives. Carries `time`, `delta`, `heading`, `altitude`, `weather`, `turbulenceLevel`, plus full `camera` + `director` config slices, plus `isLeader`. Pre-allocated; reused each frame.
+The per-frame snapshot every engine tick receives. Carries `time`, `wallTimeSec`, `wallDeltaSec`, `heading`, `altitude`, `weather`, `turbulenceLevel`, plus full `camera` + `director` config slices, plus `isLeader`. The wall-clock fields are the tick contract: absolute seconds, not accumulated deltas. Pre-allocated; reused each frame.
 
 ### Scene effects (no registry)
 The `Effect`/`Compositor` registry was removed. DOM effects are plain Svelte
