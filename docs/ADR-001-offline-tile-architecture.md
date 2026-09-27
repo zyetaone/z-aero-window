@@ -1,5 +1,7 @@
 # ADR-001: Offline Tile Architecture for Pi 5 Fleet Deployment
 
+> **Path note (2026-09-27):** this ADR predates the `aero-1/` · `aero-2/` split. Bare `src/…`, `content/…`, `tools/…` and `scripts/…` paths below are relative to what is now `aero-1/`; paths that no longer exist anywhere are marked *(removed)* inline. The decision text itself is unchanged.
+
 > Implementation note: this ADR captures the intended standalone tile architecture. The current `main` branch only retains the script-based helpers in `scripts/prefetch-tiles.ts` and `scripts/build-pmtiles.ts`; the standalone packager workspace described below is not part of the current tree, and historical names like `tile-packager/` or `aero-tiles.service` are preserved here for context only.
 
 ## Context
@@ -518,7 +520,7 @@ downloads the new package from the fleet server.
 ### Provisioning Changes
 
 ```bash
-# Addition to deploy/provision-pi.sh:
+# Addition to deploy/provision-pi.sh (removed — provisioning is now deploy/pi/install.sh):
 
 # ─── 5b. Install Tile Server ────────────────────────────────────────────────
 
@@ -655,7 +657,7 @@ Tasks:
 
 ### Phase 6: Provisioning (Week 3)
 
-Update `deploy/provision-pi.sh`.
+Update `deploy/provision-pi.sh` *(removed — provisioning is now `deploy/pi/install.sh`)*.
 
 Tasks:
 1. Add Bun installation

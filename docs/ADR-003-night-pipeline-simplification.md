@@ -1,5 +1,7 @@
 # ADR-003 — Night Pipeline Simplification (Phase 15.5)
 
+> **Path note (2026-09-27):** this ADR predates the `aero-1/` · `aero-2/` split. Bare `src/…`, `content/…`, `tools/…` and `scripts/…` paths below are relative to what is now `aero-1/`; paths that no longer exist anywhere are marked *(removed)* inline. The decision text itself is unchanged.
+
 > Status: Accepted. Phase 1+2+1.5a+1.5b+1.5c+7 landed 2026-05-21.
 > Phases 3-6 (productionize variant E + variant F + altitude-gate VIIRS) queued
 > for post-validation when Pi 5 hardware confirms there's frame budget.
@@ -139,7 +141,7 @@ light-on-ground. This is the post-ship Week-2 work.
 - `src/lib/world/shaders.ts` — base darken + drop shadow crush + contrast
 - `src/lib/world/compose.ts` — drop CartoDB setup + sync, drop base brightness lerp
 - `src/lib/world/cesium-setup.ts` — drop `CARTODB_DARK_URL` constant
-- `src/lib/night/index.ts` — drop `NIGHT_MAP_SMOOTHSTEP_FLOOR/CEIL` exports
+- `src/lib/night/index.ts` *(removed — inlined into `src/lib/utils.ts`)* — drop `NIGHT_MAP_SMOOTHSTEP_FLOOR/CEIL` exports
 - `src/lib/model/config-tree.svelte.ts` — drop `baseNightBrightness`, `nightAlpha`, `nightBrightness`, `nightContrast`
 - `src/lib/shell/window/Glass.svelte` — collapse 3 elements into 1 with `@property` for reactive opacity
 
@@ -147,4 +149,4 @@ light-on-ground. This is the post-ship Week-2 work.
 
 - Council that produced the P2 verdict: see `~/.claude/projects/-Users-rick-d-Developer-zyetaone-z-aero-window/memory/` for the 4-lens council records.
 - Pre-simplification architecture: `docs/ARCHITECTURE-original-framing.md` v1.
-- The vector roads paradigm shift: `src/routes/playground/night-lab/+page.svelte` Variant F.
+- The vector roads paradigm shift: `src/routes/playground/night-lab/+page.svelte` *(removed — `/playground` was deleted; `?lab=1` on `/` is the DEV lab)* Variant F.

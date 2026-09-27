@@ -1,11 +1,11 @@
 # State API Reference
 
 > **Historical reference — the file it documents no longer exists.**
-> `src/lib/app-state.svelte.ts` and `src/lib/simulation/` were replaced by
-> `src/lib/model/aero-window.svelte.ts` (root state) and
-> `src/lib/model/config-tree.svelte.ts` (the SSOT for every tunable number).
+> `src/lib/app-state.svelte.ts` *(removed)* and `src/lib/simulation/` *(removed)* were replaced by
+> `aero-1/src/lib/model/aero-window.svelte.ts` (root state) and
+> `aero-1/src/lib/model/config-tree.svelte.ts` (the SSOT for every tunable number).
 > Treat the rune *patterns* below as still-valid illustrations, but verify every
-> import path and API name against `src/lib/model/` before copying anything.
+> import path and API name against `aero-1/src/lib/model/` before copying anything.
 
 Quick reference for the state architecture using Svelte 5 runes.
 

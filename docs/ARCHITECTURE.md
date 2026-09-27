@@ -1,9 +1,10 @@
 # AeroWindow Architecture (canonical)
 
 > **Status (2026-08-15):** Live tree is authoritative. CODEMAPS may lag —
-> prefer this file + `AGENTS.md` + `src/lib/*` folders.
+> prefer this file + `AGENTS.md` + `aero-1/src/lib/*` folders.
+> Paths in this document are relative to the repo root; the app it describes is `aero-1/`.
 >
-> **Product:** Zyeta · **Engineered by:** rdtect (`src/lib/credits.ts`).  
+> **Product:** Zyeta · **Engineered by:** rdtect (`aero-1/src/lib/credits.ts`).  
 > Stakeholder view (architecture + terms + credits): **`/wiki`**.
 >
 > See also: `AGENTS.md` for day-to-day patterns (Cesium isolation, untrack rule).
@@ -153,7 +154,7 @@ Edge panes          pure view (no tab, no open-blind HUD)
 
 ### Role / chrome SSOT
 
-All shell chrome role gates live in **`src/lib/fleet/parallax.svelte.ts`**
+All shell chrome role gates live in **`aero-1/src/lib/fleet/parallax.svelte.ts`**
 next to `isGroupLeader`. Do not re-inline `role === 'left' || …` in
 components.
 
@@ -218,7 +219,7 @@ panel, for example): that's a signal you should be designing a
 a custom render-target — not a second Viewer.
 
 The invariant is enforced by convention. The single call site is
-`src/lib/world/CesiumViewer.svelte` and it's documented in that file's
+`aero-1/src/lib/world/CesiumViewer.svelte` and it's documented in that file's
 header comment.
 
 ## Reactive feature pattern
@@ -288,7 +289,7 @@ Three rules:
 > wrapper that builds the slice + resources from `this.#model` and
 > delegates. The `#scratchDest` field stays on the orchestrator
 > because it belongs to the per-viewer allocation lifetime. 8 tests
-> in `tests/lib/world/camera.test.ts` pin the math.
+> in `aero-1/tests/lib/world/camera.test.ts` pin the math.
 
 > **Phase 4 shipped**: `compose.ts` dropped to ~376 lines (was 670+).
 > It sits at **535** today and has been ~520 since mid-August — the
@@ -316,7 +317,7 @@ the `$effect` model cleanly — setup runs once, sync runs reactively.
 
 ## Three.js overlay
 
-The overlay (in `src/lib/world/three/`) holds **only** what Cesium
+The overlay (in `aero-1/src/lib/world/three/`) holds **only** what Cesium
 genuinely can't do:
 - **Wing** — camera-anchored SWA 737 GLB with yaw-stripped
   positioning for 3-Pi panorama continuity
