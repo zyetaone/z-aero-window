@@ -228,6 +228,16 @@ no-change poll is a plain `git fetch` that exits in ~2s; a rebuild + restart
 happens ONLY when a new release actually lands, so a push reaches the whole
 fleet within minutes.
 
+**Restarts are synchronised, fetches are not.** After building, the updater
+holds the restart until the first quarter-hour at or after the release commit's
+time plus 20 minutes (`apply_boundary`, unit-tested in
+`aero-1/tests/tools/apply-boundary.test.ts`). Every pane derives the same
+instant from the commit it just fetched and the clock it already shares, so a
+push switches all three panes within seconds instead of opening a ~16-minute
+window of mixed builds. A pane that finishes building after the boundary
+restarts immediately. `AERO_APPLY_LEAD_SEC=0` in `/etc/aero/config.env`
+disables the hold on a bench unit.
+
 `release` is fast-forwarded by CI only after check + tests + build pass on
 `main` (`.github/workflows/ci.yml`), so a red commit never reaches a Pi. On
 each real update the updater pulls → `bun install` → `bun run build` (compiles

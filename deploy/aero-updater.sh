@@ -5,7 +5,8 @@
 # Pulls CI-blessed code from git, installs dependencies, rebuilds, restarts
 # services, and VERIFIES the app came back — rolling back to the previous
 # commit on any failure (install, build, or post-restart health probe).
-# Runs as a systemd timer (daily) or on-demand.
+# Runs as a systemd timer (every 15 min) or on-demand. Restarts are held to
+# a wall-wide quarter-hour boundary so the three panes switch builds together.
 #
 # Deploy gate: tracks the `release` branch by default, which CI fast-forwards
 # ONLY after check + tests + build pass on main (.github/workflows/ci.yml).
@@ -192,6 +193,26 @@ fi
 
 # ─── Helpers ─────────────────────────────────────────────────────────────
 
+# The wall-wide apply boundary for a release, as a unix second.
+#
+# Three panes poll independently (15 min + 90 s jitter) and used to restart
+# the moment each one finished building, so every push opened a window of
+# up to ~16 minutes in which the wall ran two builds side by side. No
+# coordination protocol is needed to close it: every pane computes the same
+# boundary from the same two numbers — the release commit's committer time,
+# which git carries to all of them, and the clock they already share.
+#
+# boundary = first quarter-hour at or after (commit time + lead). The lead
+# covers the slowest poll (16.5 min) plus a build (~3 min) so that, in the
+# normal case, every pane has fetched and built BEFORE the boundary and they
+# restart within seconds of each other. A pane that finishes late restarts
+# at once — a straggler, which is no worse than today. Pure function of its
+# arguments, so it is unit-tested from aero-1/tests/tools.
+apply_boundary() {
+    local commit_ts="$1" lead="${2:-1200}" period=900
+    echo $(( ( (commit_ts + lead + period - 1) / period ) * period ))
+}
+
 restart_services() {
     systemctl restart aero-app.service 2>/dev/null || true
     systemctl restart aero-kiosk.service 2>/dev/null || true
@@ -343,6 +364,22 @@ if ! git diff --quiet "${LOCAL}" "${REMOTE}" -- deploy/ 2>/dev/null; then
     fi
 else
     log "deploy/ unchanged — units left as-is"
+fi
+
+# ─── 4c. Hold the restart to the wall-wide apply boundary ────────────────
+# Everything above (fetch, install, build, units) is local and invisible to
+# the passenger; only the restart changes the picture. See apply_boundary().
+# AERO_APPLY_LEAD_SEC=0 disables the hold for bench work.
+APPLY_LEAD_SEC="${AERO_APPLY_LEAD_SEC:-1200}"
+if (( APPLY_LEAD_SEC > 0 )); then
+    apply_at=$(apply_boundary "$(git log -1 --format=%ct HEAD)" "${APPLY_LEAD_SEC}")
+    now_ts=$(date +%s)
+    if (( now_ts < apply_at )); then
+        log "Built. Holding restart $(( apply_at - now_ts ))s until the wall-wide boundary $(date -d "@${apply_at}" '+%H:%M:%S' 2>/dev/null || echo "${apply_at}")"
+        sleep $(( apply_at - now_ts ))
+    else
+        log "Boundary $(date -d "@${apply_at}" '+%H:%M:%S' 2>/dev/null || echo "${apply_at}") already passed — restarting now (straggler)"
+    fi
 fi
 
 # ─── 5. Restart + verify ─────────────────────────────────────────────────
