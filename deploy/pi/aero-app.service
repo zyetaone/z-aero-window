@@ -33,6 +33,10 @@ EnvironmentFile=-/etc/aero/config.env
 Environment=NODE_ENV=production
 Environment=HOME=/home/__AERO_USER__
 Environment=PORT=3000
+# adapter-node caps request bodies at 512 KB by default, which turned every
+# media upload into a misleading 400 "expected multipart". The routes enforce
+# their own 50 MB cap after auth; this just stops the adapter cutting in first.
+Environment=BODY_SIZE_LIMIT=52428800
 
 # Serve-only — the unit must NEVER build. Building here meant a bad commit
 # put the Pi in a build-fail → Restart=always crash loop with a dark kiosk.

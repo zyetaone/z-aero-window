@@ -9,4 +9,5 @@
 #     with a cold shader cache on Monday morning.
 #
 # Format: m h dom mon dow user command
-0 3 * * 0 pi /bin/bash -c 'find /home/pi/.config/chromium/Default/GPUCache -mindepth 1 -delete 2>/dev/null; find /home/pi/.config/chromium/ShaderCache -mindepth 1 -delete 2>/dev/null; true'
+# __AERO_USER__ is substituted by install.sh (the fleet user is not `pi`).
+0 3 * * 0 __AERO_USER__ /bin/bash -c 'find /home/__AERO_USER__/.config/chromium/Default/GPUCache -mindepth 1 -delete 2>/dev/null; find /home/__AERO_USER__/.config/chromium/ShaderCache -mindepth 1 -delete 2>/dev/null; true'
