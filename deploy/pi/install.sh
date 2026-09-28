@@ -34,8 +34,20 @@ REPO_URL="${AERO_REPO_URL:-https://github.com/zyetaone/z-aero-window.git}"
 # Pass --branch main (or AERO_REPO_BRANCH=main) for a dev/test install.
 REPO_BRANCH="${AERO_REPO_BRANCH:-release}"
 INSTALL_DIR="/opt/aero-window"
-PI_USER="${SUDO_USER:-pi}"
-BUN_BIN="/home/${PI_USER}/.bun/bin/bun"
+# The service user. A fielded Pi's config.env is authoritative: the OTA path
+# (aero-updater.sh → --units-only) runs from systemd as root with NO SUDO_USER,
+# and the old `${SUDO_USER:-pi}` fallback rewrote every unit, the health cron
+# and the sudoers line for user `pi` on a Pi provisioned as `kiosk` — the app
+# then failed to start twice over (unknown user, no bun at /home/pi) and the
+# 15-minute retry kept re-breaking it. Fresh install: the sudo caller, then pi.
+PI_USER="$(command grep -oP '^AERO_USER=\K.+' /etc/aero/config.env 2>/dev/null || true)"
+# A config.env that predates the AERO_USER line: the installed unit knows.
+if [[ -z "${PI_USER}" && -r /etc/systemd/system/aero-app.service ]]; then
+	PI_USER="$(command grep -oP '^User=\K.+' /etc/systemd/system/aero-app.service 2>/dev/null || true)"
+fi
+PI_USER="${PI_USER:-${SUDO_USER:-pi}}"
+BUN_BIN="$(command grep -oP '^AERO_BUN_BIN=\K.+' /etc/aero/config.env 2>/dev/null || true)"
+BUN_BIN="${BUN_BIN:-/home/${PI_USER}/.bun/bin/bun}"
 # Pre-git hand-copied layout found on the first fielded Pi. Only read from —
 # never modified or removed — so a failed migration leaves it intact.
 LEGACY_DIR="/home/${PI_USER}/aero-window"
@@ -313,6 +325,23 @@ if [[ -z "${EXISTING_WIFI_RESET_TOKEN}" ]]; then
 	fi
 fi
 
+# Admin bearer for every mutating admin endpoint (fly-to, push mode/scene,
+# OTA, content upload). AUTO-GENERATED for the same reason as the two above:
+# requireAdminToken is fail-closed, so the empty value a fresh install used to
+# write meant a brand-new wall booted, looked right, and refused every admin
+# write with 503 until someone hand-edited config.env. The Pi's own browser
+# reads it back through the loopback-only /api/internal/token route; anyone
+# else pastes it once (`command grep AERO_ADMIN_TOKEN /etc/aero/config.env`).
+if [[ -z "${EXISTING_ADMIN_TOKEN}" ]]; then
+	if [[ -n "${AERO_ADMIN_TOKEN:-}" ]]; then
+		EXISTING_ADMIN_TOKEN="${AERO_ADMIN_TOKEN}"
+	elif command -v openssl >/dev/null 2>&1; then
+		EXISTING_ADMIN_TOKEN="$(openssl rand -hex 24)"
+	else
+		EXISTING_ADMIN_TOKEN="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+	fi
+fi
+
 # Cesium Ion token, served at RUNTIME by /api/internal/ion-token instead of
 # being inlined into the client bundle at build time. Seeded, in order, from:
 # an existing config.env value, the CESIUM_ION_TOKEN env of this run, or the
@@ -396,6 +425,28 @@ if [[ -f /etc/aero/config.env ]] && ! command grep -q '^AERO_FLEET_TOKEN=.' /etc
 	echo "AERO_FLEET_TOKEN=${ADDED_FLEET_TOKEN}" >> /etc/aero/config.env
 	echo "  added missing AERO_FLEET_TOKEN to /etc/aero/config.env (generated)"
 fi
+# The updater runs bun as AERO_USER and this installer reads it back on the
+# OTA path; a config.env from before either line existed gets both.
+if [[ -f /etc/aero/config.env ]] && ! command grep -q '^AERO_USER=.' /etc/aero/config.env; then
+	echo "AERO_USER=${PI_USER}" >> /etc/aero/config.env
+	echo "  added missing AERO_USER=${PI_USER} to /etc/aero/config.env"
+fi
+if [[ -f /etc/aero/config.env ]] && ! command grep -q '^AERO_BUN_BIN=.' /etc/aero/config.env; then
+	echo "AERO_BUN_BIN=${BUN_BIN}" >> /etc/aero/config.env
+	echo "  added missing AERO_BUN_BIN=${BUN_BIN} to /etc/aero/config.env"
+fi
+# Same for the admin token: a Pi imaged while install.sh wrote it empty has
+# 503'd every admin write since. Generated here, it becomes 401-until-pasted.
+if [[ -f /etc/aero/config.env ]] && ! command grep -q '^AERO_ADMIN_TOKEN=.' /etc/aero/config.env; then
+	if command -v openssl >/dev/null 2>&1; then
+		ADDED_ADMIN_TOKEN="$(openssl rand -hex 24)"
+	else
+		ADDED_ADMIN_TOKEN="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+	fi
+	sed -i '/^AERO_ADMIN_TOKEN=$/d' /etc/aero/config.env
+	echo "AERO_ADMIN_TOKEN=${ADDED_ADMIN_TOKEN}" >> /etc/aero/config.env
+	echo "  added missing AERO_ADMIN_TOKEN to /etc/aero/config.env (generated)"
+fi
 
 # Media keys, same append-only treatment and for the same reason: media-store
 # and usb-import read these from the environment, and a Pi imaged before they
@@ -458,6 +509,19 @@ for unit in aero-xserver.service aero-app.service aero-kiosk.service aero-update
 		"${SCRIPT_DIR}/${unit}" > "/etc/systemd/system/${unit}"
 	chmod 644 "/etc/systemd/system/${unit}"
 done
+# /run/aero holds the thermal state health-check.sh writes for the kiosk's
+# /api/internal/thermal. /run is a root-owned tmpfs, the cron runs as the
+# service user, and its `mkdir -p` failed silently — so the load-shed never
+# fired on any Pi while the heartbeat kept reporting "shed". tmpfiles.d
+# recreates it on every boot, owned by the user that writes it.
+cat > /etc/tmpfiles.d/aero.conf <<EOF
+d /run/aero 0755 ${PI_USER} ${PI_USER} -
+EOF
+systemd-tmpfiles --create /etc/tmpfiles.d/aero.conf >/dev/null 2>&1 || install -d -m 755 -o "${PI_USER}" -g "${PI_USER}" /run/aero
+# The heartbeat store appends here as the service user; /var/log is root's,
+# so without this every self-heartbeat logged EACCES once a minute.
+[[ -e /var/log/aero-heartbeats.jsonl ]] || install -m 644 -o "${PI_USER}" -g "${PI_USER}" /dev/null /var/log/aero-heartbeats.jsonl
+chown "${PI_USER}:${PI_USER}" /var/log/aero-heartbeats.jsonl 2>/dev/null || true
 # The updater timer has no placeholders — copy verbatim.
 install -m 644 "${SCRIPT_DIR}/aero-updater.timer" /etc/systemd/system/aero-updater.timer
 
@@ -540,7 +604,10 @@ fi
 
 # Cron entries — written to /etc/cron.d so they're package-level, not user-level.
 install -m 644 "${SCRIPT_DIR}/nightly-reboot.cron"       /etc/cron.d/aero-nightly-reboot
-install -m 644 "${SCRIPT_DIR}/weekly-cache-clear.cron"   /etc/cron.d/aero-weekly-cache-clear
+# Templated on the service user: the shipped file used to hardcode `pi` and
+# /home/pi, so cron logged "bad username" and never cleared a kiosk-user Pi.
+sed "s|__AERO_USER__|${PI_USER}|g" "${SCRIPT_DIR}/weekly-cache-clear.cron" > /etc/cron.d/aero-weekly-cache-clear
+chmod 644 /etc/cron.d/aero-weekly-cache-clear
 
 # Pen-drive automount. Pi OS Lite has no desktop, so nothing mounts a stick
 # unless we do; /media/aero is what AERO_USB_DIR defaults to in the app.
