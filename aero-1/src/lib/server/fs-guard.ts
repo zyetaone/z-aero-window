@@ -30,7 +30,19 @@ export interface SafeResolveResult {
 }
 
 export function safeResolveWithin(root: string, subPath: string): SafeResolveResult {
-	const rootDir = root.replace(/\/+$/, '') + '/';
+	// The root is absolutised FIRST. `resolve(rootDir, subPath)` returns an
+	// absolute path, so a RELATIVE root left the startsWith below comparing an
+	// absolute string against a relative prefix — never true, so every input came
+	// back `forbidden` even when the file existed inside the root. Verified: a
+	// relative root denied a real file within it.
+	//
+	// Not hypothetical: /api/bundle/[hash] passes
+	// `process.env.AERO_LAN_CACHE_DIR ?? './data/lan-cache'`, and
+	// AERO_LAN_CACHE_DIR ships EMPTY in .env.example, so the relative default is
+	// what the Pi runs. readLocal collapses `forbidden` and `notFound` to the
+	// same 404, so it failed silently — and the one test stubbed an absolute
+	// path, which is exactly why nothing caught it.
+	const rootDir = resolve(root).replace(/\/+$/, '') + '/';
 	const filePath = resolve(rootDir, subPath);
 	if (!filePath.startsWith(rootDir)) return { filePath, notFound: false, forbidden: true };
 	if (!existsSync(filePath)) return { filePath, notFound: true, forbidden: false };

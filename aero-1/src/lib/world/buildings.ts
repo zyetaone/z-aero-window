@@ -79,6 +79,13 @@ export function resetBuildingsViewerState(): void {
 	_offlineTier = false;
 	_show.reset();
 	_nightFactor.reset();
+	// Module-singleton and CAMERA-derived, so exactly the state AGENTS.md's
+	// init-reset rule is about: retained across a remount they carry the previous
+	// viewer's city brightness into the new one. The viewer-lifecycle test cannot
+	// see this — it asserts the module is REGISTERED, not that its reset is
+	// complete.
+	_cityBrightness = 1;
+	_cityBrightnessTimer = 0;
 }
 registerViewerTeardown('buildings', resetBuildingsViewerState);
 

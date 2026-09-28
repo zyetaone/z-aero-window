@@ -31,10 +31,20 @@ export const GET: RequestHandler = ({ request }) => {
 		return json({ online: false }, { headers: lanCorsHeaders(origin) });
 	}
 	const staleMs = Date.now() - status.lastSeen;
-	return json(
-		{ ...status, online: staleMs < 10_000, staleMs },
-		{ headers: lanCorsHeaders(origin) },
-	);
+	// This GET is token-free and CORS-reflected to `*.local` exactly like
+	// /api/fleet/heartbeat's, and `status` is the browser's own POST body — which
+	// carries `lastErrors`, raw aero-app journal lines, plus commit, errorCount
+	// and the tick/frame percentiles.
+	//
+	// /api/fleet/heartbeat states the policy for itself and strips the field:
+	// "lastError carries a raw aero-app journal line ... GET is token-free ... so
+	// it must not leak to any LAN client". Two sibling UNAUTHENTICATED read
+	// routes, opposite policies, on the same class of data. Useful to an operator
+	// with a shell on the device (the POST caller already has it); no business
+	// going out over an unauthenticated GET.
+	const pub = { ...status, online: staleMs < 10_000, staleMs };
+	delete pub.lastErrors;
+	return json(pub, { headers: lanCorsHeaders(origin) });
 };
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {

@@ -166,8 +166,21 @@ export const NIGHT_PALETTE = {
 	 *   0.5            8.8              61.9
 	 *
 	 * So the knob works and is the right one to reach for — but in the darker
-	 * direction. Given the display was reported as too dim, 0.8 stays. Drop to
-	 * 0.5 only if the deep-night VIIRS wash ever reads too STRONG.
+	 * direction. Given the display was reported as too dim, the ceiling stayed put.
+	 * Drop it only if the deep-night VIIRS wash ever reads too STRONG.
+	 *
+	 * ⚠ STALE NUMBERS, AND THIS IS THE SECOND TIME IN THIS BLOCK. The table
+	 * above describes a ceiling of 0.8, and an operator reading "drop to 0.5"
+	 * against the value actually in the file (0.15) would be making it 3.3x
+	 * BRIGHTER while believing they were making it darker. The block's own note
+	 * records that the prose previously said "capping at 0.5" while the value had
+	 * already moved to 0.8, and that "enforcement was written against the VALUE".
+	 * The prose drifted again, in the same block.
+	 *
+	 * The measured figures (55.5 / 92.6) were taken at the 0.8 ceiling and
+	 * describe a band this file no longer operates in: history, not a spec. The
+	 * RATIO is the part that generalises, not the absolute numbers. Re-measure
+	 * before trusting them.
 	 */
 	/**
 	 * VIIRS night-lights fill (not structure).
@@ -178,7 +191,7 @@ export const NIGHT_PALETTE = {
 	 * is the shipped night-show band; structure comes from building windows
 	 * and the z18 road mask. VIIRS is "where is the city" fill only.
 	 *
-	 * 0.6 → 0.30 → 0.20 → 0.14: zoom-8 VIIRS is ~583 m/px; at 30k ft one
+	 * 0.8 → 0.6 → 0.30 → 0.20 → 0.15: zoom-8 VIIRS is ~583 m/px; at 30k ft one
 	 * sample spans ~88 screen px. It cannot resolve roads/buildings — only a
 	 * soft city blob. Lower ceiling = less "soaky" amber puddle; roads carry
 	 * the city, VIIRS only seeds where light is (mask + faint halo).

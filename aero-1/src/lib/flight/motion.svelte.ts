@@ -86,7 +86,31 @@ export function motionStep(delta: number, ctx: SimulationContext): void {
 }
 
 function tickInternal(_delta: number, ctx: SimulationContext): void {
-	const { time: t, heading, altitude, turbulenceLevel, camera, warpFactor } = ctx;
+	// `t` is the WALL SECOND, not `ctx.time`. This was `time: t`, and it is the
+	// most consequential `ctx.time` consumer in the tree: every sin() below —
+	// turbulence, breathing, engine vibe, chatter — is a function of it, and
+	// those reach the audience as the whole-scene CSS transform in Pane.svelte.
+	//
+	// `ctx.time` is `#time = (#time + delta) % 3600` in AeroWindow, where
+	// `delta` is the game-loop's CLAMPED frame delta (Math.min(dt, 0.1)). The
+	// clamp is right — it stops a stalled frame flinging the sim forward — but it
+	// means `ctx.time` is not the wall clock. On a pane at 3 fps, which is what
+	// aero-window.svelte says the Pi panel actually runs at, `ctx.time` advances
+	// 0.1 s per 0.33 s of real time: 0.3x. The 22 s breathing cycle then takes
+	// 73 wall seconds, and the engine vibe, nominally 7 Hz, runs at 2.1 Hz.
+	//
+	// Worse than slow: each pane runs at ITS OWN rate, so three panes at
+	// different frame rates breathe out of phase and the cabin motion does not
+	// line up across the seam. The product's central claim, failing on the
+	// hardware the fleet actually runs.
+	//
+	// The line below already fixed this class for the OTHER time input in this
+	// function ("flight advances heading on wallDeltaSec, so bank turnRate must
+	// use the same clock"). The oscillator phases were left on the accumulator.
+	// Deriving from the clock also removes the `% 3600` hour-boundary pop, since
+	// 3600 is not a multiple of breathingPeriod (22).
+	const t = ctx.wallTimeSec;
+	const { heading, altitude, turbulenceLevel, camera, warpFactor } = ctx;
 	const m = camera.motion;
 	const turbMult = m.turbulenceMultipliers[turbulenceLevel];
 	// Wall-clock step when available (same class as orbit/director): flight

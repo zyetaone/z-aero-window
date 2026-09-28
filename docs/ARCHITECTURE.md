@@ -103,7 +103,9 @@ SvelteKit
     ↓
 AeroWindow              (Svelte 5 orchestration + reactive state)
     ↓
-CesiumViewer.svelte      (the ONLY place `new Cesium.Viewer()` is called)
+compose.ts               (the ONLY place `new Cesium.Viewer()` is called —
+                          in the CesiumManager constructor; CesiumViewer.svelte
+                          is the only file that runtime-imports Cesium)
     ↓
 Viewer
     ↓
@@ -219,8 +221,12 @@ panel, for example): that's a signal you should be designing a
 a custom render-target — not a second Viewer.
 
 The invariant is enforced by convention. The single call site is
-`aero-1/src/lib/world/CesiumViewer.svelte` and it's documented in that file's
-header comment.
+`new CesiumModule.Viewer(...)` in the `CesiumManager` constructor at
+`aero-1/src/lib/world/compose.ts:134` — NOT in `CesiumViewer.svelte`, which is
+the only file that runtime-imports Cesium. Cesium *isolation* and
+single-Viewer *ownership* are two different rules pinned to two different files,
+and this doc previously conflated them, pointing an auditor at the file that
+does neither.
 
 ## Reactive feature pattern
 

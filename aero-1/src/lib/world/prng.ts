@@ -32,9 +32,18 @@
  * Replace any `Math.random()` in a build-once-and-never-regen path
  * (star buffer init, cluster position generation, etc).
  *
- * Do NOT replace per-frame randomness (drift gust noise, twinkle
- * phase offsets WITHIN a star) — that should stay live so individual
- * Pis don't synchronise their per-frame oscillation.
+ * Do NOT introduce live randomness into a rendering path (drift gust noise,
+ * twinkle phase offsets WITHIN a star). Every such value must be a PURE FUNCTION
+ * OF THE WALL CLOCK via daySeed()/mulberry32(), because three panes form one
+ * window and never talk to each other — per-frame randomness desynchronises them
+ * and the seam shimmers.
+ *
+ * This line previously said the opposite ("that should stay live so individual
+ * Pis don't synchronise their per-frame oscillation"), which INVERTS invariant
+ * #4 and contradicts hash-palette.ts, clouds/wind.ts, Wing.svelte and
+ * flight.svelte.ts, all of which derive from the clock instead. It is the file
+ * a determinism sweep reads first, so it was instructing the reader to break the
+ * rule it exists to support.
  */
 
 /** mulberry32 — 32-bit deterministic PRNG. Returns uniform [0, 1). */

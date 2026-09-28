@@ -219,8 +219,18 @@ export function tickLightning(delta: number, weather: WeatherSlice, wallSec: num
 
 /** Tear down the post-process stage. Idempotent. */
 export function destroyLightning(): void {
-	if (!_stage) return;
-	if (_viewer && !_viewer.isDestroyed?.()) {
+	// The Cesium-handle removal is conditional; the RESET IS NOT. This used to
+	// early-return on `!_stage`, which is reachable: CesiumManager.start() awaits
+	// three network setups before mountLightning, so a first attempt failing
+	// during any of them calls destroy() with no stage — and every reset below
+	// then survived into the next attempt.
+	//
+	// The only thing between that and the non-terminating strike loop this
+	// file's own header describes was the `false -> true` transition guard in
+	// tick. A teardown that skips its own resets because there is nothing to tear
+	// down is the wrong default; every other registered teardown in world/ resets
+	// unconditionally.
+	if (_stage && _viewer && !_viewer.isDestroyed?.()) {
 		_viewer.scene.postProcessStages.remove(_stage);
 	}
 	_stage = null;
