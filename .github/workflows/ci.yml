@@ -22,6 +22,11 @@ jobs:
   build-and-check:
     name: Type-check & Build
     runs-on: ubuntu-latest
+    # Without this GitHub's default is 360 minutes, so a wedged step — a smoke
+    # waiting on a browser that never binds, a build that stalls on a fetch —
+    # occupies a runner for six hours before anyone is told. Generous against
+    # the real chain (minutes) and short enough to be a signal.
+    timeout-minutes: 25
     # v1 moved from the repo root into aero-1/ when the tree split into two
     # applications with shared assets (data/, deploy/) at the top. Every step
     # in this job runs against that app, not the root, which no longer has a
@@ -40,7 +45,19 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          # Pinned, and the same pin as the aero-2 job below — for the same
+          # reason spelled out there: a floating toolchain means a green build
+          # can turn red with no commit, and the toolchain is then the only
+          # variable left. That reasoning was written down two jobs down and
+          # applied to the pre-ship rewrite while THIS job, the one that decides
+          # what the fleet deploys, floated.
+          #
+          # It also means CI and local disagreed in the other direction: every
+          # local run — all 1134 aero-1 tests, both apps' gates, both smoke
+          # suites — was on 1.3.14, so `latest` was verifying a toolchain
+          # nobody had verified against. 1.3.14 is the version the tests pass
+          # on locally.
+          bun-version: 1.3.14
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -79,7 +96,11 @@ jobs:
           # A second request proves the process survived the first, which is
           # precisely what the middleware-contract bug broke.
           curl -fsS --max-time 5 -o /dev/null http://localhost:3000/api/devices
-          kill "$SERVER_PID"
+          # `|| true`: GitHub runs these with `bash -e`, so a kill of an
+          # already-dead process would fail a step whose assertions PASSED.
+          # That is not hypothetical — the server dying is precisely what the
+          # three curls above exist to catch.
+          kill "$SERVER_PID" 2>/dev/null || true
 
       # The curls above prove the SERVER works. They cannot prove a PAGE does:
       # `ssr = false` means the static shell returns 200 whether or not the app
@@ -140,6 +161,9 @@ jobs:
   aero-2:
     name: aero-2 — Type-check & Test
     runs-on: ubuntu-latest
+    # Same reasoning as the job above. aero-2's smoke starts its own server AND
+    # its own browser, so a bind failure here is the likeliest hang in the file.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: aero-2
@@ -204,7 +228,11 @@ jobs:
           curl -fsS --max-time 5 -o /dev/null http://localhost:3000/
           # Second request proves the process survived the first.
           curl -fsS --max-time 5 http://localhost:3000/api/tiles/health
-          kill "$SERVER_PID"
+          # `|| true`: GitHub runs these with `bash -e`, so a kill of an
+          # already-dead process would fail a step whose assertions PASSED.
+          # That is not hypothetical — the server dying is precisely what the
+          # three curls above exist to catch.
+          kill "$SERVER_PID" 2>/dev/null || true
 
       # Loads every route in a real browser and asserts it rendered — the check
       # no typecheck and no non-mounting unit test can perform. aero-2's own
@@ -238,6 +266,9 @@ jobs:
     needs: [build-and-check, aero-2]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Three API calls, one ref move. Anything slower is a GitHub outage, not a
+    # slow promotion, and it must not sit on a runner.
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
