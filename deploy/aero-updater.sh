@@ -147,6 +147,40 @@ apply_boundary() {
     echo $(( ( (commit_ts + lead + period - 1) / period ) * period ))
 }
 
+# How long to hold, and what to do instead. PURE: arguments in, one token out,
+# no clock, no filesystem, no globals. Extracted beside apply_boundary for the
+# same reason that one is: the hold decides whether the fleet stays in sync or
+# one pane restarts early, and it is all arithmetic that can be pinned without
+# running the updater on a Pi.
+#
+# Prints one of:
+#   hold:<seconds>  boundary is ahead and inside the budget — sleep
+#   now             boundary already passed — restart (a normal straggler)
+#   overbudget      further out than the budget — restart, and the caller logs
+#                   the skew, because over-budget is only reachable via a clock
+#                   BEHIND the commit's
+#
+# The asymmetry matters: `now` is ordinary and expected (one pane built late),
+# while `overbudget` means this pane's clock disagrees with the commit's, and
+# unclamped it would sleep for months and never update again.
+#
+# The lead is a parameter rather than hardcoded so the caller and the test use
+# the SAME number; a hardcoded 1200 here would silently disagree with
+# AERO_APPLY_LEAD_SEC the day anyone changed it.
+hold_decision() {
+    local commit_ts="$1" now_ts="$2" lead="$3" budget="$4"
+    local apply_at hold_sec
+    apply_at=$(apply_boundary "${commit_ts}" "${lead}")
+    hold_sec=$(( apply_at - now_ts ))
+    if (( hold_sec <= 0 )); then
+        echo "now"
+    elif (( hold_sec > budget )); then
+        echo "overbudget"
+    else
+        echo "hold:${hold_sec}"
+    fi
+}
+
 restart_services() {
     systemctl restart aero-app.service 2>/dev/null || true
     systemctl restart aero-kiosk.service 2>/dev/null || true
@@ -535,9 +569,13 @@ elif (( APPLY_LEAD_SEC > 0 )); then
     apply_at=$(apply_boundary "${commit_ts}" "${APPLY_LEAD_SEC}")
     now_ts=$(date +%s)
     hold_sec=$(( apply_at - now_ts ))
-    if (( hold_sec <= 0 )); then
+    # The branch is DECIDED by the pure function so it can be unit-tested, and
+    # `hold_sec` is still used for the log lines — the two must agree, and the
+    # test pins that they do.
+    decision=$(hold_decision "${commit_ts}" "${now_ts}" "${APPLY_LEAD_SEC}" "${APPLY_BUDGET_SEC}")
+    if [[ "${decision}" == "now" ]]; then
         log "Boundary $(date -d "@${apply_at}" '+%H:%M:%S' 2>/dev/null || echo "${apply_at}") already passed — restarting now (straggler)"
-    elif (( hold_sec > APPLY_BUDGET_SEC )); then
+    elif [[ "${decision}" == "overbudget" ]]; then
         # Not a formatting concern. hold = (lead .. lead+899) − skew, so at the
         # defaults this is reachable ONLY by a negative skew: a local clock
         # behind the commit's. That is the whole point — "restarting now" is
