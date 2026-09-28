@@ -7,6 +7,12 @@
 #   - systemd + the kiosk service brings the app back up in <30s.
 #   - 04:00 is after the dim-schedule fires at 02:00 and before the
 #     bright-schedule at 06:00, so the reboot happens while the display is dim.
+#   - Waits (up to 50 min) for a running OTA first. A reboot mid-build left
+#     HEAD at the new commit with no build/ — every later poll said "already
+#     up to date" and the pane stayed dark. The updater now repairs that too,
+#     but not racing it is cheaper than repairing it.
 #
 # Format: m h dom mon dow user command
-0 4 * * * root /sbin/shutdown -r now
+# (A running Type=oneshot unit reports `activating`, which `is-active --quiet`
+#  treats as inactive — hence the prefix match, not the exit code.)
+0 4 * * * root /bin/bash -c 'for i in $(seq 1 50); do [[ "$(systemctl is-active aero-updater.service 2>/dev/null)" == activ* ]] || break; sleep 60; done; /sbin/shutdown -r now'

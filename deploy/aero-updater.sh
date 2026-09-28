@@ -95,10 +95,129 @@ resolve_app_dir
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"; }
 
+# bun runs as the service user, never root. This unit has no User=, so
+# `bun install` / `bun run build` used to leave node_modules/, .svelte-kit/,
+# build/ and build.prev/ root-owned; the next full `install.sh` re-provision
+# (which builds as the user) then died on EACCES at vite's rimraf of build/.
+as_app_user() {
+    if [[ -n "${AERO_USER:-}" && "${EUID}" -eq 0 ]]; then
+        sudo -u "${AERO_USER}" -H "$@"
+    else
+        "$@"
+    fi
+}
+# Hand the user anything an earlier root-run updater left behind.
+reown_app_tree() {
+    [[ -n "${AERO_USER:-}" && "${EUID}" -eq 0 ]] || return 0
+    local d
+    for d in node_modules .svelte-kit build build.prev; do
+        [[ -e "${APP_DIR}/${d}" ]] && chown -R "${AERO_USER}:${AERO_USER}" "${APP_DIR}/${d}" 2>/dev/null || true
+    done
+}
+
+# A release that rolled back is not retried every 15 minutes forever: the
+# poisoned sha is appended here on every rollback and skipped once it has
+# rolled back twice, so a bad release costs two builds per pane, not one per poll.
+BAD_RELEASE_FILE="/var/lib/aero/bad-release"
+
 CHECK_ONLY=false
 if [[ "${1:-}" == "--check" ]]; then CHECK_ONLY=true; fi
 
 log "=== Aero Updater starting (branch: ${BRANCH}) ==="
+
+# ─── Helpers ─────────────────────────────────────────────────────────────
+
+# The wall-wide apply boundary for a release, as a unix second.
+#
+# Three panes poll independently (15 min + 90 s jitter) and used to restart
+# the moment each one finished building, so every push opened a window of
+# up to ~16 minutes in which the wall ran two builds side by side. No
+# coordination protocol is needed to close it: every pane computes the same
+# boundary from the same two numbers — the release commit's committer time,
+# which git carries to all of them, and the clock they already share.
+#
+# boundary = first quarter-hour at or after (commit time + lead). The lead
+# covers the slowest poll (16.5 min) plus a build (~3 min) so that, in the
+# normal case, every pane has fetched and built BEFORE the boundary and they
+# restart within seconds of each other. A pane that finishes late restarts
+# at once — a straggler, which is no worse than today. Pure function of its
+# arguments, so it is unit-tested from aero-1/tests/tools.
+apply_boundary() {
+    local commit_ts="$1" lead="${2:-1200}" period=900
+    echo $(( ( (commit_ts + lead + period - 1) / period ) * period ))
+}
+
+restart_services() {
+    systemctl restart aero-app.service 2>/dev/null || true
+    systemctl restart aero-kiosk.service 2>/dev/null || true
+}
+
+# Probe the app's own status endpoint. curl -f treats server.ts's
+# "no build found" 503 as failure, so a half-written build/ can't pass.
+# 12 × 5s = up to 60s for Bun + SvelteKit handler to come up.
+probe_health() {
+    local i
+    for ((i = 1; i <= 12; i++)); do
+        if curl -fsS --max-time 3 "${PROBE_URL}" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 5
+    done
+    return 1
+}
+
+# Snapshot / restore the last known-good build.
+#
+# `bun run build` DESTROYS build/ before it writes: @sveltejs/adapter-node
+# calls `builder.rimraf(out)` as its first act (verified against 5.5.7,
+# index.js line 32). So the old rollback log line — "previous build/ still on
+# disk" — was false. A failed rollback build left the device with NO build at
+# all, which server.ts answers with exit 1, which under Restart=always is a
+# crash loop with nothing to recover to.
+#
+# 34 MB for v1, 5.7 MB for aero-2. Cheap insurance.
+snapshot_build() {
+    [[ -d "${APP_DIR}/build" ]] || return 0
+    rm -rf "${APP_DIR}/build.prev"
+    cp -a "${APP_DIR}/build" "${APP_DIR}/build.prev" 2>/dev/null \
+        || log "WARN: could not snapshot build/ — rollback will have no fallback"
+}
+
+restore_build() {
+    [[ -d "${APP_DIR}/build.prev" ]] || return 1
+    rm -rf "${APP_DIR}/build"
+    cp -a "${APP_DIR}/build.prev" "${APP_DIR}/build"
+}
+
+# Full rollback: previous commit + reinstall + rebuild + restart + verify.
+# Wired to EVERY failure class (install, build, post-restart probe) — the
+# old build-only rollback let a builds-fine-crashes-at-runtime commit ship,
+# and a double install failure left HEAD updated with a stale build
+# ("already up to date" on the next run while broken).
+rollback() {
+    log "ERROR: $1 — rolling back to ${LOCAL:0:8}"
+    mkdir -p "$(dirname "${BAD_RELEASE_FILE}")" && echo "${REMOTE}" >> "${BAD_RELEASE_FILE}"
+    git reset --hard "${LOCAL}" 2>&1 | tee -a "${LOG_FILE}"
+    # The revert may have moved the app back to the git root, so ask again
+    # rather than trusting the answer from before the reset.
+    resolve_app_dir
+    reown_app_tree
+    ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || true
+    if ! ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}"; then
+        if restore_build; then
+            log "WARN: rollback build failed — restored the pre-update build/"
+        else
+            log "CRITICAL: rollback build failed and no build.prev to restore — device has no build/"
+        fi
+    fi
+    restart_services
+    if probe_health; then
+        log "Rollback verified — serving ${LOCAL:0:8}"
+    else
+        log "CRITICAL: health probe failed even after rollback — operator attention needed"
+    fi
+    exit 1
+}
 
 # ─── 1. Check for updates ────────────────────────────────────────────────
 
@@ -177,7 +296,38 @@ LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse "${SOURCE}/${BRANCH}")
 
 if [[ "${LOCAL}" == "${REMOTE}" ]]; then
+    # THE STUCK STATE this used to hide: an update killed between adapter-node's
+    # rimraf of build/ and the end of `vite build` (04:00 reboot, power cut,
+    # TimeoutStartSec) leaves HEAD already at the tip with no build/. Every
+    # later poll landed here, said "up to date", and the pane stayed dark —
+    # aero-app's ConditionPathExists skips it and nothing ever rebuilt.
+    if [[ ! -f "${APP_DIR}/build/index.js" ]]; then
+        log "HEAD is current but ${APP_DIR}/build/index.js is MISSING — repairing"
+        if restore_build; then
+            log "Restored build.prev; rebuilding for the current commit"
+        fi
+        reown_app_tree
+        ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || true
+        if ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}"; then
+            log "Rebuilt ${LOCAL:0:8}"
+        elif restore_build; then
+            log "WARN: rebuild failed — serving the restored build.prev"
+        else
+            log "CRITICAL: rebuild failed and no build.prev — device still has no build/"
+        fi
+        restart_services
+        probe_health && log "Repaired — serving ${LOCAL:0:8}" || log "CRITICAL: health probe failed after repair"
+        exit 0
+    fi
     log "Already up to date (${LOCAL:0:8})"
+    exit 0
+fi
+
+# Two strikes, not one: rollback() also fires on a transient `bun install`
+# failure (a network blip), and one of those must not ban a release until the
+# next one lands. The second rollback of the same sha does.
+if [[ -f "${BAD_RELEASE_FILE}" ]] && (( $(command grep -cxF "${REMOTE}" "${BAD_RELEASE_FILE}" 2>/dev/null || echo 0) >= 2 )); then
+    log "Skipping ${REMOTE:0:8}: it rolled back twice on this pane (${BAD_RELEASE_FILE}); waiting for a newer release"
     exit 0
 fi
 
@@ -198,98 +348,6 @@ if [[ "${CHECK_ONLY}" == true ]]; then
     log "Check-only mode — not applying"
     exit 0
 fi
-
-# ─── Helpers ─────────────────────────────────────────────────────────────
-
-# The wall-wide apply boundary for a release, as a unix second.
-#
-# Three panes poll independently (15 min + 90 s jitter) and used to restart
-# the moment each one finished building, so every push opened a window of
-# up to ~16 minutes in which the wall ran two builds side by side. No
-# coordination protocol is needed to close it: every pane computes the same
-# boundary from the same two numbers — the release commit's committer time,
-# which git carries to all of them, and the clock they already share.
-#
-# boundary = first quarter-hour at or after (commit time + lead). The lead
-# covers the slowest poll (16.5 min) plus a build (~3 min) so that, in the
-# normal case, every pane has fetched and built BEFORE the boundary and they
-# restart within seconds of each other. A pane that finishes late restarts
-# at once — a straggler, which is no worse than today. Pure function of its
-# arguments, so it is unit-tested from aero-1/tests/tools.
-apply_boundary() {
-    local commit_ts="$1" lead="${2:-1200}" period=900
-    echo $(( ( (commit_ts + lead + period - 1) / period ) * period ))
-}
-
-restart_services() {
-    systemctl restart aero-app.service 2>/dev/null || true
-    systemctl restart aero-kiosk.service 2>/dev/null || true
-}
-
-# Probe the app's own status endpoint. curl -f treats server.ts's
-# "no build found" 503 as failure, so a half-written build/ can't pass.
-# 12 × 5s = up to 60s for Bun + SvelteKit handler to come up.
-probe_health() {
-    local i
-    for ((i = 1; i <= 12; i++)); do
-        if curl -fsS --max-time 3 "${PROBE_URL}" >/dev/null 2>&1; then
-            return 0
-        fi
-        sleep 5
-    done
-    return 1
-}
-
-# Snapshot / restore the last known-good build.
-#
-# `bun run build` DESTROYS build/ before it writes: @sveltejs/adapter-node
-# calls `builder.rimraf(out)` as its first act (verified against 5.5.7,
-# index.js line 32). So the old rollback log line — "previous build/ still on
-# disk" — was false. A failed rollback build left the device with NO build at
-# all, which server.ts answers with exit 1, which under Restart=always is a
-# crash loop with nothing to recover to.
-#
-# 34 MB for v1, 5.7 MB for aero-2. Cheap insurance.
-snapshot_build() {
-    [[ -d "${APP_DIR}/build" ]] || return 0
-    rm -rf "${APP_DIR}/build.prev"
-    cp -a "${APP_DIR}/build" "${APP_DIR}/build.prev" 2>/dev/null \
-        || log "WARN: could not snapshot build/ — rollback will have no fallback"
-}
-
-restore_build() {
-    [[ -d "${APP_DIR}/build.prev" ]] || return 1
-    rm -rf "${APP_DIR}/build"
-    cp -a "${APP_DIR}/build.prev" "${APP_DIR}/build"
-}
-
-# Full rollback: previous commit + reinstall + rebuild + restart + verify.
-# Wired to EVERY failure class (install, build, post-restart probe) — the
-# old build-only rollback let a builds-fine-crashes-at-runtime commit ship,
-# and a double install failure left HEAD updated with a stale build
-# ("already up to date" on the next run while broken).
-rollback() {
-    log "ERROR: $1 — rolling back to ${LOCAL:0:8}"
-    git reset --hard "${LOCAL}" 2>&1 | tee -a "${LOG_FILE}"
-    # The revert may have moved the app back to the git root, so ask again
-    # rather than trusting the answer from before the reset.
-    resolve_app_dir
-    ( cd "${APP_DIR}" && "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || true
-    if ! ( cd "${APP_DIR}" && "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}"; then
-        if restore_build; then
-            log "WARN: rollback build failed — restored the pre-update build/"
-        else
-            log "CRITICAL: rollback build failed and no build.prev to restore — device has no build/"
-        fi
-    fi
-    restart_services
-    if probe_health; then
-        log "Rollback verified — serving ${LOCAL:0:8}"
-    else
-        log "CRITICAL: health probe failed even after rollback — operator attention needed"
-    fi
-    exit 1
-}
 
 # ─── 2. Pull changes ─────────────────────────────────────────────────────
 
@@ -336,16 +394,17 @@ fi
 snapshot_build
 
 log "Installing dependencies..."
-( cd "${APP_DIR}" && "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || {
+reown_app_tree
+( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || {
     log "WARN: bun install failed — trying without frozen lockfile"
-    ( cd "${APP_DIR}" && "${BUN_BIN}" install ) 2>&1 | tee -a "${LOG_FILE}" || rollback "bun install failed"
+    ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install ) 2>&1 | tee -a "${LOG_FILE}" || rollback "bun install failed"
 }
 
 # ─── 4. Build ────────────────────────────────────────────────────────────
 
 if [[ -f "${APP_DIR}/package.json" ]] && command grep -q '"build"' "${APP_DIR}/package.json"; then
     log "Building app..."
-    ( cd "${APP_DIR}" && "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}" || rollback "build failed"
+    ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}" || rollback "build failed"
 fi
 
 # ─── 4b. Reinstall deploy config when it changed ─────────────────────────
