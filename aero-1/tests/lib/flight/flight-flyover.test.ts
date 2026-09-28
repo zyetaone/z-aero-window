@@ -12,7 +12,7 @@ const ALT = { default: 35000, min: 10000, max: 65000 };
 
 function ctx(overrides: Partial<SimulationContext> = {}): SimulationContext {
 	return {
-		time: 0, wallTimeSec: 0, wallDeltaSec: 0.1, lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
+		wallTimeSec: 0, wallDeltaSec: 0.1, lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
 		bankAngle: 0, weather: 'clear', skyState: 'night',
 		nightFactor: 1, dawnDuskFactor: 0, locationId: 'hyderabad',
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,

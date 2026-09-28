@@ -58,12 +58,26 @@ export type SkyState = 'day' | 'night' | 'dawn' | 'dusk';
 
 /** Universal context passed to all simulation engines each frame. */
 export interface SimulationContext {
-	time: number;
 	/** Wall-clock seconds (Date.now()/1000) — identical across panorama panes
-	 *  within NTP drift. `time` is boot-relative and advanced by the dt-clamped
-	 *  delta, so on slow Pis it runs slower than wall clock and cross-pane
-	 *  oscillators (orbit breathe/wander) decorrelate within minutes. Anything
-	 *  that must stay position-locked across the fleet reads this instead.
+	 *  within NTP drift, and the ONLY clock on this context.
+	 *
+	 *  There used to be a second one beside it: `time`, boot-relative and
+	 *  advanced by the game-loop's dt-CLAMPED delta, so on a Pi at the 2-4 fps
+	 *  this app actually runs at it advanced 0.2-0.4x the wall rate. Its own
+	 *  docstring admitted the consequence — "cross-pane oscillators decorrelate
+	 *  within minutes" — and then it stayed, because a field nobody reads is
+	 *  invisible to every gate: the type checker cannot see a hazard nobody
+	 *  expresses, and no test exercises a value that is only written.
+	 *
+	 *  It had exactly one live reader, motion.svelte.ts, where all eleven
+	 *  `sin(t * ...)` oscillator phases ran off it — so the cabin breathing
+	 *  cycle took 73 wall seconds on a 3 fps pane instead of 22, and panes at
+	 *  different frame rates breathed out of phase across the seam. Fixed by
+	 *  moving the phases onto this field, which then left `time` with zero
+	 *  production readers, and zero is not a defensible reason to keep a clock.
+	 *  Deleted rather than deprecated: a second time source on a per-frame
+	 *  context is the whole hazard, and leaving it optional invites the exact
+	 *  regression it already caused once.
 	 *
 	 *  REQUIRED, not optional. Both wall fields used to be `?:` with every
 	 *  consumer falling back to the local frame delta when they were absent —

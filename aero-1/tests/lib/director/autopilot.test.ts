@@ -10,7 +10,7 @@ import type { SimulationContext } from '$lib/types';
 
 function makeCtx(overrides: Partial<SimulationContext> = {}): SimulationContext {
 	return {
-		time: 0, wallTimeSec: 0, wallDeltaSec: 0, lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
+		wallTimeSec: 0, wallDeltaSec: 0, lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
 		bankAngle: 0, weather: 'cloudy', skyState: 'day',
 		nightFactor: 0, dawnDuskFactor: 0, locationId: 'hyderabad',
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,

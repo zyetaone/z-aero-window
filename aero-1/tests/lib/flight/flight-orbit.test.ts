@@ -24,9 +24,20 @@ const SECOND_LOCATION = [...LOCATION_IDS][1];
  * so a 3 fps Pi accumulates sim time at ~0.3× wall clock and a 5 fps Pi at
  * ~0.5× — boot-relative sim time decorrelated the panes within minutes.
  */
-function tickCtx(time: number, wallTimeSec: number, wallDeltaSec: number): SimulationContext {
+/**
+ * The `time` parameter this used to take is gone with the field.
+ *
+ * It was the whole point of the test: a boot-relative second (312.7) beside a
+ * wall second (1_750_000), so that any consumer reading the wrong one produced
+ * a visibly different orbit. That distinction is now structural — the context
+ * has exactly one clock and it is the wall one — so the argument has no way to
+ * express itself. Kept as this comment because "the wall clock is not
+ * interchangeable with a sim clock" is still the property worth protecting; it
+ * just cannot be violated through this helper any more.
+ */
+function tickCtx(wallTimeSec: number, wallDeltaSec: number): SimulationContext {
 	return {
-		time, wallTimeSec, wallDeltaSec,
+		wallTimeSec, wallDeltaSec,
 		lat: 17, lon: 78, altitude: 35000, heading: 0, pitch: 0,
 		bankAngle: 0, weather: 'clear', skyState: 'night',
 		nightFactor: 1, dawnDuskFactor: 0, locationId: 'hyderabad',
@@ -99,8 +110,8 @@ describe('FlightSimEngine wall-clock position lock', () => {
 		a.setLocationWithSky(FIRST_LOCATION, 'day');
 		b.setLocationWithSky(FIRST_LOCATION, 'day');
 
-		a.tick(0.016, tickCtx(/*time*/ 312.7, /*wallTimeSec*/ 1_750_000, /*wallDeltaSec*/ 0.4));
-		b.tick(0.1, tickCtx(/*time*/ 4.2, /*wallTimeSec*/ 1_750_000, /*wallDeltaSec*/ 0.4));
+		a.tick(0.016, tickCtx(/*wallTimeSec*/ 1_750_000, /*wallDeltaSec*/ 0.4));
+		b.tick(0.1, tickCtx(/*wallTimeSec*/ 1_750_000, /*wallDeltaSec*/ 0.4));
 
 		expect(a.lat).toBe(b.lat);
 		expect(a.lon).toBe(b.lon);
@@ -115,8 +126,8 @@ describe('FlightSimEngine wall-clock position lock', () => {
 		a.setLocationWithSky(FIRST_LOCATION, 'day');
 		b.setLocationWithSky(FIRST_LOCATION, 'day');
 
-		a.tick(0.1, tickCtx(10, 1_750_000, 0.1));
-		b.tick(0.1, tickCtx(10, 1_750_000 + 90, 0.1));   // 90 wall-seconds later
+		a.tick(0.1, tickCtx(1_750_000, 0.1));
+		b.tick(0.1, tickCtx(1_750_000 + 90, 0.1));   // 90 wall-seconds later
 
 		const differs = a.lat !== b.lat || a.lon !== b.lon || a.heading !== b.heading;
 		expect(differs).toBe(true);

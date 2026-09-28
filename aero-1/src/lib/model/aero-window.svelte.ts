@@ -154,10 +154,6 @@ export class AeroWindow {
 	// consumer. autoQuality is gone (no more silent FPS-driven demotion).
 	get qualityMode() { return this.config.world.qualityMode; }
 
-	// High-frequency animation time (not reactive — updated each tick).
-	// Read internally via #createContext to feed engines; no external consumer.
-	#time = 0;
-
 	// Private perf counters. 0 = no frame seen yet, so the first frame only
 	// establishes the baseline and contributes no period sample.
 	#fpsLastTime   = 0;
@@ -579,7 +575,6 @@ export class AeroWindow {
 	tick(delta: number): void {
 		if (!Number.isFinite(delta) || delta <= 0 || delta > 0.1) return;
 		const frameStart = performance.now();
-		this.#time = (this.#time + delta) % 3600;
 		this.#reportFrame(frameStart);
 
 		const ctx = this.#createContext();
@@ -678,7 +673,7 @@ export class AeroWindow {
 	} as Pick<SimulationContext, 'camera' | 'director'>);
 
 	#createContext(): SimulationContext {
-		return this.#ctxBuilder.build(this, this.#time);
+		return this.#ctxBuilder.build(this);
 	}
 
 	// Feed the real, *unclamped* wall-clock gap between frames to telemetry.

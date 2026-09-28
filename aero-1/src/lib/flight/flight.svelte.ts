@@ -366,20 +366,19 @@ export class FlightSimEngine {
 		// (angle0, wallT0) to the current wallT with fixed substeps. Missed
 		// frames / different FPS no longer leave panes at different phases —
 		// they reconverge on the next tick that shares wallT.
-		// The `??` looks dead — `wallTimeSec` is a required field on
-		// SimulationContext, and TypeScript will not flag a fallback against a
-		// non-nullable left side. It is NOT dead. Test contexts are built by
-		// casting a literal (`as unknown as SimulationContext`) and routinely
-		// omit fields they do not exercise; drop this and every such helper
-		// computes `undefined - x` = NaN, which does not throw — it silently
-		// freezes the scenario loop. Caught by
-		// tests/lib/flight/flight-scenario-loop.test.svelte.ts when the
-		// fallback was removed.
+		// No fallback, and there is no longer a second clock to fall back to.
 		//
-		// So this stays a fallback for TYPEDNESS failures only, not a second
-		// source of time in normal operation: every real context is built by
-		// #createContext, which always sets it.
-		const wallT = ctx.wallTimeSec ?? ctx.time;
+		// This used to be `ctx.wallTimeSec ?? ctx.time`. That looked dead —
+		// wallTimeSec is a required field, and TypeScript will not flag a
+		// fallback against a non-nullable left side — and removing it froze the
+		// scenario loop, because test contexts are built by casting a literal
+		// (`as unknown as SimulationContext`) and omitted the field, so
+		// `undefined - x` was NaN: no throw, just a stopped loop. The fix was
+		// never a fallback but the MISSING REQUIRED FIELD in the test factory,
+		// which is now supplied. `ctx.time` has since been deleted from the
+		// context entirely, so a second time source can no longer creep back in
+		// behind a `??`.
+		const wallT = ctx.wallTimeSec;
 		const breathePhase = (wallT / orbit.breathePeriod) * Math.PI * 2;
 		const breathe = (Math.sin(breathePhase) + 1) * 0.5;
 		this.orbitRadiusMajor = orbit.majorMin + breathe * (orbit.majorMax - orbit.majorMin);
@@ -450,20 +449,19 @@ export class FlightSimEngine {
 		// Wall-clock absolute progress — same multi-Pi self-heal as #tickOrbit.
 		// Progress is (wallT − legStart) × speedNorm / duration, not a running
 		// sum of wallDelta, so missed frames reconverge.
-		// The `??` looks dead — `wallTimeSec` is a required field on
-		// SimulationContext, and TypeScript will not flag a fallback against a
-		// non-nullable left side. It is NOT dead. Test contexts are built by
-		// casting a literal (`as unknown as SimulationContext`) and routinely
-		// omit fields they do not exercise; drop this and every such helper
-		// computes `undefined - x` = NaN, which does not throw — it silently
-		// freezes the scenario loop. Caught by
-		// tests/lib/flight/flight-scenario-loop.test.svelte.ts when the
-		// fallback was removed.
+		// No fallback, and there is no longer a second clock to fall back to.
 		//
-		// So this stays a fallback for TYPEDNESS failures only, not a second
-		// source of time in normal operation: every real context is built by
-		// #createContext, which always sets it.
-		const wallT = ctx.wallTimeSec ?? ctx.time;
+		// This used to be `ctx.wallTimeSec ?? ctx.time`. That looked dead —
+		// wallTimeSec is a required field, and TypeScript will not flag a
+		// fallback against a non-nullable left side — and removing it froze the
+		// scenario loop, because test contexts are built by casting a literal
+		// (`as unknown as SimulationContext`) and omitted the field, so
+		// `undefined - x` was NaN: no throw, just a stopped loop. The fix was
+		// never a fallback but the MISSING REQUIRED FIELD in the test factory,
+		// which is now supplied. `ctx.time` has since been deleted from the
+		// context entirely, so a second time source can no longer creep back in
+		// behind a `??`.
+		const wallT = ctx.wallTimeSec;
 		if (this.#scenarioLegStartWallT === null) this.#scenarioLegStartWallT = wallT;
 		// NORMALISE THE SPEED KNOB — DO NOT PASS IT RAW.
 		// Authored `duration` is SECONDS at the default knob position. The raw

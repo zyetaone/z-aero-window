@@ -87,7 +87,7 @@ export class SimulationContextBuilder {
 
 	constructor(seed: Pick<SimulationContext, 'camera' | 'director'>) {
 		this.#ctx = {
-			time: 0, lat: 0, lon: 0, altitude: 0, heading: 0, pitch: 0, bankAngle: 0,
+			wallTimeSec: 0, wallDeltaSec: 0, lat: 0, lon: 0, altitude: 0, heading: 0, pitch: 0, bankAngle: 0,
 			weather: 'cloudy', skyState: 'day', nightFactor: 0, dawnDuskFactor: 0,
 			locationId: 'hyderabad', userAdjustingAltitude: false, userAdjustingTime: false,
 			userAdjustingAtmosphere: false, cloudDensity: 0, cloudSpeed: 0, haze: 0,
@@ -98,10 +98,20 @@ export class SimulationContextBuilder {
 		} as SimulationContext;
 	}
 
-	/** Refresh and return the shared context. `nowMs` is injectable for tests. */
-	build(src: ContextSource, timeSec: number, nowMs: number = Date.now()): SimulationContext {
+	/**
+	 * Refresh and return the shared context. `nowMs` is injectable for tests.
+	 *
+	 * There is no `timeSec` parameter and no `c.time` write. The context used to
+	 * carry a second, boot-relative clock beside the wall one, fed by the
+	 * game-loop's dt-clamped delta — so it ran 0.2-0.4x the wall rate on the
+	 * 2-4 fps a Pi actually achieves, and its single live reader (motion's
+	 * oscillator phases) put the panes' cabin breathing out of phase. With that
+	 * reader migrated to `wallTimeSec` the field had none, so the whole
+	 * accumulator is gone rather than left writing a value nothing reads.
+	 * See the note on SimulationContext.wallTimeSec in types.ts.
+	 */
+	build(src: ContextSource, nowMs: number = Date.now()): SimulationContext {
 		const c = this.#ctx;
-		c.time = timeSec;
 		c.wallTimeSec = nowMs / 1000;
 		c.wallDeltaSec = wallDeltaSec(nowMs, this.#lastWallMs);
 		this.#lastWallMs = nowMs;

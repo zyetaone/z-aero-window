@@ -18,7 +18,7 @@ const BOOT_HEADING = 45; // FlightSimEngine's boot heading
 
 function makeCtx(heading: number, wallDeltaSec: number = 1 / 60): SimulationContext {
 	return {
-		time: 0, wallTimeSec: 0, lat: 0, lon: 0, altitude: 35000, heading, pitch: 60, bankAngle: 0,
+		wallTimeSec: 0, lat: 0, lon: 0, altitude: 35000, heading, pitch: 60, bankAngle: 0,
 		weather: 'clear', skyState: 'day', nightFactor: 0, dawnDuskFactor: 0,
 		locationId: 'dubai',
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,
@@ -47,7 +47,8 @@ describe('motion first tick', () => {
 		const ctx = makeCtx(BOOT_HEADING);
 		for (let i = 0; i < 120; i++) {
 			motionStep(1 / 60, ctx);
-			ctx.time += 1 / 60;
+			ctx.wallTimeSec += 1 / 60;
+			ctx.wallDeltaSec = 1 / 60;
 		}
 		expect(motion.bankAngle).toBe(0);
 	});
@@ -115,21 +116,20 @@ describe('motion first tick', () => {
  * must give the same pose, whatever frame delta got us there.
  */
 describe('motion oscillator phases are a function of the wall second', () => {
-	/** game-loop.ts:32 — the clamp that makes `ctx.time` diverge from the wall. */
-	const GAME_LOOP_CLAMP_SEC = 0.1;
-
 	/**
 	 * Drive the module from wall second 0 to `totalWallSec` at `frameSec` per
 	 * frame, and read the cabin pose at the end.
 	 *
 	 * Two things this has to get right, both learned the hard way:
 	 *
-	 * 1. BOTH clocks are modelled, and that is the entire point. wallTimeSec
-	 *    advances by the true frame while `time` accumulates the CLAMPED delta.
-	 *    A first draft set `ctx.time = w`, making the two identical — and the
-	 *    test then passed with the bug PRESENT *and* with the fix reverted,
-	 *    because it had nothing to discriminate. At 3 fps the clamp is exactly
-	 *    what makes them diverge: 0.333 s of wall becomes 0.1 s of `time`.
+	 * 1. Only the wall clock exists. The context used to carry a second,
+	 *    boot-relative `time` alongside it, advanced by the game-loop's
+	 *    dt-CLAMPED delta — and this bug was that the oscillator phases read
+	 *    THAT one. Modelling the clamp was the point of the test; now that the
+	 *    field is deleted the clamp cannot reach these phases at all, which is
+	 *    the structural half of the fix. (A first draft of this test set
+	 *    `ctx.time = w` alongside `wallTimeSec = w`, making them identical, and
+	 *    therefore passed with the bug present AND with the fix reverted.)
 	 *
 	 * 2. The `$state` proxy is read synchronously, in the same turn as the
 	 *    last motionStep. Reading it from inside an async callback has no
@@ -139,12 +139,9 @@ describe('motion oscillator phases are a function of the wall second', () => {
 		const mod = await import('$lib/flight/motion.svelte');
 		mod.motionReset();
 		const ctx = makeCtx(BOOT_HEADING, frameSec);
-		let simTime = 0;
 		for (let w = frameSec; w <= totalWallSec + 1e-9; w += frameSec) {
-			simTime = (simTime + Math.min(frameSec, GAME_LOOP_CLAMP_SEC)) % 3600;
 			ctx.wallTimeSec = w;
 			ctx.wallDeltaSec = frameSec;
-			ctx.time = simTime;
 			mod.motionStep(frameSec, ctx);
 		}
 		return {

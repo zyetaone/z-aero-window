@@ -69,16 +69,17 @@ const seed = { camera, director } as unknown as Pick<SimulationContext, 'camera'
 
 describe('SimulationContextBuilder', () => {
 	it('copies model state onto the context', () => {
-		const c = new SimulationContextBuilder(seed).build(source(), 12, 1_000_000);
+		const c = new SimulationContextBuilder(seed).build(source(), 1_000_000);
 		expect(c.altitude).toBe(32_000);
 		expect(c.locationId).toBe('dubai');
 		expect(c.nightFactor).toBe(0.8);
 		expect(c.cloudSpeed).toBe(1.2);
-		expect(c.time).toBe(12);
+		// `time` is gone: the context carries one clock, and nowMs is the only input.
+		expect(c.wallTimeSec).toBe(1_000);
 	});
 
 	it('derives turbulence from the weather recipe rather than storing it twice', () => {
-		const c = new SimulationContextBuilder(seed).build(source({ weather: 'storm' }), 0, 1_000);
+		const c = new SimulationContextBuilder(seed).build(source({ weather: 'storm' }), 1_000);
 		expect(c.turbulenceLevel).toBe('severe');
 	});
 
@@ -87,18 +88,18 @@ describe('SimulationContextBuilder', () => {
 		// and every consumer reads it synchronously in-frame. If this ever stops
 		// holding, the aliasing assumption behind that choice is gone.
 		const b = new SimulationContextBuilder(seed);
-		expect(b.build(source(), 0, 1_000)).toBe(b.build(source(), 1, 2_000));
+		expect(b.build(source(), 1_000)).toBe(b.build(source(), 2_000));
 	});
 
 	it('advances the wall cursor between frames', () => {
 		const b = new SimulationContextBuilder(seed);
-		b.build(source(), 0, 1_000_000);
-		expect(b.build(source(), 1, 1_002_000).wallDeltaSec).toBeCloseTo(2);
+		b.build(source(), 1_000_000);
+		expect(b.build(source(), 1_002_000).wallDeltaSec).toBeCloseTo(2);
 	});
 
 	it('reports zero delta on its first frame only', () => {
 		const b = new SimulationContextBuilder(seed);
-		expect(b.build(source(), 0, 1_000_000).wallDeltaSec).toBe(0);
-		expect(b.build(source(), 1, 1_000_500).wallDeltaSec).toBeCloseTo(0.5);
+		expect(b.build(source(), 1_000_000).wallDeltaSec).toBe(0);
+		expect(b.build(source(), 1_000_500).wallDeltaSec).toBeCloseTo(0.5);
 	});
 });

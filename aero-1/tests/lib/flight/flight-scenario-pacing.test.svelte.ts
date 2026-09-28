@@ -53,8 +53,8 @@ function sustainedVerticalRateFtPerMin(seconds: number): number {
 	const rates: number[] = [];
 	for (let t = 0; t < seconds; t += dt) {
 		engine.tick(dt, ctx);
-		ctx.time += dt;
 		ctx.wallTimeSec += dt;
+		ctx.wallDeltaSec = dt;
 		rates.push((Math.abs(engine.altitude - prevAlt) / dt) * 60);
 		prevAlt = engine.altitude;
 	}
@@ -97,8 +97,8 @@ describe('scenario playback pacing', () => {
 		// Advance into a scenario leg.
 		for (let t = 0; t < 5; t += 0.1) {
 			engine.tick(0.1, ctx);
-			ctx.time += 0.1;
-			if (ctx.wallTimeSec !== undefined) ctx.wallTimeSec += 0.1;
+			ctx.wallTimeSec += 0.1;
+			ctx.wallDeltaSec = 0.1;
 		}
 		const latBeforeFly = engine.lat;
 		// Cruise to another city; departure must NOT race the scenario path.
@@ -106,7 +106,8 @@ describe('scenario playback pacing', () => {
 		expect(engine.flightMode).toBe('cruise_departure');
 		for (let t = 0; t < 3; t += 0.1) {
 			engine.tick(0.1, ctx);
-			ctx.time += 0.1;
+			ctx.wallTimeSec += 0.1;
+			ctx.wallDeltaSec = 0.1;
 		}
 		// Path frozen during warp: still at the pre-fly coordinates.
 		expect(engine.lat).toBeCloseTo(latBeforeFly, 5);
@@ -141,13 +142,13 @@ describe('scenario playback pacing', () => {
 		// b covers the same authored distance in half the wall time.
 		for (let t = 0; t < 40; t += 0.1) {
 			a.tick(0.1, ctxA);
-			ctxA.time += 0.1;
-			ctxA.wallTimeSec = (ctxA.wallTimeSec ?? 0) + 0.1;
+			ctxA.wallTimeSec += 0.1;
+			ctxA.wallDeltaSec = 0.1;
 		}
 		for (let t = 0; t < 20; t += 0.1) {
 			b.tick(0.1, ctxB);
-			ctxB.time += 0.1;
-			ctxB.wallTimeSec = (ctxB.wallTimeSec ?? 0) + 0.1;
+			ctxB.wallTimeSec += 0.1;
+			ctxB.wallDeltaSec = 0.1;
 		}
 
 		// 2dp ≈ 1 km. Not tighter: sine jitter is keyed to wallT (different

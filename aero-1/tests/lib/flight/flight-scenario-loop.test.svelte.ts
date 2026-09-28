@@ -23,7 +23,13 @@ const [HOME] = [...LOCATION_IDS];
 
 function makeCtx(): SimulationContext {
 	return {
-		time: 0, lat: 0, lon: 0, altitude: 35000, heading: 45, pitch: 60, bankAngle: 0,
+		// `wallTimeSec` is REQUIRED on SimulationContext, and this factory casts
+		// through `as unknown as`, so the compiler never checked it — which is why
+		// the two `?? ctx.time` fallbacks in flight.svelte.ts existed and were
+		// load-bearing: a context reaching the orbit maths without a wall clock
+		// produced NaN and silently froze the scenario loop. Supplied here, and
+		// `time` is gone, so the wall clock is the only one there is.
+		wallTimeSec: 0, wallDeltaSec: 0, lat: 0, lon: 0, altitude: 35000, heading: 45, pitch: 60, bankAngle: 0,
 		weather: 'clear', skyState: 'day', nightFactor: 0, dawnDuskFactor: 0,
 		locationId: HOME,
 		userAdjustingAltitude: false, userAdjustingTime: false, userAdjustingAtmosphere: false,
@@ -41,7 +47,12 @@ function run(engine: FlightSimEngine, ctx: SimulationContext, seconds: number): 
 	const signs: number[] = [];
 	for (let t = 0; t < seconds; t += dt) {
 		engine.tick(dt, ctx);
-		ctx.time += dt;
+		// The wall clock is the only clock now, so this loop advances it. It used
+		// to advance `ctx.time` and leave `wallTimeSec` pinned at 0 — which is why
+		// this test needed the `?? ctx.time` fallbacks in flight.svelte.ts to get
+		// anything at all.
+		ctx.wallTimeSec = t + dt;
+		ctx.wallDeltaSec = dt;
 		signs.push(engine.travelSign);
 	}
 	return signs;
@@ -82,7 +93,8 @@ describe('scenario loop-flip seed mixing', () => {
 		for (let t = 0; t < 800; t += dt) {
 			a.tick(dt, ctx);
 			b.tick(dt, ctx);
-			ctx.time += dt;
+			ctx.wallTimeSec = t + dt;
+			ctx.wallDeltaSec = dt;
 			expect(b.lat).toBe(a.lat);
 			expect(b.lon).toBe(a.lon);
 			expect(b.heading).toBe(a.heading);
