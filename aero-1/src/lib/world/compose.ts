@@ -9,6 +9,40 @@
  * Owns directly: viewer lifecycle, post-processing,
  * cloud billboards, lightning, and the per-frame render loop.
  * (Camera sync lives in ./camera — see syncCamera().)
+ *
+ * ── THIS FILE IS NOT A GOD OBJECT. DON'T "FIX" IT. ────────────────────────
+ * It is ~550 lines, which looks like a smell, and a review of the whole app
+ * proposed replacing the subsystem fan-out with a declarative table — "one entry
+ * per subsystem instead of an edit in three places". That refactor was costed
+ * before it was written, and the numbers say do not:
+ *
+ *   - The fan-out is 40 of the 548 lines, not 548. 150 lines are comment-only
+ *     and 43 are blank, so there are ~355 lines of code. The two biggest
+ *     sections are Start (viewer construction + the three `await setup*`) and
+ *     the per-field header — neither of which a table touches.
+ *   - The syncs are ALREADY factored into per-subsystem private methods, which
+ *     is the decomposition the table was supposed to introduce.
+ *   - They do not share a shape, so a table needs a widest-common-denominator
+ *     signature. Measured arity at the subsystem call: syncCamera and
+ *     syncImagery pass none, syncCloudBillboards and syncQuality pass two,
+ *     syncBuildings passes eight. A uniform entry means either fat arguments
+ *     most callers cannot supply, or a per-entry adapter — more ceremony than
+ *     the 40 lines it removes.
+ *   - The tick order is LOAD-BEARING, and a table makes it implicit. #syncImagery
+ *     sets `#nightFxOn` (compose.ts:290) and #syncQuality reads it (compose.ts:
+ *     421) — the night post-FX hysteresis is decided in one subsystem and
+ *     consumed in another, later in the same tick. In a table, that ordering
+ *     lives in row order, and re-sorting rows silently breaks dusk.
+ *
+ * The comments in Start() are load-bearing too, not padding: they record why
+ * the hash palette is NOT installed there (#syncQuality installs it reactively
+ * so runtime toggles work) and why atmosphere re-init is skipped. A mechanical
+ * pass that moved those calls into a list would delete the only place that
+ * knowledge exists.
+ *
+ * If a future change really does need N subsystems configured the same way, the
+ * right move is a new module with its own init/setup/sync trio — not a table
+ * over the existing ones.
  */
 
 import type * as CesiumType from 'cesium';
