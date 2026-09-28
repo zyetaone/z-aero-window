@@ -97,3 +97,29 @@ describe('handleResponse ingestion', () => {
 		expect(pi?.port).toBe(4000);
 	});
 });
+
+describe('SRV target must be the announcer\'s own .local name', () => {
+	// peer-token.ts attaches the admin bearer to any *.local host, so a LAN
+	// box announcing a roster id with a foreign target would be handed the
+	// token on the next fan-out. Only `${deviceId}.local` is accepted.
+	it('rejects a target that is not <deviceId>.local', () => {
+		vi.stubEnv('AERO_PEERS', '');
+		handleResponse({
+			answers: [{ name: 'aero-display-09._aero-bundle._tcp.local', type: 'SRV', data: { port: 3000, target: 'evil.local' } }],
+		});
+		expect(listPeers()).toHaveLength(0);
+	});
+	it('accepts the canonical target, case-insensitively and with a root dot', () => {
+		vi.stubEnv('AERO_PEERS', '');
+		handleResponse({
+			answers: [{ name: 'aero-display-09._aero-bundle._tcp.local', type: 'SRV', data: { port: 3000, target: 'AERO-DISPLAY-09.local.' } }],
+		});
+		expect(listPeers()).toHaveLength(1);
+	});
+	it('rejects an out-of-range or fractional port', () => {
+		vi.stubEnv('AERO_PEERS', '');
+		handleResponse(srvAnswer('aero-display-09', 70000));
+		handleResponse(srvAnswer('aero-display-10', 1.5));
+		expect(listPeers()).toHaveLength(0);
+	});
+});

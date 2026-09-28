@@ -152,6 +152,13 @@ export function handleResponse(resp: { answers?: Array<{ name: string; type: str
 		// allowlist the heartbeat store enforces). New entries beyond
 		// MAX_PEERS are dropped — refreshes of known peers always land.
 		if (!DEVICE_ID_PATTERN.test(deviceId)) return;
+		// The SRV target must be the announcer's own name. Every Pi announces
+		// `${deviceHost()}.local` (see announce), and peer-token.ts attaches the
+		// admin bearer to any *.local host — so a LAN box announcing a roster
+		// deviceId with target `evil.local` used to replace the real entry and
+		// be handed the token on the next fan-out. Refuse anything else.
+		if (host.toLowerCase().replace(/\.$/, '') !== `${deviceId.toLowerCase()}.local`) return;
+		if (!Number.isInteger(port) || port < 1 || port > 65535) return;
 		const roster = pinnedPeers();
 		if (roster && !roster.has(deviceId)) return;
 		if (!peers.has(deviceId) && peers.size >= MAX_PEERS) return;
