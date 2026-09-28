@@ -274,13 +274,78 @@ describe('the architecture invariants are actually held', () => {
 	 * determinism. Derive from `view.wallSec` instead.
 	 */
 	it('integrates no frame deltas in the simulation path', () => {
+		// Three shapes, because one is not enough — and the reason is recorded
+		// here rather than in a fix that was quietly narrower than it looked.
+		//
+		// The original guard matched ONLY the `+=` form:
+		//
+		//     /(\w+)\s*\+=\s*[^;\n]*\b(dt|delta|deltaMs|elapsed|frameTime)\b/
+		//
+		// The clearance integrator that 5a9c97f2 replaced was written as
+		// `return prev + (goal - prev) * step`, and this codebase prefers the
+		// return/assignment form. Worse, a frame-delta accumulator injected into
+		// flight-path.ts as `(_acc = _acc + (1 - _acc) * Math.min(1, Math.max(0, delta) * 0.5))`
+		// left this test PASSING. So the automated wall-sync guard was blind to
+		// the very bug class it exists to prevent, and only the per-module tests
+		// stood behind it — a new module with no dedicated test would have
+		// integrated frame deltas with nothing to catch it.
+		//
+		// The multiplier is required to reference a TIME variable. That is what
+		// separates an accumulator from an ordinary lerp: `downtown.ts` has
+		// `scale = 1 + (DOWNTOWN_LOOP_SCALE - 1) * blend`, which is the same
+		// shape but multiplies by a blend factor, not elapsed time. Flagging it
+		// would be a false positive, and a guard that cries wolf gets ignored.
+		// Scanned per STATEMENT rather than by one clever regex. Two attempts at
+		// a single expression failed for reasons worth recording: `return (_acc +
+		// (1 - _acc) * …)` has a leading paren the pattern did not allow, and in
+		// `(1 - _acc)` a `\\w+` happily matched the literal `1` and then demanded
+		// `- 1` where the code said `- _acc`. Regular expressions are the wrong
+		// tool for "does this statement accumulate", so: split on `;`, and flag a
+		// statement when it has the accumulator SHAPE and references TIME.
+		const TIME =
+			/\b(?:dt|dtSec|delta|deltaMs|deltaSec|elapsed|frameTime|frameDelta|wallDelta\w*)\b/;
+		// `X + (… X …) *` — the exponential-smoothing shape, in return or
+		// assignment position. Downtown's `scale = 1 + (LOOP_SCALE - 1) * blend`
+		// has the same outline but no time term, so it is not flagged.
+		// `X + (… X …) *` where X is a BARE IDENTIFIER that is being assigned back
+		// to itself — module or class state, which is what an accumulator is.
+		//
+		// The lookbehind is load-bearing and was not in the first attempt.
+		// `\bgoalM\b` happily matches inside `glide.goalM`, so the CORRECT closed
+		// form —
+		//
+		//     return glide.goalM + (glide.fromM - glide.goalM) * Math.exp(-RATE * elapsed)
+		//
+		// — was flagged as an accumulator, because it mentions `elapsed` and has
+		// the lerp outline. It is not one: it reads a property, and
+		// `exp(-RATE * elapsed)` is a pure function of the clock. Requiring the
+		// repeated name to be a whole bare identifier, not a property access,
+		// separates the two.
+		//
+		// A regex cannot separate every legitimate decay from every illegitimate
+		// accumulation without dataflow analysis. This catches the shapes that
+		// actually get written; `tests/tick-cadence.test.ts` is the backstop that
+		// does not care about shape at all.
+		const ACC_SHAPE = /(?<![.\w])(\w+)\s*\+\s*\([^)]*(?<![.\w])\1(?!\w)[^)]*\)\s*\*/;
 		const offenders: string[] = [];
 		for (const file of simSources()) {
 			const rel = file.replace(/^src\/lib\//, '');
 			const code = stripComments(readFileSync(file, 'utf8'));
-			// `foo += dt`, `foo += delta * n`, `foo += elapsed`, and friends.
-			const m = /(\w+)\s*\+=\s*[^;\n]*\b(dt|delta|deltaMs|elapsed|frameTime)\b/.exec(code);
-			if (m) offenders.push(`${rel} (${m[0].trim()})`);
+			for (const stmt of code.split(';')) {
+				if (!TIME.test(stmt)) continue;
+				// Self-assignment through a DOTTED name — `this.v = this.v + (goal -
+				// this.v) * k * delta` is a class-field accumulator, a real violation,
+				// and the lookbehind above excludes it. What separates it from the
+				// closed form in clearance.ts is not the dot, it is the ASSIGNMENT:
+				// `return glide.goalM + …` reads a property, this one writes it back
+				// to itself. So the target is captured whole and required on both
+				// sides of the `=`.
+				const SELF_ASSIGN = /([^\s=;]+)\s*=\s*\1\s*\+/;
+				if (/\w+\s*\+=\s*[^;]*\w/.test(stmt) || ACC_SHAPE.test(stmt) || SELF_ASSIGN.test(stmt)) {
+					offenders.push(`${rel} (${stmt.trim().replace(/\s+/g, ' ').slice(0, 70)})`);
+					break;
+				}
+			}
 		}
 		expect(offenders, 'derive from view.wallSec, not from an accumulator').toEqual([]);
 	});
