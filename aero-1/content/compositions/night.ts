@@ -125,7 +125,20 @@ export const NIGHT_PALETTE = {
 		// darkened review monitor has. ACES rolls the top off, so this is ~+21%
 		// of scene luminance in but well under that on screen, and highlights
 		// compress rather than clip. Night still unaffected (nightFactor lerp).
-		exposureDay:        1.7,
+		//
+		// 1.7 → 2.2 (Sep 2026): the fielded wall still read dim by day. The
+		// Narkowicz ACES shoulder is why +0.3 steps vanished on screen — at
+		// the imagery midtone (~0.23 linear) 1.4/1.7/2.0 land at 0.47/0.53/
+		// 0.59 linear, so each bump was worth ~3% of sRGB. 2.2 is a step you
+		// can see; bright sand (~0.65 linear) compresses to ~0.93 sRGB, not
+		// clipped. NOT a tonemapper swap: Cesium runs tonemapping BEFORE the
+		// custom stages, so PBR_NEUTRAL/FILMIC would re-feed the night palette
+		// pass — that is a full night re-tune, not a day fix.
+		exposureDay:        2.2,
+		/** globe.lambertDiffuseMultiplier by day (Cesium default 0.9 at night) —
+		 *  see syncAtmosphere. Holds the ground on its lit clamp through the
+		 *  afternoon instead of sagging from ~13:30. */
+		lambertDay:         1.4,
 		atmosphereLightDay: 10.0,
 	},
 

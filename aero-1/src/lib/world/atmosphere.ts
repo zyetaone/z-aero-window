@@ -81,6 +81,7 @@ export function fogVisualDensityScalar(nightFactor: number, hazeAmount: number):
 const _fogVisualScalar = new EpsilonGate<number>(0.001, -1);
 const _fogBrightness = new EpsilonGate<number>(0.01, -1);
 const _lightIntensity = new EpsilonGate<number>(0.01, -1);
+const _lambert = new EpsilonGate<number>(0.01, -1);
 const _skySatShift = new EpsilonGate<number>(0.01, 999);
 const _skyBrShift = new EpsilonGate<number>(0.01, 999);
 const _atmoKilled = new EpsilonGate<boolean>(0, false);
@@ -176,9 +177,23 @@ export function syncAtmosphere(model: AtmosphereModel, clockTime: CesiumType.Jul
 		_moonlight.intensity = moonIntensity;
 		C.Cartesian3.negate(_earthToMoon, _moonlight.direction);
 	} else {
+		// Dead lever, recorded so nobody re-derives it: intensity >= 1 is inert on
+		// the globe. UniformState normalises czm_lightColor to max component 1
+		// and GlobeFS reads that, not czm_lightColorHdr — so 1.0 == 2.0 by day.
+		// Only the < 1 twilight ramp does anything.
 		const li = lerp(1.0, 0.02, nf);
 		_lightIntensity.update(li, (val) => { if (v.scene.light) v.scene.light.intensity = val; });
 	}
+
+	// Afternoon sag. GlobeFS lights the ground with clamp(lambert * mult + 0.3, 0, 1)
+	// and Cesium's default mult 0.9 drops the ground off its clamp from ~13:30
+	// (0.94 at 15:00, 0.56 at 17:00 over Hyderabad). A wall is not an eye with
+	// auto-exposure, so the fall-off just reads dim. Day value keeps the ground
+	// clamped-lit until ~16:00; lerps back to the default so night (moonlit
+	// lambert × mult) is byte-identical.
+	_lambert.update(lerp(NIGHT_PALETTE.scene.lambertDay, 0.9, nf), (val) => {
+		v.scene.globe.lambertDiffuseMultiplier = val;
+	});
 
 	const baseExp =
 		NIGHT_PALETTE.scene.exposureDay + (w.nightExposure - NIGHT_PALETTE.scene.exposureDay) * nf;
@@ -219,6 +234,7 @@ export function resetAtmosphereViewerState(): void {
 	_fogDensity.reset();
 	_fogBrightness.reset();
 	_lightIntensity.reset();
+	_lambert.reset();
 	_skySatShift.reset();
 	_skyBrShift.reset();
 	_atmoKilled.reset();
