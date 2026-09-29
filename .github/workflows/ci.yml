@@ -52,12 +52,11 @@ jobs:
           # applied to the pre-ship rewrite while THIS job, the one that decides
           # what the fleet deploys, floated.
           #
-          # It also means CI and local disagreed in the other direction: every
-          # local run — all 1134 aero-1 tests, both apps' gates, both smoke
-          # suites — was on 1.3.14, so `latest` was verifying a toolchain
-          # nobody had verified against. 1.3.14 is the version the tests pass
-          # on locally.
-          bun-version: 1.3.14
+          # Bumped 1.3.14 → 1.4.2 on 2026-09-29: the local toolchain had already
+          # moved on, so this pin now tracks the version every local run —
+          # all aero-1 tests, both apps' gates, both smoke suites — verifies
+          # against, instead of a version nobody runs anymore.
+          bun-version: 1.4.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -175,12 +174,13 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version: 1.4.2
           # Pinned, not `latest`. This job has been red since 2026-08-28 with a
           # rolldown dep-optimizer failure that has never reproduced on darwin
           # at the same lockfile — so the toolchain is the remaining variable,
           # and a floating one means a green build can turn red with no commit.
-          # 1.3.14 is the version the tests pass on locally.
+          # 1.4.2 is the version the tests pass on locally (bumped from 1.3.14
+          # on 2026-09-29 to match the other job).
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

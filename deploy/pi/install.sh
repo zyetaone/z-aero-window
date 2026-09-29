@@ -173,9 +173,28 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
 
 # ─── Step 2: Bun runtime (installs only if missing) ───────────────────────────
 
+# Pinned, not floating — same reason as the pin in .github/workflows/ci.yml:
+# a floating toolchain turns a green build red with no commit. Keep this in
+# sync with `bun-version` there. Only affects fresh installs: a device that
+# already has Bun keeps whatever version it was provisioned with, and the
+# updater never upgrades the runtime (the app is the deploy unit, and the
+# liveness watchdog + rollback already cover a broken runtime).
+#
+# bun.sh/install reads the version ONLY from its first positional arg (a
+# release tag with the `bun-` prefix) — it honours no env var, so the pin
+# must be piped as `bash -s 'bun-v1.4.2'`, not as BUN_VERSION=... Assert the
+# installed version afterwards: a silently ignored pin would leave the device
+# on a toolchain CI never verified, and nothing downstream checks.
+BUN_VERSION="1.4.2"
+
 echo "[2/7] Installing Bun runtime..."
 if [[ ! -x "${BUN_BIN}" ]]; then
-	sudo -u "${PI_USER}" bash -c 'curl -fsSL https://bun.sh/install | bash'
+	sudo -u "${PI_USER}" bash -c "curl -fsSL https://bun.sh/install | bash -s 'bun-v${BUN_VERSION}'"
+	INSTALLED_BUN="$(sudo -u "${PI_USER}" "${BUN_BIN}" --version)"
+	if [[ "${INSTALLED_BUN}" != "${BUN_VERSION}" ]]; then
+		echo "ERROR: expected bun ${BUN_VERSION}, got ${INSTALLED_BUN}" >&2
+		exit 1
+	fi
 else
 	echo "  bun already installed at ${BUN_BIN}"
 fi
