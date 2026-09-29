@@ -79,6 +79,41 @@ export class LiveWeatherSync {
 	pending: PendingReading | null = null;
 
 	/**
+	 * The wall second the currently-applied live reading stops being authoritative.
+	 * 0 = nothing live is applied, so there is nothing to expire.
+	 *
+	 * WHY A LIVE READING MUST EXPIRE. `applyLiveWeather` writes `config.weather`,
+	 * and `weatherAt` treats any value other than 'clear' as an operator pin that
+	 * outranks the schedule FOREVER:
+	 *
+	 *     return this.config.weather !== 'clear' || !this.config.liveWeather
+	 *         ? this.config.weather
+	 *         : scheduledWeather(wallSec);
+	 *
+	 * So applying a live reading silently converted a per-pane observation into a
+	 * permanent pin, and the divergence that follows never heals:
+	 *
+	 *   - a pane whose fetch FAILS leaves `pending` null, never applies, and keeps
+	 *     the previous pin — while its neighbours apply the new one. Two panes, two
+	 *     skies, indefinitely. There was no convergence path, which is why the
+	 *     panel review called this a blocker.
+	 *   - worse, inverted for a 'clear' reading: a live 'clear' is
+	 *     indistinguishable from "no override" (same sentinel), so the pane that
+	 *     SUCCEEDED falls back to the schedule while the pane that FAILED keeps its
+	 *     stale value. The working pane looked like the broken one.
+	 *   - and toggling `liveWeather` off did not restore the schedule, because the
+	 *     stale pin was still sitting in `config.weather`.
+	 *
+	 * Expiry puts the wall clock back in charge. A live reading is authoritative
+	 * for the slot it was scheduled for and no longer; at the boundary that follows
+	 * it, `config.weather` returns to 'clear' and `scheduledWeather(wallSec)` — a
+	 * pure function of the wall second, identical on every pane — takes over. So
+	 * divergence between panes is BOUNDED to one poll period instead of permanent,
+	 * and it converges whether the next fetch succeeds, fails, or never happens.
+	 */
+	private liveUntilWallSec = 0;
+
+	/**
 	 * Buffer a reading against the second its fetch was SCHEDULED for.
 	 * Receiving is not applying. A newer reading supersedes one still
 	 * waiting: the later fetch is the fresher sky.
@@ -93,11 +128,36 @@ export class LiveWeatherSync {
 	 * to the same value its neighbours applied on time.
 	 */
 	applyDue(wallSec: number, config: LiveWeatherTarget): boolean {
+		// Expiry runs FIRST, and unconditionally, so a pane that never receives
+		// another reading still hands control back to the schedule. Doing it after
+		// the apply would let a fresh reading extend itself indefinitely on a pane
+		// whose fetches all succeed, and would never fire on one whose fetches
+		// fail — which is the pane that needs it.
+		let expired = false;
+		if (this.liveUntilWallSec > 0 && wallSec >= this.liveUntilWallSec) {
+			this.liveUntilWallSec = 0;
+			// 'clear' is the sentinel weatherAt reads as "no override", so this
+			// does not mean "make the sky clear" — it means "the schedule decides".
+			config.applyLiveWeather('clear');
+			expired = true;
+		}
+
 		const due = this.pending;
-		if (!due || wallSec < due.applyAtWallSec) return false;
+		if (!due || wallSec < due.applyAtWallSec) return expired;
 		this.pending = null;
 		config.applyLiveWeather(due.weather);
+		// Authoritative for one poll period from the second it landed. A later
+		// successful reading replaces this; a failed one lets it lapse.
+		this.liveUntilWallSec = due.applyAtWallSec + LIVE_WEATHER_POLL_SEC;
 		return true;
+	}
+
+	/**
+	 * The second the applied live reading lapses, or 0 if none is applied.
+	 * Exposed for the unit test and for diagnostics; the tick does not read it.
+	 */
+	get liveExpiresWallSec(): number {
+		return this.liveUntilWallSec;
 	}
 
 	/** Drop whatever is waiting: the place changed, so the reading is for the wrong sky. */
