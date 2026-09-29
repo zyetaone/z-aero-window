@@ -18,12 +18,12 @@ let tmp: string;
 beforeEach(async () => {
 	tmp = await mkdtemp(join(tmpdir(), 'aero-bundles-'));
 	process.env.AERO_BUNDLES_DIR = tmp;
-	disk._resetCacheForTests();
+	disk.invalidateCache();
 });
 
 afterEach(async () => {
 	delete process.env.AERO_BUNDLES_DIR;
-	disk._resetCacheForTests();
+	disk.invalidateCache();
 	await rm(tmp, { recursive: true, force: true });
 });
 
@@ -84,7 +84,7 @@ describe('disk.server round-trip', () => {
 	});
 
 	it('skips malformed JSON files on hydration', async () => {
-		disk._resetCacheForTests();
+		disk.invalidateCache();
 		await writeFile(join(tmp, 'broken.json'), '{ not valid json', 'utf-8');
 		await disk.saveBundle(sample('good'));
 		const list = await disk.listBundles();
@@ -92,7 +92,7 @@ describe('disk.server round-trip', () => {
 	});
 
 	it('skips JSON files that do not match the ContentBundle shape', async () => {
-		disk._resetCacheForTests();
+		disk.invalidateCache();
 		await writeFile(join(tmp, 'foreign.json'), JSON.stringify({ hello: 'world' }), 'utf-8');
 		const list = await disk.listBundles();
 		expect(list).toEqual([]);

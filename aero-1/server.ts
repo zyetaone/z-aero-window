@@ -27,6 +27,7 @@
 
 import { existsSync } from 'node:fs';
 import { startLanProxy } from './src/lib/server/fleet/lan-peers';
+import { installMemoryPressureGuard } from './src/lib/server/memory-pressure';
 
 // adapter-node reads PORT/HOST from env at import time and defaults PORT to
 // 3000. Set this project's default BEFORE importing it so `bun run serve`
@@ -47,6 +48,13 @@ process.on('uncaughtException', (err) => {
 	console.error('[server] FATAL uncaughtException:', err);
 	process.exit(1);
 });
+
+// OS-level memory pressure (Bun 1.4+; PSI on Linux fires only at
+// "critical"). The kiosk's Chromium — not this process — is the big
+// consumer on a 2 GB Pi, so this can't free its memory; it logs for
+// journalctl correlation and sheds this process's dispensable state.
+// No-op on pre-1.4 runtimes, where the event never fires.
+installMemoryPressureGuard();
 
 // mDNS peer discovery + announce. Silent-fails on platforms without
 // multicast (Docker-networked-host, some WSL2 setups) — the app keeps

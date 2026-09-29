@@ -115,7 +115,12 @@ export async function deleteBundle(id: string): Promise<boolean> {
 	return true;
 }
 
-/** Testing hook — clears the in-memory cache so next access re-hydrates from disk. */
-export function _resetCacheForTests(): void {
+/**
+ * Clear the in-memory cache so the next access re-hydrates from disk.
+ * Disk is the source of truth, so nothing is lost — the cost is one
+ * re-read. Used by the memory-pressure guard (server.ts) to shed state
+ * under OS memory pressure, and by tests to reset between cases.
+ */
+export function invalidateCache(): void {
 	cache = null;
 }
