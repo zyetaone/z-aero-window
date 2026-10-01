@@ -31,6 +31,22 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+/**
+ * The runtime the BUILT SERVER must be started with.
+ *
+ * `build/index.js` is adapter-bun output: it calls `Bun.serve`, `Bun.file` and
+ * `Bun.semver` at module scope, so starting it under Node dies before it binds a
+ * socket — the first frame of the stack is `Bun is not defined`, and the smoke
+ * harness would report it as a server that never came up rather than as the
+ * reason.
+ *
+ * This harness is itself a Node script (shebang above, global WebSocket), so
+ * `process.execPath` here is Node whichever way it was launched. Resolve Bun
+ * explicitly rather than assuming the caller matched. Spawning `bun` from a
+ * Node process is fine — it is a sibling binary on the Pi and in CI.
+ */
+const SERVER_RUNTIME = process.versions.bun ? process.execPath : 'bun';
+
 const arg = (name, dflt) => {
 	const i = process.argv.indexOf(`--${name}`);
 	return i === -1 ? dflt : process.argv[i + 1];
@@ -196,7 +212,7 @@ const kioskEnv = {
 // `NODE_ENV: undefined` inside the spread would still hand the child the key;
 // only deleting it reproduces an unprovisioned Pi.
 delete kioskEnv.NODE_ENV;
-const server = spawn(process.execPath, ['build/index.js'], {
+const server = spawn(SERVER_RUNTIME, ['build/index.js'], {
 	env: kioskEnv,
 	stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -589,7 +605,7 @@ try {
 	};
 	delete guardEnv.NODE_ENV;
 	delete guardEnv.AERO_ADMIN_UI;
-	const guardServer = spawn(process.execPath, ['build/index.js'], {
+	const guardServer = spawn(SERVER_RUNTIME, ['build/index.js'], {
 		env: guardEnv,
 		stdio: 'ignore'
 	});
@@ -616,7 +632,7 @@ try {
 	 * `readLimitedJson` has unit tests asserting exactly this, and they passed
 	 * while every real request got an empty `200`. A bare `new Request(...)` has
 	 * no socket, so `reader.cancel()` had nothing to destroy; over HTTP it
-	 * destroyed the connection adapter-node needed to write the 413 to. The
+	 * destroyed the connection the adapter needed to write the 413 to. The
 	 * suite was green and the wire was wrong, on `/api/wall` as shipped.
 	 *
 	 * Only a real request can see that, which is what this file is for.

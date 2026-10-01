@@ -4,8 +4,9 @@
  *
  * Loose tiles are easy to inspect but bad to ship: an SD card holding hundreds
  * of thousands of tiny files pays filesystem overhead on every read. PMTiles is
- * one file, read by HTTP Range request (sirv, which adapter-node serves static
- * files with, already answers 206).
+ * one file, read by HTTP Range request — adapter-bun registers static assets as
+ * native Bun routes and answers 206 with Accept-Ranges/Content-Range (verified
+ * against a built server, not assumed from the docs).
  *
  * Goes via MBTiles because that is what `pmtiles convert` accepts, and MBTiles
  * is just a SQLite schema — bun ships SQLite, so this needs no mb-util.

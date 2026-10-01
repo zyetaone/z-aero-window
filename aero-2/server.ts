@@ -1,6 +1,7 @@
 /**
  * Server entrypoint for production and Pi fleet deployment.
- * Hands HTTP over to adapter-node's built output (build/index.js).
+ * Hands HTTP over to adapter-bun's built output (build/index.js), which
+ * auto-starts a `Bun.serve` on import — the same contract adapter-node had.
  */
 import { existsSync } from 'node:fs';
 

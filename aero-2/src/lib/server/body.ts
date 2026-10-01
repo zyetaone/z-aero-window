@@ -42,14 +42,33 @@ export async function readLimited(
 				 * HTTP, an over-limit POST got an empty `200` with `Connection:
 				 * close`, on this route and on `/api/wall`, which had shipped that way.
 				 *
+				 * Do not "simplify" this back to `cancel()` now that the app runs on
+				 * adapter-bun instead of adapter-node: `releaseLock()` is correct under
+				 * any adapter, while `cancel()` was only safe under the one it was
+				 * measured on. The wire-level 413 is asserted in
+				 * tools/smoke-routes.mjs and was re-verified against the Bun server,
+				 * which is the check that would catch it if this ever stopped holding.
+				 *
 				 * A unit test cannot see it. A bare `new Request(...)` has no socket
 				 * to destroy, so the handler returns a clean 413 and the suite is
 				 * green while the wire says 200. That gap is why this is verified with
 				 * curl against a built server, not only with vitest.
 				 *
-				 * Releasing the lock instead leaves the stream intact; adapter-node's
-				 * own `drain_request` discards the rest once the response is sent, so
-				 * the connection stays usable and the status is truthful. The bytes
+				 * Releasing the lock instead leaves the stream intact, which is what
+				 * makes the 413 reachable at all. What happens to the CONNECTION
+				 * afterwards differs by adapter, and both were measured over real HTTP:
+				 *
+				 *   adapter-node  drains the unread remainder once the response is
+				 *                 written, so the connection stays reusable.
+				 *   adapter-bun   answers `Connection: close` and drops it. Control:
+				 *                 two ordinary requests DO report `Re-using existing
+				 *                 connection`; the request after a 413 opens a new one.
+				 *
+				 * Closing is not a regression — you cannot reuse a connection whose
+				 * request body is still unread, so not draining and not reusing are the
+				 * same decision reached two ways, and closing avoids reading another
+				 * 700 KB of a payload we have already rejected. The requirement here is
+				 * only that the STATUS be truthful, and that holds under both. The bytes
 				 * already read are dropped either way.
 				 *
 				 * The `finally` below releases too, which is fine: a second

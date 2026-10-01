@@ -2,7 +2,27 @@
 
 Minimal rewrite of [Aero Dynamic Window](../) — one slice at a time.
 
-**Stack:** SvelteKit · Svelte 5 runes · MapLibre GL · adapter-node (Pi kiosk).
+**Stack:** SvelteKit · Svelte 5 runes · MapLibre GL · adapter-bun (Bun-native Pi kiosk).
+
+### Runtime floor: Bun 1.4+
+
+`adapter-bun` produces a **Bun-only** server — the built `build/index.js` calls
+`Bun.serve`, `Bun.file` and `Bun.semver` at module scope, so it cannot start
+under Node, and it throws at boot below Bun 1.4.0. `bun run build` therefore
+runs as `bun run --bun build:bun` (`build:bun` is the real `vite build`): the
+`--bun` flag overrides Vite's Node shebang, and without it the adapter's Bun
+build API is simply unavailable.
+
+Keep in mind when fielding this:
+
+- `deploy/pi/install.sh` pins `BUN_VERSION="1.4.2"` **for fresh installs only** —
+  a device that already has Bun keeps what it was provisioned with.
+- `deploy/aero-updater.sh` deliberately never upgrades the runtime; the design
+  note is at `install.sh:176-181`. Rollback covers a broken runtime, but a
+  device on Bun < 1.4 will reject every new build and sit on the rollback
+  until someone upgrades its Bun by hand.
+
+That is a precondition, not a bug: nothing here upgrades the runtime for you.
 
 ```sh
 bun install

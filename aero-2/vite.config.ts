@@ -1,4 +1,4 @@
-import adapter from '@sveltejs/adapter-node';
+import adapter from '@sveltejs/adapter-bun';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defaultServerConditions } from 'vite';
 import { defineConfig } from 'vitest/config';
@@ -81,8 +81,8 @@ export default defineConfig({
 			 * green — 416 unit tests, a clean typecheck, no import cycles — because
 			 * none of them loads a page below the root.
 			 *
-			 * Absolute is correct for this app regardless: it is served by
-			 * adapter-node from a known origin, never from a subdirectory, so the
+			 * Absolute is correct for this app regardless: it is served from
+			 * a known origin, never from a subdirectory, so the
 			 * portability relative paths buy is worth nothing here.
 			 */
 			paths: { relative: false },
