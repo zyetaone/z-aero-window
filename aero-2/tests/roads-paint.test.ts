@@ -38,7 +38,23 @@ describe('lampOpacity', () => {
 			expect(typeof v).toBe('number');
 			expect(v).toBeGreaterThanOrEqual(0);
 			expect(v).toBeLessThanOrEqual(1);
-			expect(Math.round(v * 100) / 100).toBe(v);
+			// Quantised to the 0.01 grid, but NOT exactly representable there:
+			// quantize(0.345) is 0.35000000000000003. Asserting exact equality
+			// here would only pass because the chosen inputs happen to land
+			// clean, and it advertises a guarantee the code does not make. The
+			// bound is what MapLibre actually cares about.
+			expect(Math.abs(v * 100 - Math.round(v * 100))).toBeLessThan(1e-9);
+		}
+	});
+
+	it('returns a finite number in range for non-finite input', () => {
+		// A NaN reaching line-opacity makes MapLibre drop the layer, so the
+		// road lamps would vanish with no error. Guarded, and tested.
+		for (const bad of [NaN, Infinity, -Infinity]) {
+			const v = lampOpacity(0.55, bad, 0.99);
+			expect(Number.isFinite(v)).toBe(true);
+			expect(v).toBeGreaterThanOrEqual(0);
+			expect(v).toBeLessThanOrEqual(1);
 		}
 	});
 

@@ -97,6 +97,13 @@ export const GET: RequestHandler = async ({ url, request }) => {
 	const cors = lanCorsHeaders(request.headers.get('origin'));
 	const headers = { ...cors, 'Cache-Control': 'public, max-age=60' };
 	const errorHeaders = { ...cors, 'Cache-Control': 'no-store' };
+	// A `stale: true` 200 is a stand-in for a dead provider, and it may be
+	// STALE_MAX_MS old. It must not carry the same 60 s shared-cache lifetime
+	// as a live reading: a proxy (or anything that respects the header) is then
+	// entitled to pin one hour-old weather for a further minute, and the panes
+	// read that as current. The internal Map cache is still worth 60 s — that
+	// is this process reusing its own reading — but an intermediary is not.
+	const staleHeaders = { ...cors, 'Cache-Control': 'no-store' };
 
 	const lat = num(url.searchParams.get('lat'));
 	const lon = num(url.searchParams.get('lon'));
@@ -126,6 +133,6 @@ export const GET: RequestHandler = async ({ url, request }) => {
 
 	// Provider down but a (stale) reading exists: say so honestly and let
 	// the client decide. Nothing cached at all: 503, client holds course.
-	if (hit) return json({ ...hit, fromCache: true, stale: true }, { headers });
+	if (hit) return json({ ...hit, fromCache: true, stale: true }, { headers: staleHeaders });
 	return json({ error: 'weather provider unreachable' }, { status: 503, headers: errorHeaders });
 };

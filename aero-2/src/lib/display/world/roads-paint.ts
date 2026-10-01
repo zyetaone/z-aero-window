@@ -102,9 +102,18 @@ export const SNAP = { duration: 0 } as const;
 
 /**
  * A `line-opacity` value: the product of the reactive scalars, clamped and
- * on the 0.01 grid. Always a number — that is the whole contract.
+ * quantised. Always a finite number in 0..1 — that is the whole contract.
+ *
+ * The NaN guard is not decoration. `Math.min(1, NaN)` is NaN and
+ * `Math.round(NaN)` is NaN, so without it a single non-finite input propagates
+ * straight into a `line-opacity` paint expression, and MapLibre's response to a
+ * NaN expression is to drop the layer — the road lamps silently vanish rather
+ * than throwing. Every comparable function in this tree already guards
+ * (`farFieldShare`, `gradeWarm`, `downtownWarpSec`); this one did not, and its
+ * docstring claimed a guarantee the tests never exercised.
  */
 export function lampOpacity(...factors: number[]): number {
+	if (!factors.every((f) => Number.isFinite(f))) return 0;
 	const product = factors.reduce((a, b) => a * b, 1);
 	return quantize(Math.max(0, Math.min(1, product)));
 }

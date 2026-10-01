@@ -135,6 +135,21 @@ export function datumAt(glide: DatumGlide, wallSec: number): number {
 export function glideDatum(prev: DatumGlide | null, target: number, wallSec: number): DatumGlide {
 	const goal = target + DATUM_MARGIN_M;
 	if (prev === null) return { fromM: goal, fromWallSec: wallSec, goalM: goal };
+	// A clock that steps BACKWARDS (NTP correction, or a reboot onto a dead RTC)
+	// puts wallSec behind the anchor, so `elapsed` clamps to 0 and datumAt
+	// returns fromM — the pre-fall height. With a constant target that latches:
+	// the pane jumps back up to where the fall began and stays there, which is
+	// the one case where the closed form is WORSE than the old integrating
+	// version, whose dt clamp held the current value instead. The integrator
+	// degraded to a freeze at the right altitude; this froze at the wrong one.
+	//
+	// So re-anchor: continue the fall from the datum actually on screen at the
+	// new (earlier) second. The picture does not jump, the fall keeps
+	// converging, and once the clock catches up every pane agrees again because
+	// they all re-anchor at their own current datum.
+	if (wallSec < prev.fromWallSec) {
+		return { fromM: datumAt(prev, wallSec), fromWallSec: wallSec, goalM: prev.goalM };
+	}
 	if (goal === prev.goalM) return prev;
 	const current = datumAt(prev, wallSec);
 	if (goal >= current) return { fromM: goal, fromWallSec: wallSec, goalM: goal };

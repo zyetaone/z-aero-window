@@ -115,6 +115,13 @@ describe('GET /api/weather — cache lifetime', () => {
 		expect(stale.status).toBe(200);
 		expect(await stale.json()).toMatchObject({ weather: 'rain', fromCache: true, stale: true });
 		expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+		// A stale stand-in can be an hour old, so it must NOT carry the live
+		// reading's `public, max-age=60`. A proxy is then entitled to pin an
+		// hour-old weather for another minute, and every pane reads it as
+		// current. The 60 s is for this process reusing its own cache, not for
+		// an intermediary. An earlier version returned the same `headers` here
+		// and every test in this file still passed.
+		expect(stale.headers.get('cache-control')).toBe('no-store');
 
 		// An hour-old reading is not weather: the client holds course instead.
 		vi.setSystemTime(t0 + 61 * MIN);

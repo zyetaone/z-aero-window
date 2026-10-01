@@ -171,7 +171,7 @@
 	 * costs a re-parse. Same syntax, opposite economics — the question is always
 	 * whether the mounted-but-invisible thing is doing WORK.
 	 */
-	// Latched against twilight dither. The lightUpUT is tracked — an earlier
+	// Latched against twilight dither. The gate's own input is tracked — an earlier
 	// `untrack` around the whole call evaluated the gate once at mount and
 	// froze it, so a dusk boot never mounted the source no matter how dark it
 	// got. Only the LATCH read is untracked: the effect writes `latched`, and

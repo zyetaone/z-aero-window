@@ -93,7 +93,7 @@
 		)
 	);
 
-	// Latched against twilight dither. The nightLightOpacityUT is tracked — an earlier
+	// Latched against twilight dither. The gate's own input is tracked — an earlier
 	// `untrack` around the whole call evaluated the gate once at mount and
 	// froze it, so a dusk boot never mounted the layer no matter how dark it
 	// got. Only the LATCH read is untracked: the effect writes `latched`, and
