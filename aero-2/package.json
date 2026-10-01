@@ -20,25 +20,25 @@
 	},
 	"dependencies": {
 		"@svelte-maplibre-gl/pmtiles": "^2.0.1",
-		"maplibre-gl": "^6.6.0",
+		"maplibre-gl": "^6.11.2",
 		"svelte-maplibre-gl": "^2.2.1",
 		"three": "^0.185.1",
 		"zod": "^4.6.5"
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-node": "next",
+		"@sveltejs/adapter-node": "6.0.0-next.10",
 		"@sveltejs/kit": "3.0.0-next.25",
-		"@sveltejs/vite-plugin-svelte": "^7.3.0",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@types/three": "^0.185.4",
-		"happy-dom": "^20.11.6",
+		"happy-dom": "^20.14.5",
 		"jsqr": "^1.4.0",
 		"pngjs": "^7.0.0",
-		"prettier": "^3.9.6",
+		"prettier": "^3.9.9",
 		"prettier-plugin-svelte": "^4.1.1",
-		"svelte": "^5.56.10",
+		"svelte": "^5.57.1",
 		"svelte-check": "^4.7.6",
 		"typescript": "^6.0.3",
-		"vite": "^8.2.2",
+		"vite": "^8.3.1",
 		"vitest": "^4.1.11"
 	},
 	"imports": {
