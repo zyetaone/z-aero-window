@@ -115,12 +115,6 @@ export async function initCesiumGlobal(C: typeof CesiumType): Promise<void> {
 	(globalThis as any).CESIUM_BASE_URL = '/cesiumStatic';
 }
 
-/** Test-only reset hook — module state is per-process. */
-export function __resetIonTokenCacheForTests(): void {
-	resolvedToken = null;
-	tokenResolved = false;
-}
-
 /**
  * Shared Cesium.Viewer constructor options — strips all built-in widgets
  * (toolbar, geocoder, animation, etc.) so the canvas is purely a render surface.

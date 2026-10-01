@@ -449,12 +449,3 @@ export function syncOfflineBuildings(
 	showOfflineCity(locationId, buildingsEnabled);
 }
 
-/** Test seam — lets a test drive the tier decision without a GPU. */
-export function _setOfflineTierForTest(on: boolean): void {
-	_offlineTier = on;
-}
-
-/** True when the Ion tier is unavailable and GeoJSON is carrying the skyline. */
-export function isOfflineBuildingTier(): boolean {
-	return _offlineTier;
-}
