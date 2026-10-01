@@ -158,14 +158,6 @@ export interface WorldPatch {
 	vantageBeat?: VantageBeat;
 }
 
-export interface MicroEventData {
-	type: 'shooting-star' | 'bird' | 'contrail';
-	elapsed: number;
-	duration: number;
-	x: number;
-	y: number;
-}
-
 // ─── Scenario types ──────────────────────────────────────────────────────────
 
 interface Waypoint {
