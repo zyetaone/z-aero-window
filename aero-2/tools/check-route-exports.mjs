@@ -8,8 +8,7 @@
  * So the shape of the failure is:
  *
  *     svelte-check       0 errors, 0 warnings
- *     check-cycles       pass
- *     check-rune-naming  pass
+ *     check-repo         pass
  *     bun run build      Error: Invalid export 'MAX_BODY_BYTES' in /api/status
  *
  * which is correct and fast enough, but it costs a full production build to
@@ -23,26 +22,26 @@
  *    the dev server and the client runtime. So a bad export from `+page.ts`
  *    reaches a production build unchallenged. This checks all five stems.
  * 2. `+page.server.ts` and `+layout.server.ts` are likewise unvalidated at
- *    build. This app has neither today, but the checker covers them the day
- *    someone adds one.
+ *    build. This app HAS one — `admin/+page.server.ts` — so this is not a
+ *    theoretical branch for it.
  *
  * THE ALLOWLIST IS NOT WRITTEN DOWN HERE, on purpose. The first version of this
  * check COPIED kit's sets into a local `RULES` table and documented that it had
- * copied them verbatim. It had not: the copy omitted `load`, which every
- * `+page.ts` and `+layout.ts` is allowed to export. Nothing caught it here —
- * this app's route modules export only `ssr` and `csr`, and it has no
- * `+page.server.ts` — so the defect sat dormant until the same script was
- * ported to aero-2, where `admin/+page.server.ts` exports `load` and the check
- * reported a real-looking failure for a completely legal export. A false
- * positive in a gate whose only job is to be trusted is worse than no gate.
+ * copied them verbatim. It had not: the copy was missing `load`, which every
+ * `+page.ts` and `+layout.ts` is allowed to export, and missing `QUERY`, which
+ * kit 3 added to the `+server.ts` set. Nothing caught it, because the app it
+ * shipped with exports only `ssr` and `csr` from its route modules and has no
+ * `+page.server.ts` at all. Porting the check to an app that DOES export `load`
+ * is what exposed it — a false positive that reads as a real failure, in a gate
+ * whose entire job is to be trusted, is worse than no gate.
  *
  * So this now calls kit's OWN validators on each name, loaded from the installed
- * package. Two consequences a copied table cannot give:
+ * package. Two consequences that a copied table cannot give:
  *
  *   - it cannot drift: whatever the installed kit accepts, this accepts, and a
  *     kit upgrade that widens or narrows the set takes effect without an edit
- *     here. (kit 3 also added `QUERY` to the `+server.ts` set; this script
- *     needs no knowledge of that.)
+ *     here. aero-1 on kit 2 rejects `QUERY`, this same script on kit 3 accepts
+ *     it, and neither has to be told.
  *   - the failure message is kit's, including its hint about which file the
  *     name IS valid in, rather than a reconstruction of it.
  *
@@ -57,10 +56,9 @@
  * export is exempt when its name starts with `_`, and that exemption is
  * enforced by SvelteKit on the RESOLVED MODULE — not on what you wrote. So
  * `export { thing as _thing }` is accepted at build and then `thing` is missing
- * at runtime. This check cannot see through that either, and neither can the
- * type checker — verified, not assumed: a route module exporting only
- * `export { impl as _impl }` passes here. Keep route-module constants beside
- * the schema they bound instead, which is where they belong anyway.
+ * at runtime. This check cannot see through that, and neither can the type
+ * checker. Keep route-module constants beside the schema they bound instead,
+ * which is where they belong anyway.
  *
  * Run: node tools/check-route-exports.mjs
  */
