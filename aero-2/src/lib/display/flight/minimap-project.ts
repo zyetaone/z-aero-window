@@ -180,9 +180,4 @@ export function coverTiles(
 	return out;
 }
 
-/** Pixel y at `zoom` back to longitude — exported for tests. */
-export function xToLon(x: number, world: number): number {
-	return (x / world) * 360 - 180;
-}
-
 export { yToLat };
