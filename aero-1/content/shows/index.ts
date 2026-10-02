@@ -54,8 +54,9 @@ export const DAILY_ROTATION: readonly Show[] = [
 	// slots land it between 21:00 and 05:00 local — the identical void, reached
 	// through the hour instead of through the author.
 	//
-	// Both are reachable by URL and from the admin panel, where the operator
-	// picks the moment. Letting either back into the rotation needs the pick to
+	// Neither is playable from the fleet today — no URL or admin path resolves
+	// them by id; they simply sit out the rotation. Letting either back in
+	// needs the pick to
 	// be sky-aware (pickNextLocation already scores destination sky; this one
 	// does not), or the `clouds` location needs a moonlit floor to be worth
 	// looking at after dark.
