@@ -440,6 +440,91 @@ if [[ -n "${free_mb}" ]] && (( free_mb < MIN_FREE_MB )); then
     exit 0
 fi
 
+# ─── 3b. Runtime floor, read from the app being built ────────────────────────
+
+# True when $1 (a version) is at or above $2 (a floor).
+#
+# `sort -V` is the whole comparison — hand-rolled numeric parsing gets 1.10
+# wrong, and a floor check that calls 1.10 older than 1.9 is exactly the class
+# of defect this guard exists to prevent. Deliberately a named function rather
+# than an inline test: apply_boundary and hold_decision are covered from
+# aero-1/tests/tools by extracting them from this file, and this sits next to
+# them for the same reason. Its input is its only dependency, so the extractor
+# can run it in a bare shell.
+#
+# Returns non-zero for a version that is not comparable at all (a failed
+# `--version` reporting "unavailable"), because failing open would let an
+# unusable runtime past a guard whose job is to notice exactly that.
+bun_meets_floor() {
+    # Fails CLOSED on a version it cannot parse. This is not defensive padding:
+    # `printf '%s\n%s\n' 1.4.0 unavailable | sort -V` puts 1.4.0 first because
+    # sort orders digits before letters, so without this guard a runtime that
+    # cannot even answer `--version` would be measured as being ABOVE the floor
+    # and waved through. The prefix form (not a full `^[0-9.]+$`) still accepts
+    # `1.4.2-canary.1`, which must not be blocked just because it has a suffix.
+    [[ "$1" =~ ^[0-9]+\.[0-9]+ ]] || return 1
+    [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n 1)" == "$2" ]]
+}
+
+# @sveltejs/adapter-bun THROWS below Bun 1.4.0 — it calls Bun APIs that do not
+# exist earlier. What makes that worth a guard rather than a log line is the
+# SHAPE of the failure without one, traced through this same script:
+#
+#   `bun run build` dies inside the adapter
+#     -> line 468 reads it as "build failed" -> rollback()
+#     -> rollback resets to the previous commit, which builds fine on
+#        adapter-node, so the device looks healthy
+#     -> the sha is appended to bad-release on EVERY rollback
+#     -> the second poll bans it outright (the two-strikes check above)
+#
+# Net effect: two "build failed" lines in the journal, then that release is
+# never tried again on any pane, while the real cause — a runtime nobody
+# upgraded — sits in /var/log/aero-updater.log as a stack trace about
+# `Bun.serve`. Nothing anywhere says "your Bun is too old".
+#
+# WHICH APP, and why the version is not written here twice: the requirement is
+# read from the package.json about to be built. If it pulls
+# @sveltejs/adapter-bun the floor is enforced; if it does not — aero-1 builds
+# with adapter-node — this block does not run at all, so the shipped fleet is
+# untouched by this change. A device mid-migration is handled by the tree it is
+# migrating to, not by a number someone remembers to update here.
+#
+# SKIP, and the sha is NOT poisoned: the release is fine, the runtime is not,
+# and poisoning would ban a good release for a fault it cannot cause.
+#
+# HEAD IS RESTORED, which is the part that is easy to get wrong. The
+# `git reset --hard` above already moved HEAD to the incoming commit, and LOCAL
+# still holds where it came from. Exiting in place would leave HEAD == REMOTE,
+# so is_newer would be false on every later poll: the log would say "nothing to
+# apply" forever, and upgrading Bun afterwards would never trigger a build — the
+# update would have been consumed by a device that could not use it. Putting
+# HEAD back makes this skip mean what it says: retried on the next poll,
+# indefinitely, until the runtime is upgraded.
+#
+# (The free-disk guard just above exits WITHOUT restoring HEAD. That one is
+# survivable because a later release un-sticks it, so the device merely misses
+# one — but the same reasoning does not apply here, where "wait for a newer
+# release" is precisely the wrong answer to "you need to upgrade Bun".)
+if [[ -f "${APP_DIR}/package.json" ]] && command grep -q '"@sveltejs/adapter-bun"' "${APP_DIR}/package.json"; then
+    BUN_FLOOR="1.4.0"
+    BUN_HAVE="$(as_app_user "${BUN_BIN}" --version 2>/dev/null || echo "unavailable")"
+    if ! bun_meets_floor "${BUN_HAVE}" "${BUN_FLOOR}"; then
+        log "SKIP: this app builds with @sveltejs/adapter-bun, which needs Bun >= ${BUN_FLOOR}."
+        log "      ${BUN_BIN} reports '${BUN_HAVE}'. Below that floor every build fails inside"
+        log "      the adapter and this sha would be banned after two attempts, with the cause"
+        log "      buried in a Bun.serve stack trace — so it is checked before install, not"
+        log "      discovered during it. The release is fine; the runtime is not."
+        log "      Upgrade the runtime, then the next poll retries this commit:"
+        log "        curl -fsSL https://bun.sh/install | bash -s 'bun-v${BUN_FLOOR}'"
+        if [[ "$(git rev-parse HEAD)" == "${REMOTE}" ]]; then
+            git reset --hard "${LOCAL}" >/dev/null 2>&1 \
+                && log "      HEAD restored to ${LOCAL:0:8}; re-checked on every poll until then." \
+                || log "      WARN: could not restore HEAD to ${LOCAL:0:8} — the next poll may not retry."
+        fi
+        exit 0
+    fi
+fi
+
 snapshot_build
 
 log "Installing dependencies..."
