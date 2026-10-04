@@ -69,6 +69,16 @@ stat -c '  %U %a %n' /var/log/aero-updater.log 2>/dev/null || echo "  no /var/lo
 tail -n 8 /var/log/aero-updater.log 2>/dev/null | sed 's/^/  /'
 journalctl -u aero-updater --since -2d --no-pager 2>/dev/null | tail -12 | sed 's/^/  /'
 
+say "prebuilt vs on-device build (fallback-retirement evidence)"
+if [[ -f /var/log/aero-updater.log ]]; then
+  # Counts for the deletion decision in AERO-1-VS-AERO-2.md §9: several days of
+  # installs > 0 with fallbacks == 0 across the whole wall means the on-device
+  # build path has no live reason left. Logrotate keeps ~5 weeks.
+  echo "  prebuilt installs:  $(grep -c 'Prebuilt: installed the CI build' /var/log/aero-updater.log)"
+  echo "  on-device fallbacks: $(grep -c 'building on-device' /var/log/aero-updater.log)"
+  grep 'building on-device' /var/log/aero-updater.log 2>/dev/null | tail -5 | sed 's/^/     /'
+fi
+
 
 say "sudo preflight, as the service user (what the app's privileged hatch runs)"
 U=$(grep -m1 '^User=' /etc/systemd/system/aero-app.service 2>/dev/null | cut -d= -f2)
