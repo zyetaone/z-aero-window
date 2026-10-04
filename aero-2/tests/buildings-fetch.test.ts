@@ -42,6 +42,35 @@ interface RunResult {
 }
 
 /**
+ * Runs the tool with an explicit argv. Split out from `run` because the
+ * failover test has to name endpoints IT builds rather than the one stub `run`
+ * stands up — and because the properties worth asserting are the ones a caller
+ * sees: exit code, what is on disk, what is in the refusal file.
+ */
+async function execTool(argv: string[], dir: string): Promise<RunResult> {
+	/**
+	 * ASYNC, and it has to be.
+	 *
+	 * The first version of this used `execFileSync` and the suite hung for
+	 * the full timeout on every case, with no output. The stub Overpass
+	 * endpoint lives in THIS process, so answering the tool's POST needs the
+	 * event loop — and `execFileSync` blocks the event loop for exactly as
+	 * long as the child runs. The child waits for a response that cannot be
+	 * produced until the child exits. A textbook self-deadlock, and one that
+	 * looks like a slow test rather than a wrong one.
+	 */
+	const { status, stderr } = await new Promise<{ status: number; stderr: string }>(
+		(resolve, reject) => {
+			execFile('python3', [TOOL, ...argv], { encoding: 'utf8' }, (error, _stdout, errOut) => {
+				if (error && typeof error.code !== 'number') return reject(error);
+				resolve({ status: error ? (error.code as number) : 0, stderr: errOut ?? '' });
+			});
+		}
+	);
+	return { status, stderr, dir };
+}
+
+/**
  * Runs the tool against a local stub of the Overpass endpoint, so the whole
  * path — HTTP, JSON parse, geometry, self-check, write — is exercised without
  * a network. A stub is the only way to test a failure mode, and the failure
@@ -65,48 +94,26 @@ async function run(elements: unknown[], args: string[] = []): Promise<RunResult>
 	const port = (server.address() as { port: number }).port;
 
 	try {
-		/**
-		 * ASYNC, and it has to be.
-		 *
-		 * The first version of this used `execFileSync` and the suite hung for
-		 * the full timeout on every case, with no output. The stub Overpass
-		 * endpoint lives in THIS process, so answering the tool's POST needs the
-		 * event loop — and `execFileSync` blocks the event loop for exactly as
-		 * long as the child runs. The child waits for a response that cannot be
-		 * produced until the child exits. A textbook self-deadlock, and one that
-		 * looks like a slow test rather than a wrong one.
-		 */
-		const { status, stderr } = await new Promise<{ status: number; stderr: string }>(
-			(resolve, reject) => {
-				execFile(
-					'python3',
-					[
-						TOOL,
-						'testville',
-						'--lat',
-						'0',
-						'--lon',
-						'0',
-						// `--out` is not optional here. Without it the tool writes to
-						// `./data/buildings` in the REPO, which is what the first
-						// version of this test did: it passed, and left a 68 KB
-						// testville.geojson in the working tree. The tool's default is
-						// correct for a human at a repo root and wrong for a test.
-						'--out',
-						dir,
-						'--endpoint',
-						`http://127.0.0.1:${port}/api/interpreter`,
-						...args
-					],
-					{ encoding: 'utf8' },
-					(error, _stdout, errOut) => {
-						if (error && typeof error.code !== 'number') return reject(error);
-						resolve({ status: error ? (error.code as number) : 0, stderr: errOut ?? '' });
-					}
-				);
-			}
+		return await execTool(
+			[
+				'testville',
+				'--lat',
+				'0',
+				'--lon',
+				'0',
+				// `--out` is not optional here. Without it the tool writes to
+				// `./data/buildings` in the REPO, which is what the first
+				// version of this test did: it passed, and left a 68 KB
+				// testville.geojson in the working tree. The tool's default is
+				// correct for a human at a repo root and wrong for a test.
+				'--out',
+				dir,
+				'--endpoint',
+				`http://127.0.0.1:${port}/api/interpreter`,
+				...args
+			],
+			dir
 		);
-		return { status, stderr, dir };
 	} finally {
 		server.close();
 	}
@@ -304,6 +311,87 @@ describe('fetch-buildings.py', () => {
 		expect(ring[0]).toEqual(ring[ring.length - 1]);
 		rmSync(r.dir, { recursive: true, force: true });
 	});
+
+	it('fails over to the next endpoint, and records the one that served', async () => {
+		/**
+		 * The single-endpoint version of this tool died the moment
+		 * overpass-api.de declined it — which it does routinely, and did
+		 * recently with a 406 that had nothing to do with the query. A build
+		 * fetcher with one mirror does not have availability, it has a
+		 * schedule, and the failure mode was "no city pack today" with a
+		 * stack trace pointing at a third party.
+		 *
+		 * Stub A answers 504 to everything; stub B answers with the fixture.
+		 * A is listed FIRST, so if failover did not happen this test cannot
+		 * pass on any path — it would exit non-zero.
+		 */
+		const dir = mkdtempSync(join(tmpdir(), 'aero-buildings-'));
+		const { createServer } = await import('node:http');
+		const body = fixture(manySquares(320, 0, 0));
+		let deadHits = 0;
+
+		const dead = createServer((_req, res) => {
+			deadHits++;
+			res.writeHead(504, { 'Content-Type': 'text/plain' });
+			res.end('504 Gateway Time-out');
+		});
+		const live = createServer((_req, res) => {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(body);
+		});
+
+		await new Promise<void>((d) => dead.listen(0, '127.0.0.1', d));
+		await new Promise<void>((d) => live.listen(0, '127.0.0.1', d));
+		const deadUrl = `http://127.0.0.1:${(dead.address() as { port: number }).port}/api/interpreter`;
+		const liveUrl = `http://127.0.0.1:${(live.address() as { port: number }).port}/api/interpreter`;
+
+		try {
+			const r = await execTool(
+				[
+					'testville',
+					'--lat',
+					'0',
+					'--lon',
+					'0',
+					'--out',
+					dir,
+					'--endpoint',
+					deadUrl,
+					'--endpoint',
+					liveUrl
+				],
+				dir
+			);
+			expect(r.status, r.stderr).toBe(0);
+
+			// The dead mirror was genuinely asked. Without this the test only
+			// proves the live stub works, which the tests above already do.
+			expect(deadHits).toBeGreaterThan(0);
+			expect(r.stderr).toContain('trying next endpoint');
+			expect(existsSync(join(dir, 'data/buildings/testville.geojson'))).toBe(true);
+
+			// Provenance must name the endpoint that ACTUALLY served, not the
+			// first one listed. A manifest blaming a mirror that 504'd sends
+			// the next person through the wrong provider's logs.
+			const manifest = JSON.parse(
+				readFileSync(join(dir, 'data/buildings/source-testville.json'), 'utf8')
+			);
+			expect(manifest.endpoint).toBe(liveUrl);
+		} finally {
+			dead.close();
+			live.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+		// 30 s, well above the ~900 ms this takes when failover works, and the
+		// point is that the DEFAULT 5 s is not enough when it does not. With a
+		// dead primary and no failover the tool burns 5 s + 10 s of backoff
+		// before giving up, so under the default this test fails with
+		// "Test timed out in 5000ms" and the exit code and stderr assertions
+		// below never run — a failure that names the harness clock instead of
+		// the defect. Measured by breaking failover on purpose and reading the
+		// report rather than trusting that "failed" meant the right thing.
+		// The still-passing path stays ~900 ms, so nothing is slowed down.
+	}, 30_000);
 
 	it('rejects an unknown place unless coordinates are given', () => {
 		/**

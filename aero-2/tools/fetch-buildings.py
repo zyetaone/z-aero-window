@@ -108,7 +108,37 @@ DEFAULT_MAX_FEATURES = 600
 # Below this the pass is a flyover of a car park. Denver is the known one.
 MIN_FEATURES = 300
 
-DEFAULT_ENDPOINT = "https://overpass-api.de/api/interpreter"
+# FAILOVER LIST, ordered, and every entry measured rather than assumed. A build
+# that can reach exactly one mirror is a build that stops whenever that mirror
+# rate-limits — which overpass-api.de does routinely, and did recently with a
+# 406 that had nothing to do with this query.
+#
+#   overpass-api.de            200 in ~1-3 s   — primary
+#   maps.mail.ru/osm/tools     200 in ~15 s
+#   overpass.kumi.systems      200 in ~58 s    — community mirror
+#
+# Deliberately NOT in this list, each for a reason that was measured:
+#
+#   overpass.private.coffee    504 after 79 s. Flaky enough to be a coin flip;
+#                              a third endpoint that fails half the time adds
+#                              latency without adding availability.
+#   overpass.osm.jp            TLS CERTIFICATE VERIFY FAILED. A mirror whose
+#                              certificate does not validate is worse than no
+#                              mirror: urllib refuses it, and a less careful
+#                              client would happily send the query to whoever
+#                              holds that cert.
+#   overpass.osm.ch            Switzerland-only. It answers 200 with ZERO
+#                              elements for every other country. That is the
+#                              dangerous failure of the three — it looks like
+#                              success, and what arrives is an empty pack that
+#                              the self-check then has to refuse. A silent wrong
+#                              answer is the reason a failover list needs each
+#                              entry checked against a non-home query.
+ENDPOINTS: tuple[str, ...] = (
+    "https://overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+)
 
 # Metres per storey, for buildings that give levels but no height. 3.2 is the
 # figure OSM's own building:levels consumers use for mixed residential.
@@ -180,45 +210,75 @@ out geom tags qt;
 """.strip()
 
 
-def fetch_overpass(query: str, endpoint: str, attempts: int = 3) -> dict:
-    """POST the query, retrying transport errors and 429/504 with a real backoff.
+def fetch_overpass(query: str, endpoints: tuple[str, ...], attempts: int = 3) -> tuple[dict, str]:
+    """POST the query across a failover list, retrying with a real backoff.
+
+    Returns (payload, endpoint) — the endpoint that ACTUALLY served, not the
+    one asked for first. The manifest records it as provenance, and a manifest
+    that names a mirror which 504'd is a lie about where the city came from.
 
     Overpass rate-limits by IP and returns 429 as a plain text body, so the
     status has to be read before the body is parsed as JSON.
+
+    STRUCTURE: rounds × endpoints, exactly as aero-1's `fetchRoadGroupFeatures`
+    has always done it. Within a round every endpoint is tried once, in order;
+    only when the round is exhausted does the backoff sleep. That ordering is
+    what makes failover cheap — a dead primary costs one request, not one
+    timeout, because the sleep is not paid until every endpoint has declined.
+
+    Any error at all — 4xx, 5xx, TLS, timeout, malformed JSON — moves to the
+    next endpoint rather than raising. A 400 would not be fixed by a different
+    mirror, but burning two extra requests on it is cheaper than a second
+    code path deciding which failures are "our fault", and this runs at build
+    time where nobody is waiting.
     """
     delay = 5.0
     last: Exception | None = None
     for attempt in range(1, attempts + 1):
-        try:
-            req = urllib.request.Request(
-                endpoint,
-                data=query.encode("utf-8"),
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "User-Agent": "aero-2-tile-packager/1.0 (offline kiosk imagery)",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=180) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", "replace")[:200]
-            last = exc
-            # 429 rate limit and 504 gateway timeout are both worth waiting out.
-            if exc.code in (429, 502, 503, 504) and attempt < attempts:
-                print(f"  overpass {exc.code}, retrying in {delay:.0f}s ({body})", file=sys.stderr)
-                time.sleep(delay)
-                delay *= 2
+        for endpoint in endpoints:
+            try:
+                req = urllib.request.Request(
+                    endpoint,
+                    data=query.encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "User-Agent": "aero-2-tile-packager/1.0 (offline kiosk imagery)",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=180) as resp:
+                    return json.loads(resp.read().decode("utf-8")), endpoint
+            except urllib.error.HTTPError as exc:
+                last = exc
+                body = exc.read().decode("utf-8", "replace")
+                # 400 / 413 / 422 mean the REQUEST is wrong — malformed query or
+                # oversized body. No mirror can fix those, so cycling through
+                # the list would only delay the real message behind two backoff
+                # sleeps. Raise immediately and let the author read it. Anything
+                # else (429 rate limit, 5xx, a mirror being down) is exactly
+                # what failover is for.
+                fatal = exc.code in (400, 413, 422)
+                print(
+                    f"  overpass {endpoint}: HTTP {exc.code} {body[:80]}"
+                    + ("" if fatal else " — trying next endpoint"),
+                    file=sys.stderr,
+                )
+                if fatal:
+                    raise
                 continue
-            raise
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            last = exc
-            if attempt < attempts:
-                print(f"  overpass {exc}, retrying in {delay:.0f}s", file=sys.stderr)
-                time.sleep(delay)
-                delay *= 2
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                last = exc
+                print(f"  overpass {endpoint}: {exc} — trying next endpoint", file=sys.stderr)
                 continue
-            raise
-    raise RuntimeError(f"overpass failed after {attempts} attempts: {last}")
+        # Whole round failed. Sleep, then start over from the primary, because
+        # by now every mirror has been asked once and the likeliest reason is
+        # rate limiting, which clears with time rather than with a better mirror.
+        if attempt < attempts:
+            print(f"  all endpoints failed, round {attempt}/{attempts}, waiting {delay:.0f}s", file=sys.stderr)
+            time.sleep(delay)
+            delay *= 2
+    raise RuntimeError(
+        f"overpass failed after {attempts} rounds across {len(endpoints)} endpoints: {last}"
+    )
 
 
 def rings_of(element: dict) -> list[list[list[float]]]:
@@ -263,8 +323,10 @@ def m_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return math.hypot(dx, dy)
 
 
-def build(lat: float, lon: float, radius_m: int, max_features: int, endpoint: str) -> dict:
-    raw = fetch_overpass(overpass_query(lat, lon, radius_m), endpoint)
+def build(lat: float, lon: float, radius_m: int, max_features: int, endpoints: tuple[str, ...]) -> dict:
+    # `endpoint` is whatever actually served, not whatever was asked for first —
+    # it is written into the manifest as provenance below.
+    raw, endpoint = fetch_overpass(overpass_query(lat, lon, radius_m), endpoints)
     elements = raw.get("elements") or []
     print(f"  overpass returned {len(elements)} elements", file=sys.stderr)
 
@@ -396,7 +458,17 @@ def main() -> None:
                     help=f"metres around the pin (default {DEFAULT_RADIUS_M}, ~5 km box)")
     ap.add_argument("--max-features", type=int, default=DEFAULT_MAX_FEATURES,
                     help=f"cap on footprints, tallest kept (default {DEFAULT_MAX_FEATURES})")
-    ap.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    # `action="append"` so a caller can pin the list — one --endpoint reproduces
+    # the old single-endpoint behaviour exactly, and two lets a test prove
+    # failover. Omitted entirely means ENDPOINTS, the measured list.
+    ap.add_argument(
+        "--endpoint",
+        action="append",
+        default=None,
+        metavar="URL",
+        help="override the failover list; repeat to give more than one "
+             f"(default: {len(ENDPOINTS)} measured mirrors)",
+    )
     ap.add_argument("--out", default=".", help="repo root holding data/buildings")
     args = ap.parse_args()
 
@@ -411,7 +483,9 @@ def main() -> None:
         raise SystemExit(2)
 
     print(f"{label}: {lat:.4f},{lon:.4f} r={args.radius}m cap={args.max_features}", file=sys.stderr)
-    fc = build(lat, lon, args.radius, args.max_features, args.endpoint)
+    endpoints: tuple[str, ...] = tuple(args.endpoint) if args.endpoint else ENDPOINTS
+    print(f"  endpoints: {' -> '.join(endpoints)}", file=sys.stderr)
+    fc = build(lat, lon, args.radius, args.max_features, endpoints)
     write_pack(fc, lat, lon, args.radius, Path(args.out), label)
 
 
