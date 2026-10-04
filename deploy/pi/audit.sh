@@ -55,7 +55,7 @@ have /usr/local/bin/wifi-connect
 have /usr/local/lib/aero/aero-wifi-portal.sh
 have /etc/udev/rules.d/99-aero-usb.rules
 have /etc/sudoers.d/aero
-have /etc/sudoers.d/010_pi-nopasswd                # stock blanket rule (see review A3)
+have /etc/sudoers.d/010_pi-nopasswd                # stock blanket NOPASSWD — the sudo preflight used to pass on stock images only because of this; NOT required (aero.sudoers grants the exact commands)
 for c in /etc/cron.d/*aero*; do [[ -e $c ]] && echo "  cron.d: ${c##*/}"; done
 
 say "failed units mentioning aero"
