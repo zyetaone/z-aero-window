@@ -210,3 +210,11 @@ The order that follows from these numbers:
    missing endpoints" framing retires.
 3. **Then, and only then, consider retiring aero-1.** Not before, because
    the fleet has nowhere else to run.
+4. **Decide the on-device admin token question.** aero-1 bootstraps the
+   admin UI's bearer from `/api/internal/token?type=admin` (loopback-only,
+   fail-closed), so an operator at the Pi's own display never pastes a
+   token. aero-2 has no such route and its admin is paste-only — whether
+   that is deliberate or simply unported has never been written down. If
+   on-device admin is part of the cutover, port the route and wire the
+   auto-fetch; if the operator flow is laptop-to-LAN, paste-only is fine
+   and this item closes as by design.
