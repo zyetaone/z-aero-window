@@ -64,7 +64,7 @@ At the repo root:
 - `docs/` — ADRs, codemaps, standards, and reference notes
 - `deploy/` — Raspberry Pi provisioning and updater scripts
 - `data/` — tiles and generated assets (gitignored; symlinked into `aero-1/`)
-- `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.serena/` — agent instructions
+- `AGENTS.md`, `CLAUDE.md`, `.claude/` — agent instructions
   and repo-local automation
 
 ## Key docs
@@ -73,7 +73,6 @@ At the repo root:
 - `docs/ARCHITECTURE.md` — canonical engine architecture
 - `docs/PI-PERF-PROCESS.md` — how to measure and improve Pi frame rate without lying to yourself
 - `docs/PERF-2026-07-27-fps-investigation.md` — measured 2–4 fps baseline and ruled-out causes
-- `docs/SHIP-READINESS.md` — install triage (✅ / ⚠ / ❓ / 🔴)
 - `docs/ARCHITECTURE-original-framing.md` — v1 framing (historical)
 - `docs/ADR-001-offline-tile-architecture.md` — offline tile ADR
 - `docs/standards.md` — Rules 0–10
