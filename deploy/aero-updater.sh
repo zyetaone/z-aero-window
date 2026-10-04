@@ -120,6 +120,11 @@ reown_app_tree() {
 # rolled back twice, so a bad release costs two builds per pane, not one per poll.
 BAD_RELEASE_FILE="/var/lib/aero/bad-release"
 
+# Floor of free disk required before any install/build. Defined before the
+# repair branch so both paths — the stuck-state repair and the update path —
+# share the same guard.
+MIN_FREE_MB="${AERO_MIN_FREE_MB:-1500}"
+
 CHECK_ONLY=false
 if [[ "${1:-}" == "--check" ]]; then CHECK_ONLY=true; fi
 
@@ -337,6 +342,17 @@ if [[ "${LOCAL}" == "${REMOTE}" ]]; then
     # aero-app's ConditionPathExists skips it and nothing ever rebuilt.
     if [[ ! -f "${APP_DIR}/build/index.js" ]]; then
         log "HEAD is current but ${APP_DIR}/build/index.js is MISSING — repairing"
+        # The same guard as the update path. A full disk is what killed the
+        # build mid-write in the first place, so rebuilding here fails the
+        # same way — and `cp -a`-ing build.prev on a full disk can corrupt
+        # the very fallback this branch exists to use. Stay degraded, say why.
+        repair_free_mb=$(df -Pm "${APP_DIR}" | awk 'NR==2 {print $4}')
+        if [[ -n "${repair_free_mb}" ]] && (( repair_free_mb < MIN_FREE_MB )); then
+            log "CRITICAL: build/ missing and only ${repair_free_mb} MB free (need ${MIN_FREE_MB}) —"
+            log "      not rebuilding: it would fail the same way and could corrupt build.prev."
+            log "      Free space on this card; the next poll repairs for real."
+            exit 0
+        fi
         if restore_build; then
             log "Restored build.prev; rebuilding for the current commit"
         fi
@@ -414,7 +430,6 @@ log "App directory: ${APP_DIR}"
 # Checking first turns an unrecoverable state into a skipped update: the device
 # keeps serving the build it already has, and says why in the log and to the
 # fleet.
-MIN_FREE_MB="${AERO_MIN_FREE_MB:-1500}"
 free_mb=$(df -Pm "${APP_DIR}" | awk 'NR==2 {print $4}')
 if [[ -n "${free_mb}" ]] && (( free_mb < MIN_FREE_MB )); then
     log "SKIP: only ${free_mb} MB free at ${APP_DIR}, need ${MIN_FREE_MB} MB."
@@ -430,8 +445,20 @@ snapshot_build
 log "Installing dependencies..."
 reown_app_tree
 ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || {
-    log "WARN: bun install failed — trying without frozen lockfile"
-    ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install ) 2>&1 | tee -a "${LOG_FILE}" || rollback "bun install failed"
+    # A frozen failure on a commit CI verified almost always means the on-disk
+    # lockfile is not the commit's — a run of this same pipeline killed
+    # mid-write is the cause. Restore it from the index (which the reset
+    # --hard above left at the commit) and retry frozen BEFORE the unfrozen
+    # fallback: an unfrozen install rewrites bun.lock to whatever satisfies
+    # package.json, a dependency set CI never verified. If the index is
+    # corrupt too, the checkout fails and the fallback below stays the last
+    # resort.
+    log "WARN: frozen install failed — restoring bun.lock from ${REMOTE:0:8} and retrying"
+    ( cd "${APP_DIR}" && git checkout -- bun.lock ) 2>&1 | tee -a "${LOG_FILE}" || true
+    ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || {
+        log "WARN: frozen install failed twice — trying without frozen lockfile"
+        ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install ) 2>&1 | tee -a "${LOG_FILE}" || rollback "bun install failed"
+    }
 }
 
 # ─── 4. Build ────────────────────────────────────────────────────────────
