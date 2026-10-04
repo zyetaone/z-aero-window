@@ -143,6 +143,31 @@ jobs:
           kill "$CHROME_PID" "$SERVER_PID" 2>/dev/null || true
           exit $STATUS
 
+      # ── Fleet prebuilt ─────────────────────────────────────────────────
+      # Rebuilt with the values every fielded Pi compiles in (install.sh
+      # writes VITE_TILE_SERVER_URL=/api/tiles; no build-time token), so the
+      # updater can install this instead of building on-device. A device whose
+      # values differ builds locally, as before. Only on main pushes: that is
+      # the only run whose sha can become `release`.
+      - name: Package fleet prebuilt
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          VITE_TILE_SERVER_URL: /api/tiles
+          VITE_CESIUM_ION_TOKEN: ''
+          VITE_MAPBOX_TOKEN: ''
+        run: bash ../deploy/package-build.sh aero-1
+
+      - name: Upload fleet prebuilt
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilt-aero-1
+          path: dist-prebuilt/aero-1.tar.gz*
+          if-no-files-found: warn
+          retention-days: 3
+
   # ── aero-2 ───────────────────────────────────────────────────────────────
   # The rewrite in aero-2/ had no CI of any kind. The job above covers v1 (now
   # in aero-1/), so aero-2 could be — and on 1a6c77e was — committed in a state
@@ -242,6 +267,26 @@ jobs:
         env:
           CHROME: /usr/bin/google-chrome
 
+      # Same as aero-1's. PUBLIC_WALL_ORIGIN / AERO_MEDIA_ORIGINS are left empty
+      # (the writer pane and a single pane); follower panes, which set them,
+      # fail the updater's input check and build on-device.
+      - name: Package fleet prebuilt
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          VITE_TILE_SERVER_URL: /api/tiles
+        run: bash ../deploy/package-build.sh aero-2
+
+      - name: Upload fleet prebuilt
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilt-aero-2
+          path: dist-prebuilt/aero-2.tar.gz*
+          if-no-files-found: warn
+          retention-days: 3
+
   # ── Release promotion ────────────────────────────────────────────────────
   # The Pi fleet's daily updater tracks the `release` branch, NOT main.
   # This job is the deploy gate: only a green main run moves `release`.
@@ -266,12 +311,40 @@ jobs:
     needs: [build-and-check, aero-2]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Three API calls, one ref move. Anything slower is a GitHub outage, not a
-    # slow promotion, and it must not sit on a runner.
-    timeout-minutes: 5
+    # A release upload (~95 MB) plus one ref move. Anything slower is a
+    # GitHub outage, not a slow promotion, and it must not sit on a runner.
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
+      # Publish the prebuilts BEFORE moving the ref, so a Pi that sees the new
+      # `release` finds its build already there. Best-effort: a failure here
+      # only means Pis build on-device for this sha, which is today's path —
+      # it must never block the deploy itself.
+      - name: Download fleet prebuilts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: prebuilt-*
+          merge-multiple: true
+          path: prebuilt
+
+      - name: Publish fleet prebuilts as build-${{ github.sha }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release create "build-${GITHUB_SHA}" prebuilt/* --repo "$REPO" \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "Fleet build ${GITHUB_SHA:0:8}" \
+            --notes "CI-built aero-1 / aero-2 for ${GITHUB_SHA}. Installed by deploy/aero-updater.sh; not for humans."
+          # Keep the newest 15 so a rollback a few releases back still finds
+          # its build; older ones fall back to an on-device build.
+          gh release list --repo "$REPO" --limit 200 --json tagName,createdAt \
+            -q '[.[] | select(.tagName | startswith("build-"))] | sort_by(.createdAt) | reverse | .[15:] | .[].tagName' \
+            | xargs -r -n1 gh release delete --repo "$REPO" --yes --cleanup-tag
+
       - name: Move release ref to ${{ github.sha }}
         env:
           GH_TOKEN: ${{ github.token }}

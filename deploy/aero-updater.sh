@@ -228,6 +228,101 @@ restore_build() {
     cp -a "${APP_DIR}/build.prev" "${APP_DIR}/build"
 }
 
+# ─── Prebuilt releases ───────────────────────────────────────────────────
+# CI attaches build/ + production node_modules to a `build-<sha>` release for
+# every promoted commit (deploy/package-build.sh). Installing that replaces the
+# on-device `bun install` of the whole dev tree and a >6 min `vite build` — the
+# two steps that need the network and that a reboot can kill halfway.
+#
+# Any doubt returns 1 and the caller builds on-device exactly as before, so a
+# missing release, a dead network or an odd device is never worse than today.
+# Integrity, not authorship: the checksum comes from the same GitHub-over-HTTPS
+# trust as the git fetch itself (and a stick's from the same physical access as
+# its bundle). AERO_PREBUILT_BASE=off disables the whole path.
+PREBUILT_BASE="${AERO_PREBUILT_BASE:-https://github.com/zyetaone/z-aero-window/releases/download}"
+
+# What a local build would see for $1: the exported env (config.env is sourced
+# with set -a) wins, as it does for Vite, then the app's .env file.
+# ponytail: only .env — install.sh writes no .env.production/.env.local.
+build_input() {
+    local k="$1"
+    if [[ -n "${!k+x}" ]]; then printf '%s' "${!k}"; return; fi
+    command grep -m1 "^${k}=" "${APP_DIR}/.env" 2>/dev/null | cut -d= -f2- || true
+}
+
+# The prebuilt is valid only if every value CI compiled in is what this device
+# would compile in, and the device sets no VITE_* that CI never saw.
+prebuilt_inputs_match() {
+    local manifest="$1" line key
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        key="${line%%=*}"
+        if [[ "$(build_input "${key}")" != "${line#*=}" ]]; then
+            log "Prebuilt: build input ${key} differs on this device"
+            return 1
+        fi
+    done < "${manifest}"
+    for key in $(compgen -e | command grep '^VITE_' || true) \
+               $(command grep -o '^VITE_[A-Za-z0-9_]*' "${APP_DIR}/.env" 2>/dev/null || true); do
+        if ! command grep -q "^${key}=" "${manifest}" && [[ -n "$(build_input "${key}")" ]]; then
+            log "Prebuilt: this device sets ${key}, which the CI build never saw"
+            return 1
+        fi
+    done
+}
+
+# Install the CI build for commit $1 into APP_DIR. Pen drive first
+# (USB_DIR/prebuilt/build-<sha>/), then the GitHub release.
+use_prebuilt() {
+    local sha="$1" app stage src want got
+    app="$(basename "${APP_DIR}")"
+    [[ "${PREBUILT_BASE}" != "off" ]] || return 1
+    [[ "${app}" == "aero-1" || "${app}" == "aero-2" ]] || return 1
+    stage="${REPO_DIR}/.prebuilt"
+    rm -rf "${stage}" && mkdir -p "${stage}" || return 1
+
+    src="${USB_DIR:-/media/aero}/prebuilt/build-${sha}/${app}.tar.gz"
+    if [[ -f "${src}" && -f "${src}.sha256" ]]; then
+        cp "${src}" "${stage}/a.tgz" && cp "${src}.sha256" "${stage}/a.sha256" || { rm -rf "${stage}"; return 1; }
+        log "Prebuilt: using ${src}"
+    elif ! { curl -fsSL --retry 2 --connect-timeout 10 --max-time 900 -o "${stage}/a.tgz" "${PREBUILT_BASE}/build-${sha}/${app}.tar.gz" \
+          && curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 -o "${stage}/a.sha256" "${PREBUILT_BASE}/build-${sha}/${app}.tar.gz.sha256"; } 2>>"${LOG_FILE}"; then
+        log "Prebuilt: none for ${sha:0:8} — building on-device"
+        rm -rf "${stage}"; return 1
+    fi
+
+    want="$(awk '{print $1}' "${stage}/a.sha256")"
+    got="$(sha256sum "${stage}/a.tgz" | awk '{print $1}')"
+    if [[ -z "${want}" || "${want}" != "${got}" ]]; then
+        log "WARN: prebuilt checksum mismatch for ${sha:0:8} — building on-device"
+        rm -rf "${stage}"; return 1
+    fi
+    if ! tar xzf "${stage}/a.tgz" -C "${stage}" 2>>"${LOG_FILE}" \
+        || [[ "$(cat "${stage}/COMMIT" 2>/dev/null)" != "${sha}" ]] \
+        || [[ ! -f "${stage}/build/index.js" || ! -d "${stage}/node_modules" ]]; then
+        log "WARN: prebuilt for ${sha:0:8} is incomplete — building on-device"
+        rm -rf "${stage}"; return 1
+    fi
+    if ! prebuilt_inputs_match "${stage}/build-inputs.env"; then
+        log "Prebuilt: building on-device so this device's settings are compiled in"
+        rm -rf "${stage}"; return 1
+    fi
+
+    # The swap. A kill between the rm and the mv leaves no build/, which the
+    # next poll's repair path restores from build.prev (snapshotted before this).
+    rm -rf "${APP_DIR}/build" "${APP_DIR}/node_modules"
+    mv "${stage}/build" "${APP_DIR}/build" && mv "${stage}/node_modules" "${APP_DIR}/node_modules" || {
+        rm -rf "${stage}"; return 1
+    }
+    # The `$lib` alias aero-1's server.ts resolves through; normally written by
+    # `bun install`'s prepare step, which this path skips.
+    if [[ -f "${stage}/.svelte-kit/tsconfig.json" ]]; then
+        mkdir -p "${APP_DIR}/.svelte-kit" && cp "${stage}/.svelte-kit/tsconfig.json" "${APP_DIR}/.svelte-kit/tsconfig.json"
+    fi
+    rm -rf "${stage}"
+    reown_app_tree
+    log "Prebuilt: installed the CI build of ${sha:0:8} (no on-device install or build)"
+}
+
 # Full rollback: previous commit + reinstall + rebuild + restart + verify.
 # Wired to EVERY failure class (install, build, post-restart probe) — the
 # old build-only rollback let a builds-fine-crashes-at-runtime commit ship,
@@ -241,8 +336,10 @@ rollback() {
     # rather than trusting the answer from before the reset.
     resolve_app_dir
     reown_app_tree
-    ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || true
-    if ! ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}"; then
+    if use_prebuilt "${LOCAL}"; then
+        :
+    elif ! { ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || true
+             ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}"; }; then
         if restore_build; then
             log "WARN: rollback build failed — restored the pre-update build/"
         else
@@ -357,8 +454,10 @@ if [[ "${LOCAL}" == "${REMOTE}" ]]; then
             log "Restored build.prev; rebuilding for the current commit"
         fi
         reown_app_tree
-        ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || true
-        if ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}"; then
+        if use_prebuilt "${LOCAL}"; then
+            log "Repaired from the prebuilt ${LOCAL:0:8}"
+        elif { ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || true
+               ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}"; }; then
             log "Rebuilt ${LOCAL:0:8}"
         elif restore_build; then
             log "WARN: rebuild failed — serving the restored build.prev"
@@ -526,9 +625,12 @@ if [[ -f "${APP_DIR}/package.json" ]] && command grep -q '"@sveltejs/adapter-bun
 fi
 
 snapshot_build
-
-log "Installing dependencies..."
 reown_app_tree
+
+if use_prebuilt "${REMOTE}"; then
+    :
+else
+log "Installing dependencies..."
 ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" install --frozen-lockfile ) 2>&1 | tee -a "${LOG_FILE}" || {
     # A frozen failure on a commit CI verified almost always means the on-disk
     # lockfile is not the commit's — a run of this same pipeline killed
@@ -551,6 +653,7 @@ reown_app_tree
 if [[ -f "${APP_DIR}/package.json" ]] && command grep -q '"build"' "${APP_DIR}/package.json"; then
     log "Building app..."
     ( cd "${APP_DIR}" && as_app_user "${BUN_BIN}" run build ) 2>&1 | tee -a "${LOG_FILE}" || rollback "build failed"
+fi
 fi
 
 # ─── 4b. Reinstall deploy config when it changed ─────────────────────────

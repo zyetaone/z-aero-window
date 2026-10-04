@@ -9,6 +9,9 @@ node_modules
 # -A` duly staged them.
 .svelte-kit/
 build/
+# Updater staging + CI prebuilt output (deploy/package-build.sh).
+.prebuilt/
+dist-prebuilt/
 
 # OS
 .DS_Store
