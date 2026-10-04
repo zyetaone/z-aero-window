@@ -218,3 +218,14 @@ The order that follows from these numbers:
    on-device admin is part of the cutover, port the route and wire the
    auto-fetch; if the operator flow is laptop-to-LAN, paste-only is fine
    and this item closes as by design.
+5. **Retire the on-device build fallback once the field proves it unneeded.**
+   Since the CI prebuilt cutover (`f3e183fd`), every update, repair and
+   rollback installs a checksum-verified `build/` + `node_modules` from a
+   GitHub release, and the full on-device `bun install` + `vite build`
+   remains only as the doubt-fallback (no release, mismatch, incomplete
+   tarball, or a build input this device would compile differently). The
+   fallback — and the updater machinery that exists to serve it — stays
+   until the evidence says otherwise: `audit.sh` now counts prebuilt
+   installs vs on-device fallbacks per Pi, and several days of
+   installs &gt; 0 with **zero fallbacks across the whole wall** is the
+   deletion green light.
