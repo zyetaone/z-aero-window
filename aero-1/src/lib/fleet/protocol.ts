@@ -178,7 +178,9 @@ export interface DeviceStats {
 	fpsP05: number;
 	fpsMin: number;
 	maxTempC: number;
-	/** Highest crashCount seen in the window (NRestarts is monotonic per boot). */
+	/** Highest kiosk-restart count seen in the window (NRestarts since boot —
+	 *  includes the updater's per-release restart, so it grows with release
+	 *  frequency too; monotonic per boot). Wire name kept for stability. */
 	crashCount: number;
 	commit?: string;
 	mode?: string;

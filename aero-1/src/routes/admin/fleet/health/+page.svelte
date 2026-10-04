@@ -107,7 +107,7 @@
 		<div class="stat"><strong>{loaded ? summary.offline : '—'}</strong> offline</div>
 		<div class="stat"><strong>{loaded ? summary.avgFps.toFixed(1) : '—'}</strong> avg fps</div>
 		<div class="stat"><strong>{loaded ? `${summary.maxTempC}°C` : '—'}</strong> max</div>
-		<div class="stat"><strong>{loaded ? summary.totalCrashes : '—'}</strong> crashes</div>
+		<div class="stat"><strong>{loaded ? summary.totalCrashes : '—'}</strong> kiosk restarts</div>
 		<div class="stat" class:warn-stat={(summary.throttledLive ?? 0) > 0 || (summary.shedding ?? 0) > 0}>
 			<strong>{loaded ? (summary.shedding ?? 0) : '—'}</strong> shedding
 		</div>
@@ -132,7 +132,7 @@
 					<div><dt>FPS</dt><dd style:color={fpsColor(s.fps)}>{s.fps.toFixed(0)}</dd></div>
 					<div><dt>Temp</dt><dd style:color={tempColor(s.temp)}>{s.temp}°C</dd></div>
 					<div><dt>Uptime</dt><dd>{s.uptime > 0 ? formatUptime(s.uptime) : '—'}</dd></div>
-					<div><dt>Crashes</dt><dd>{s.crashCount}</dd></div>
+					<div><dt>Restarts</dt><dd title="aero-kiosk.service NRestarts since boot — includes the updater's per-release restart">{s.crashCount}</dd></div>
 					<div>
 						<dt>Mode</dt>
 						<dd class={s.mode && s.mode !== 'flight' ? 'mode-media' : undefined}>

@@ -161,7 +161,11 @@ if command -v journalctl >/dev/null 2>&1; then
 		| head -c 200 | tr -d '"\\' || true)"
 fi
 
-# Crash count — increment whenever aero-kiosk.service failed since boot.
+# Kiosk restarts since boot — NRestarts counts EVERY restart, including the
+# systemctl restart the updater performs on every release, so on an actively
+# shipping wall this number grows with release frequency, not only with
+# crashes. The wire key keeps the historic name `crashCount` (flat DTO, not
+# reshaped mid-fleet); the admin dashboard labels it "restarts".
 CRASH_COUNT=0
 if command -v systemctl >/dev/null 2>&1; then
 	CRASH_COUNT="$(systemctl show aero-kiosk.service -p NRestarts --value 2>/dev/null || echo 0)"
