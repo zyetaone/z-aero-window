@@ -258,13 +258,18 @@ sudo -u "${PI_USER}" bash -c "cd '${APP_DIR}' && '${BUN_BIN}' install"
 # at build time exactly like the two above -- writing it to config.env alone
 # changes nothing. Empty is the correct default (a pane polls itself); set it
 # on the two follower panes and leave the writer's empty.
+# PUBLIC_TILE_SERVER_URL is the SAME value under aero-2's name: SvelteKit 3's
+# defineEnvVars declares it (src/env.ts, static: true) instead of Vite's
+# VITE_ prefix, so an operator's custom tile host would otherwise be silently
+# ignored on an aero-2 build. Both apps read whichever name they know; the
+# default (/api/tiles) makes the two identical until someone customises.
 EXISTING_MEDIA_ORIGINS=""
 EXISTING_WALL_ORIGIN=""
 if [[ -f /etc/aero/config.env ]]; then
 	EXISTING_MEDIA_ORIGINS="$(command grep -oP '^AERO_MEDIA_ORIGINS=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 	EXISTING_WALL_ORIGIN="$(command grep -oP '^PUBLIC_WALL_ORIGIN=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 fi
-sudo -u "${PI_USER}" bash -c "cd '${APP_DIR}' && VITE_TILE_SERVER_URL='${VITE_TILE_SERVER_URL:-/api/tiles}' AERO_MEDIA_ORIGINS='${AERO_MEDIA_ORIGINS:-${EXISTING_MEDIA_ORIGINS}}' PUBLIC_WALL_ORIGIN='${PUBLIC_WALL_ORIGIN:-${EXISTING_WALL_ORIGIN}}' '${BUN_BIN}' run build"
+sudo -u "${PI_USER}" bash -c "cd '${APP_DIR}' && VITE_TILE_SERVER_URL='${VITE_TILE_SERVER_URL:-/api/tiles}' PUBLIC_TILE_SERVER_URL='${PUBLIC_TILE_SERVER_URL:-${VITE_TILE_SERVER_URL:-/api/tiles}}' AERO_MEDIA_ORIGINS='${AERO_MEDIA_ORIGINS:-${EXISTING_MEDIA_ORIGINS}}' PUBLIC_WALL_ORIGIN='${PUBLIC_WALL_ORIGIN:-${EXISTING_WALL_ORIGIN}}' '${BUN_BIN}' run build"
 
 # ─── Step 5: Write environment config ─────────────────────────────────────────
 
