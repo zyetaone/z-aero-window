@@ -272,7 +272,10 @@ function waterMask(imagery: OffscreenCanvas) {
 		// Measured: lakes (50,59,38) (89,103,77), sea (69,101,98) (31,96,102); dry land and city
 		// run red-over-green, canopy runs blue under ~0.55 of green. Some dark canopy still passes.
 		const water = smoothstep(320, 230, r + g + b) * smoothstep(-2, 8, g - r) * smoothstep(0.55, 0.68, b / (g + 1));
-		out.data[i + 1] = 255 * (1 - 0.88 * water);
+		// Wind on the water: fractal noise in the roughness (~0.5 km cells), so the sun's glint
+		// breaks into ruffled patches and calm slicks instead of one mirror. Water pixels only.
+		const ruffle = water > 0.01 ? 0.55 + 0.9 * fbm(0x3a7e5, ((i / 4) % width) / 14, Math.floor(i / 4 / width) / 14, 3) : 1;
+		out.data[i + 1] = 255 * (1 - 0.88 * water * Math.min(1, 1.25 - 0.5 * ruffle));
 		out.data[i + 3] = 255;
 	}
 	ctx.putImageData(out, 0, 0);

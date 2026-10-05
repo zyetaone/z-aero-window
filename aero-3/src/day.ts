@@ -39,8 +39,12 @@ export type Day = {
 	/** Cloud base above the ground, m, and the wind that carries the deck, m/s. */
 	deckM: number;
 	wind: number;
-	/** Night lights: overall gain, and a seed that changes which roads are lit. */
+	/** Night lights: overall gain. */
 	lights: number;
+	/** How far near cumulus heap upward: 0 flat-topped, 1 towering. */
+	build: number;
+	/** How grey the deck runs: 0 bright white, 1 leaden. */
+	grey: number;
 };
 
 export function dayFor(place: string, ms: number, named?: string | null): Day {
@@ -63,6 +67,8 @@ export function dayFor(place: string, ms: number, named?: string | null): Day {
 		rain: r(3) < rain,
 		deckM: 1_300 + 1_200 * r(4),
 		wind: 4 + 10 * r(5),
-		lights: 0.85 + 0.3 * r(6)
+		lights: 0.85 + 0.3 * r(6),
+		build: ({ towering: 1, scattered: 0.4, fair: 0.2 } as Record<string, number>)[name] ?? 0,
+		grey: ({ overcast: 0.8, towering: 0.4, hazy: 0.3 } as Record<string, number>)[name] ?? 0.1 * r(7)
 	};
 }

@@ -73,6 +73,10 @@ export async function clouds(
 			// Mostly modest, a few big: squaring the draw skews sizes the way a real deck does.
 			const base = (t.s0 + random() ** 2 * t.ss * 1.3) * (tier < TIERS.length - 1 ? weather.size : 1);
 			const n = random() < t.lonely ? 1 : t.n0 + Math.floor(random() * t.ns);
+			// Near cumulus heap upward on a convective day: puffs climb above the anchor, not around it.
+			const heap = tier === 0 ? weather.build : 0;
+			// Each cluster a shade of its own, greyer on a leaden day: no two clouds the same white.
+			const tone = 1 - weather.grey * (0.15 + 0.3 * random()) - 0.08 * random();
 			for (let i = 0; i < n; i++) {
 				const [theta, r] = [random() * Math.PI * 2, i === 0 ? 0 : (0.2 + random() * 0.8) * base * 1.6];
 				const size = base * (i === 0 ? 1.25 : 0.85 + random() * 0.55);
@@ -80,7 +84,7 @@ export async function clouds(
 				// off by its depth as a hard horizontal line (0.4 of the height: the PNGs fade at the rim).
 				const [x, z] = [cx + Math.cos(theta) * r, cz + Math.sin(theta) * r];
 				const lowest = groundAt(x, z) + drop(x, z) + 300 + size * t.squash * 0.4;
-				const y = Math.max(lowest, cy + (i === 0 ? 0 : (random() - 0.5) * base * 0.35 * t.squash));
+				const y = Math.max(lowest, cy + (i === 0 ? 0 : (random() - 0.5 + heap * 0.6) * base * (0.35 + heap * 0.5) * t.squash));
 				const sprite = new Sprite('puff', manager);
 				sprite.cellIndex = t.cells[Math.floor(random() * t.cells.length)]!;
 				// Near-upright with a mirror for variety: a squashed card at a random angle reads as a flame.
@@ -92,7 +96,7 @@ export async function clouds(
 				// Underside darker than tops, as aero-2 shades it.
 				const lift = smoothstep(0, 1, (y - cy + base * 0.1 * t.squash) / (base * 0.2 * t.squash));
 				const normal = new Vector3(x - cx, y - cy, z - cz).normalize();
-				puffs.push({ sprite, x, z, y, alpha: 0.26 + random() * 0.28, shade: 0.84 + 0.14 * lift, normal, wrap: t.r0 + t.rs + t.s0 + t.ss });
+				puffs.push({ sprite, x, z, y, alpha: 0.26 + random() * 0.28, shade: (0.84 + 0.14 * lift) * tone, normal, wrap: t.r0 + t.rs + t.s0 + t.ss });
 			}
 		}
 	}

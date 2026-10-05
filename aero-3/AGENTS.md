@@ -8,12 +8,23 @@ The fleet still runs aero-1. Nothing here is wired into `deploy/`.
 One reason to change per file:
 
 - `server.ts` — `Bun.serve` with HTML-import bundling and `{ dir }` tile routes. No Vite, no SvelteKit.
-- `src/main.ts` — scene, light, camera orbiting the place's pin at 9 km on the wall clock (panes
-  agree without talking), the time-of-day slider, the place picker, the render loop. Cruise
-  altitude clears the highest terrain near the orbit by 1.2 km (the Himalayas), else 3.5 km AGL.
+- `src/main.ts` — scene, light, the wiring, the time-of-day slider, the place picker, the render
+  loop. Cruise is 3.5 km AGL, or 2 km over the highest ground within 4 km of the track.
+- `src/flight.ts` — the aircraft at a wall-clock second, pure in (seed, second): an elliptical
+  orbit (radius per place, default 9 km; Dubai 13, Himalayas 24) whose direction, start and tilt
+  are seeded per visit, a slow climb, bank into the turn, the seat on the inside, the gaze panning
+  ±18°. The camera is aircraft × seat quaternions. Tested.
+- `src/day.ts` — one object per place and UTC day: regime (clear, fair, scattered, towering,
+  cirrus, hazy, overcast), sun strength, haze, rain, cloud deck height and wind, heap and grey,
+  night-light gain. `?weather=` pins the regime.
+- `src/cabin.ts` — DOM over the canvas (CSS in index.html): the window rim darkening with the
+  light, aero-2's rain beads on rainy days (no backdrop-filter: a full-screen blur on the Pi), and
+  the blind. The blind is closed in the markup, lifts after 30 frames and 12 s into the visit, and
+  comes down 6 s before every 10-min slot boundary, where main.ts reloads into the next visit.
+  `?blind=0` holds one visit (screenshots, smoke).
 - `src/places.ts` — the place table and aero-2's rotation, ported as is: 600 s per city, the day's
-  order a Fisher-Yates shuffle seeded by the day number. With no `?place=`, the page follows it
-  and reloads into the next city (a reload frees every buffer). The Himalayas are `?place=` only.
+  order a Fisher-Yates shuffle seeded by the day number. Each slot is a visit: with no `?place=`
+  a new city, either way a new flight. The Himalayas are `?place=` only.
 - `src/world.ts` — the ground. A 3×3 z10 detail patch (terrarium + z12 Sentinel-2, 3072 px: the
   Pi's 4096 px texture limit is the ceiling) inside a 5×5 z8 ring (~750 km, past the horizon), both
   bent by Earth's curvature. Night is NASA's VIIRS radiance (GIBS, capped at z8) through aero-2's
@@ -22,11 +33,14 @@ One reason to change per file:
   the mountains). Ground textures are map data only; the haze dome below is the one place noise
   breaks a map up. Textures upload from JPEG blobs, so
   no CPU canvas outlives boot; `scene.clearCachedVertexData()` drops the mesh copies after build.
-- `src/buildings.ts` — OSM footprints extruded at boot into one mesh with a procedural window
-  facade: concrete and glass by day, lit rooms at night, plus a baked ambient-occlusion
+- `src/buildings.ts` — OSM footprints extruded at boot into two meshes: painted plaster with a
+  procedural window facade (lit rooms at night), and towers 45 m and up in glass curtain wall
+  (blue, teal, silver, Gulf gold; office floors lit in runs at night). Roofs take the satellite
+  pixel under them. Both carry a baked ambient-occlusion
   lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
+  (Dubai: `--lat 25.15 --lon 55.19 --radius 12000 --max-features 40000`, Downtown to the Palm)
 - `src/lights.ts` — every light is a single point from map data, in three groups: street lamps
   every 32–55 m along the road pack (`../data/roads`), with only a share of each class lit (back
   streets 50%), dark stretches where the road's own 1D noise dips, and per-lamp brightness jitter; building lights, one per ~3,000 m² on 45% of flat
@@ -38,14 +52,16 @@ One reason to change per file:
 - `src/haze.ts` — the amber murk over a lit city: one additive sheet 450 m up carrying world.ts's
   light dome (VIIRS downsampled into a blur, kneed so only the city domes, × fbm noise from math.ts).
   Gain = Haze slider × darkness ÷ exposure.
-- `src/trees.ts` — low-poly cones in clusters wherever the imagery within 5 km of the pin reads
-  green: thin instances, one draw call (`?trees=0` to skip).
+- `src/trees.ts` — low-poly crowns, cones and bushes in clumps of 1-6 wherever the imagery within
+  5 km of the pin reads green, tinted by that pixel: thin instances, a draw call per shape
+  (`?trees=0` to skip).
 - **Water** comes from the imagery too: dark, green-or-teal pixels get a smooth roughness map
-  (world.ts `waterMask`), so lakes and sea catch the sun as a glint.
+  (world.ts `waterMask`), broken up by fractal noise into ruffled patches and calm slicks, so lakes
+  and sea catch the sun as glitter rather than a mirror.
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, flat banks on the horizon, cirrus; per-tier wrap so wind never blows the deck off the
-  place. Each place gets a weather regime per UTC day (clear, fair, scattered, towering, cirrus),
-  the same on every pane; `?weather=` pins one. No card reaches below the ground, or the terrain
+  place. day.ts sets the cover, deck height, wind, how far cumulus heap up and how grey each
+  cluster runs. No card reaches below the ground, or the terrain
   clips it flat.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
 - `src/sun.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
@@ -88,7 +104,7 @@ Units are metres, y up, x east, z north.
 bun install
 bun run dev                 # http://localhost:3300/?place=hyderabad&clock=10
 bun test && bun run check   # TypeScript 7
-bun run smoke               # boots day + night in Bun.WebView, checks every layer built, screenshots to dist/smoke/
+bun run smoke [places…]     # every place day + night in Bun.WebView (~4 min), checks every layer built, screenshots to dist/smoke/
 bun run compile             # dist/aero-3: one linux-arm64 binary, page bundled in
 ```
 
@@ -106,5 +122,6 @@ On a Pi, run the binary from a directory where `../data/tiles/sentinel2`,
 
 ## Not built yet
 
-Wing, fleet sync (beyond the wall-clock rotation), admin, live weather. Add them only
+Wing, pane roles and the operator wall push, admin, live weather. Pi measurement before more
+layers: Dubai is 1.1M building vertices and ~300k lights. Add them only
 after the Pi numbers say this stack is worth growing.
