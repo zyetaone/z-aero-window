@@ -383,20 +383,24 @@ export const LOCATIONS = Location.all();
 /**
  * The places the wall actually flies between.
  *
- * Six, not eleven. The fielded aero-1 rotation hopped between a curated set
- * and the room read as a journey; eleven places on a four-minute dwell read
- * as a slideshow. Home first, then the Southwest hubs, with Dubai for a
- * daylight hour while India is at its desk (every US hub is night during
- * IST office hours). Every entry has a Sentinel-2 pack, a roads pack, a
- * towns pack and a buildings pack on disk; add a place here only after
- * packing it, or the offline Pi shows a void for ten minutes.
+ * Eight, not eleven. The fielded aero-1 rotation hopped between a curated set
+ * and the room read as a journey; all eleven on a short dwell read as a
+ * slideshow. Home first with Mumbai for the second IST desk-hour, then Dubai
+ * for a daylight hour while India is at its desk (every US hub is night
+ * during IST office hours), then the Southwest hubs. Every entry has a
+ * Sentinel-2 pack, a roads pack, a towns pack and a buildings pack on disk;
+ * add a place here only after packing it, or the offline Pi shows a void for
+ * ten minutes. (Mumbai and Phoenix were packed but left out for pacing; the
+ * dwell is now long enough for both.)
  *
  * The catalogue stays whole for the operator picker and `?place=`.
  */
 export const ROTATION: readonly Location[] = [
 	'hyderabad',
+	'mumbai',
 	'dubai',
 	'dallas',
+	'phoenix',
 	'denver',
 	'las_vegas',
 	'chicago_midway'
