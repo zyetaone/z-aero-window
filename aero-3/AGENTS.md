@@ -14,12 +14,13 @@ One reason to change per file:
   ring (~750 km, past the horizon), both bent by Earth's curvature. Night is aero-2's VIIRS tree as
   the emissive texture (raw radiance + baked z11 lamp dots) through aero-2's luminance knee.
 - `src/buildings.ts` — OSM footprints extruded at boot into one mesh with a procedural window
-  facade: concrete and glass by day, lit rooms at night. Not 3D Tiles on purpose — that format
+  facade: concrete and glass by day, lit rooms at night, plus a baked ambient-occlusion
+  lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
 - `src/lights.ts` — streetlights as real points: a lamp every 32–55 m (by road class) along the
   road pack (`../data/roads`, ~120k for Hyderabad), one additive point cloud, aero-1's per-road
-  colour deal, bloomed by Babylon's `GlowLayer` at night only. The VIIRS carpet stays faint under it.
+  colour deal, bloomed by Babylon's `GlowLayer` at night only. The VIIRS carpet stays faint under it (`?carpet=0.12`).
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, cirrus; per-tier wrap so wind never blows the deck off the place.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
@@ -50,6 +51,7 @@ Units are metres, y up, x east, z north.
 bun install
 bun run dev                 # http://localhost:3300/?place=hyderabad&clock=10
 bun test && bun run check   # TypeScript 7
+bun run smoke               # boots day + night in Bun.WebView, checks every layer built, screenshots to dist/smoke/
 bun run compile             # dist/aero-3: one linux-arm64 binary, page bundled in
 ```
 

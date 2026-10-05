@@ -9,7 +9,7 @@
  * Params (all optional, so `frame-cost.mjs` can pin a scene):
  *   ?place=hyderabad  ?clock=6 (local solar hour)  ?yaw=0 (pane offset, deg)
  *   ?scale=1 (hardware scaling)  ?gpu=webgpu  ?hud=0  ?clouds=1 (cover, 0 = clear)
- *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)
+ *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=0.12 (VIIRS texture)
  */
 import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
@@ -47,6 +47,8 @@ const [lat, lon, groundM] = PLACES[placeId]!;
 const paneYaw = Number(q.get('yaw') ?? 0) * RAD;
 const lampGain = Number(q.get('lamps') ?? 1);
 const twilightLift = Number(q.get('lift') ?? 8);
+// The baked VIIRS texture under the lamp points: a faint glow only, or it reads as blocky amber blobs.
+const carpet = Number(q.get('carpet') ?? 0.12);
 let pinnedHour = q.has('clock') ? Number(q.get('clock')) : null;
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
@@ -99,7 +101,7 @@ engine.runRenderLoop(() => {
 	// Lamps, window glow, stars and the eye's twilight adaptation all follow the sun, not the hour.
 	const dark = 1 - smoothstep(-8, 2, s.elevationDeg);
 	// The baked VIIRS carpet stays faint under the real lamp points; windows keep full gain.
-	for (const m of glowing) m.emissiveIntensity = lampGain * dark * (lamps && m !== city ? 0.45 : 1);
+	for (const m of glowing) m.emissiveIntensity = lampGain * dark * (lamps && m !== city ? carpet : 1);
 	if (lamps) {
 		lamps.mesh.setEnabled(dark > 0.01);
 		// Faint per lamp: 120k additive points sum to a white sheet at anything brighter.
@@ -165,7 +167,7 @@ function clockControls() {
 		const hour = solarHour(skyMs, lon);
 		slider.value = String(hour);
 		const hhmm = `${Math.floor(hour)}`.padStart(2, '0') + ':' + `${Math.floor((hour % 1) * 60)}`.padStart(2, '0');
-		readout.textContent = `${hhmm} solar · sun ${elevationDeg.toFixed(0)}° · ${engine.getFps().toFixed(0)} fps ${engine.isWebGPU ? 'WebGPU' : 'WebGL2'}`;
+		readout.textContent = `${hhmm} solar · sun ${elevationDeg.toFixed(0)}° · ${Number.isFinite(engine.getFps()) ? engine.getFps().toFixed(0) : '–'} fps ${engine.isWebGPU ? 'WebGPU' : 'WebGL2'}`;
 		live.disabled = pinnedHour === null;
 	};
 }

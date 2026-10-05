@@ -9,8 +9,10 @@
  * Flat-shaded: every wall quad and roof has its own vertices so the sun reads
  * on each face. Walls carry a procedural facade (windows on a 3 m grid) whose
  * lit cells are the night-time emissive, so a tower reads as floors of
- * windows by day and a scatter of lit rooms at night. Each building stands on
- * the terrain under its first corner.
+ * windows by day and a scatter of lit rooms at night. A baked lightmap (second
+ * UV set, Babylon's native lightmap slot) darkens each wall toward the street
+ * as ambient occlusion, so blocks sit on the ground instead of floating on it.
+ * Each building stands on the terrain under its first corner.
  */
 import earcut from 'earcut';
 import { Color3, DynamicTexture, Mesh, PBRMaterial, Texture, VertexData, type Scene } from '@babylonjs/core';
@@ -20,6 +22,7 @@ type Footprint = { geometry: { coordinates: number[][][] }; properties: { height
 const CELLS = 16; // windows per texture side
 const CELL_PX = 16;
 const FACADE_M = CELLS * 3; // one texture repeat is 16 windows of 3 m
+const AO_M = 40; // occlusion fades out this far up a wall
 
 export function buildings(
 	features: Footprint[],
@@ -30,6 +33,7 @@ export function buildings(
 	const positions: number[] = [];
 	const normals: number[] = [];
 	const uvs: number[] = [];
+	const uvs2: number[] = []; // lightmap: v is height up the wall, 0 at the street
 	const indices: number[] = [];
 	const random = mulberry32(0xae3);
 
@@ -59,6 +63,8 @@ export function buildings(
 			const v = positions.length / 3;
 			positions.push(x0, base, z0, x1, base, z1, x1, top, z1, x0, top, z0);
 			uvs.push(along, v0, u1, v0, u1, v0 + vTop, along, v0 + vTop);
+			const aoTop = Math.min(1, properties.height / AO_M);
+			uvs2.push(0.5, 0, 0.5, 0, 0.5, aoTop, 0.5, aoTop);
 			for (let k = 0; k < 4; k++) normals.push(nx, 0, nz);
 			indices.push(v, v + 1, v + 2, v, v + 2, v + 3);
 			along = u1;
@@ -69,12 +75,13 @@ export function buildings(
 			positions.push(x, top, z);
 			normals.push(0, 1, 0);
 			uvs.push(u0 + 0.5 / (CELLS * CELL_PX), v0 + 0.5 / (CELLS * CELL_PX)); // a wall texel: roofs read as slab
+			uvs2.push(0.5, 1); // roofs are open sky: unoccluded
 		}
 		for (const i of earcut(ring.flat())) indices.push(v + i);
 	}
 
 	const mesh = new Mesh('buildings', scene);
-	Object.assign(new VertexData(), { positions, normals, uvs, indices }).applyToMesh(mesh);
+	Object.assign(new VertexData(), { positions, normals, uvs, uvs2, indices }).applyToMesh(mesh);
 	mesh.freezeWorldMatrix();
 
 	const [albedo, lit] = facade(scene);
@@ -82,6 +89,8 @@ export function buildings(
 	material.albedoTexture = albedo;
 	material.emissiveTexture = lit;
 	material.emissiveColor = Color3.White();
+	material.lightmapTexture = occlusion(scene);
+	material.useLightmapAsShadowmap = true; // multiplies the lighting rather than adding to it
 	material.metallic = 0;
 	material.roughness = 0.85;
 	// ponytail: earcut's roof winding isn't checked against Babylon's; both sides drawn. Cull once verified.
@@ -121,6 +130,22 @@ function facade(scene: Scene): [DynamicTexture, DynamicTexture] {
 	day.update();
 	night.update();
 	return [day, night];
+}
+
+/** A 1×64 ramp, dark at the street and clear by AO_M up: the lightmap every wall shares. */
+function occlusion(scene: Scene) {
+	const tex = new DynamicTexture('building-ao', { width: 1, height: 64 }, scene, false);
+	const ctx = tex.getContext();
+	for (let y = 0; y < 64; y++) {
+		const t = 1 - y / 63; // canvas row 0 is the top of the ramp (v = 1)
+		const k = Math.round(255 * (0.45 + 0.55 * t * t * (3 - 2 * t)));
+		ctx.fillStyle = `rgb(${k},${k},${k})`;
+		ctx.fillRect(0, y, 1, 1);
+	}
+	tex.update();
+	tex.coordinatesIndex = 1;
+	tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+	return tex;
 }
 
 /** Seeded PRNG (Tommy Ettinger's mulberry32, public domain): every pane builds the same city. */
