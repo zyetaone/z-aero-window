@@ -16,6 +16,7 @@ import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { buildings } from './buildings.ts';
 import { clouds } from './clouds.ts';
 import { streetlights } from './lights.ts';
+import { trees } from './trees.ts';
 import { stars } from './stars.ts';
 import { atSolarHour, solarHour, sunAt } from './sun.ts';
 import { createWorld, smoothstep } from './world.ts';
@@ -75,8 +76,11 @@ const [city, roads, deck, sky] = await Promise.all([
 	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + DECK_M, world.drop, Number(q.get('clouds') ?? 1)),
 	stars(scene, camera, lat, lon)
 ]);
-// Street lamps along the road pack, and one light per building (lights.ts).
-const lamps = roads && streetlights(roads, world.project, world.groundAt, scene, city?.tops);
+// Street lamps along the road pack, one light per building, NASA-derived towns past them (lights.ts).
+const lamps = streetlights(roads ?? [], world.project, world.groundAt, scene, city?.tops, world.sites);
+const treeCount = q.get('trees') === '0' ? 0 : trees(scene, [pinX, pinZ], world.imagery, world.groundAt);
+// Everything is built: drop the CPU copies of vertex data (the GPU has them; nothing here picks or edits).
+scene.clearCachedVertexData();
 const glowing = [...world.materials, ...(city ? [city.material] : [])];
 
 // Babylon's bloom on everything emissive: lamps halo, windows and the city carpet glow.
@@ -92,7 +96,7 @@ if (glow && lamps) {
 if (city) glow?.addIncludedOnlyMesh(city.mesh);
 
 const hud = q.get('hud') === '0' ? null : clockControls();
-if (q.has('debug')) Object.assign(globalThis, { scene, camera, world }); // for the console and frame-cost ablations
+if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount }); // for the console and frame-cost ablations
 let hudAt = 0;
 const toSun = new Vector3();
 

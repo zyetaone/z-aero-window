@@ -10,8 +10,9 @@
  * (main.ts) then blooms them, and the ground's VIIRS emissive stays underneath
  * as the faint carpet of everything the road pack leaves out.
  *
- * Every OSM building adds one light of its own on the roof — map data only,
- * no noise.
+ * Every OSM building adds one light of its own on the roof, and the towns past
+ * the road pack come as clusters from NASA's VIIRS radiance (world.ts) — map
+ * data only, no invented noise.
  *
  * One small shader does what an unlit material cannot: each light dims with
  * distance, fading out toward the horizon (no atmosphere touches unlit points,
@@ -73,7 +74,9 @@ export function streetlights(
 	groundAt: (x: number, z: number) => number,
 	scene: Scene,
 	/** Building roofs: [x, roof y, z, height]; one light each. */
-	roofs: [number, number, number, number][] = []
+	roofs: [number, number, number, number][] = [],
+	/** Far-ring towns: flat [x, y, z, radiance] (world.ts lightSites). */
+	sites: number[] = []
 ) {
 	const positions: number[] = [];
 	const colors: number[] = [];
@@ -101,6 +104,14 @@ export function streetlights(
 		const [r, g, b] = kindFor([x, z]);
 		positions.push(x, y + 1, z);
 		colors.push(r * 0.6, g * 0.6, b * 0.6, 1);
+	}
+
+	// Far towns, dealt from the same mix, brighter where NASA measured more light.
+	for (let i = 0; i < sites.length; i += 4) {
+		const [r, g, b] = kindFor([sites[i]!, sites[i + 2]!]);
+		const k = 0.5 + 0.5 * sites[i + 3]!;
+		positions.push(sites[i]!, sites[i + 1]!, sites[i + 2]!);
+		colors.push(r * k, g * k, b * k, 1);
 	}
 
 	// Additive points, the night gain folded into the colour.

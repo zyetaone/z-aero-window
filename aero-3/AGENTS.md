@@ -13,17 +13,22 @@ One reason to change per file:
 - `src/world.ts` — the ground. A 3×3 z10 detail patch (terrarium + z12 Sentinel-2, 3072 px: the
   Pi's 4096 px texture limit is the ceiling) inside a 5×5 z8 ring (~750 km, past the horizon), both
   bent by Earth's curvature. Night is NASA's VIIRS radiance (GIBS, capped at z8) through aero-2's
-  luminance knee as a faint glow. Map data only: no procedural noise in any texture.
+  luminance knee as a faint glow, and as a mask that shows the real imagery warm under lit
+  districts. Map data only: no procedural noise in any texture. Textures upload from JPEG blobs, so
+  no CPU canvas outlives boot; `scene.clearCachedVertexData()` drops the mesh copies after build.
 - `src/buildings.ts` — OSM footprints extruded at boot into one mesh with a procedural window
   facade: concrete and glass by day, lit rooms at night, plus a baked ambient-occlusion
   lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
 - `src/lights.ts` — every light is a single point from map data: a lamp every 32–55 m along the
-  road pack (`../data/roads`) plus one on each OSM building's roof (~140k for Hyderabad), one
+  road pack (`../data/roads`), one on each OSM building's roof, and clusters from NASA's VIIRS for
+  the towns on the far ring past the roads (~200k in all for Hyderabad), one
   additive point cloud on a small shader that fades each light toward the horizon and twinkles it
   faintly. Mix: sodium 65%, warm white 15%, white 10%, red 5%, blue 5%, dealt per road by hash.
   Bloomed by Babylon's `GlowLayer` at night only, together with the buildings' lit windows.
+- `src/trees.ts` — low-poly cones in clusters wherever the imagery within 5 km of the pin reads
+  green: thin instances, one draw call (`?trees=0` to skip).
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, cirrus; per-tier wrap so wind never blows the deck off the place.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.

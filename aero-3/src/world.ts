@@ -7,7 +7,7 @@
  * east, y up, z north, origin at sea level over the centre of the detail patch. Positions come from global Mercator (0..1 across the
  * world), so the two patches, the buildings and the pin share one projection.
  */
-import { Color3, DynamicTexture, MeshBuilder, PBRMaterial, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
+import { Color3, MeshBuilder, PBRMaterial, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
 
 const RAD = Math.PI / 180;
 const TILE = 256;
@@ -84,15 +84,21 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		};
 	}
 
-	function texture(name: string, canvas: OffscreenCanvas) {
-		const tex = new DynamicTexture(name, { width: canvas.width, height: canvas.height }, scene, true);
-		tex.getContext().drawImage(canvas, 0, 0);
-		tex.update();
-		tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE;
-		return tex;
+	/**
+	 * A canvas into a GPU texture with no CPU copy left behind: a DynamicTexture keeps
+	 * its own canvas for life (37 MB for the near imagery). A JPEG blob is ~2 MB and
+	 * is what Babylon re-reads if the GL context is ever lost.
+	 */
+	async function texture(name: string, canvas: OffscreenCanvas) {
+		const url = URL.createObjectURL(await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.95 }));
+		return new Promise<Texture>((resolve, reject) => {
+			const tex: Texture = new Texture(url, scene, { mimeType: 'image/jpeg', onLoad: () => resolve(tex), onError: (m) => reject(new Error(`${name}: ${m}`)) });
+			tex.name = name;
+			tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+		});
 	}
 
-	function patch(name: string, grid: Grid, heightAt: (mx: number, my: number) => number, imagery: OffscreenCanvas, lights: OffscreenCanvas, subdivisions: number, sink?: (mx: number, my: number) => boolean) {
+	async function patch(name: string, grid: Grid, heightAt: (mx: number, my: number) => number, imagery: OffscreenCanvas, lights: OffscreenCanvas, subdivisions: number, sink?: (mx: number, my: number) => boolean) {
 		const sizeMerc = grid.span / 2 ** grid.z;
 		const size = sizeMerc * mPerMerc;
 		const [ox, oz] = [(grid.x0 / 2 ** grid.z + sizeMerc / 2 - mx0) * mPerMerc, -(grid.y0 / 2 ** grid.z + sizeMerc / 2 - my0) * mPerMerc];
@@ -112,8 +118,10 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		mesh.refreshBoundingInfo();
 
 		const material = new PBRMaterial(name, scene);
-		material.albedoTexture = texture(`${name}-imagery`, imagery);
-		material.emissiveTexture = texture(`${name}-lights`, kneeLights(lights));
+		[material.albedoTexture, material.emissiveTexture] = await Promise.all([
+			texture(`${name}-imagery`, imagery),
+			texture(`${name}-lights`, nightGround(lights, imagery))
+		]);
 		material.emissiveColor = Color3.White();
 		material.metallic = 0;
 		material.roughness = 1;
@@ -122,32 +130,46 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		return material;
 	}
 
+	const nearEdge = (m: number, origin: number) => m * 2 ** 10 > origin + 1e-3 && m * 2 ** 10 < origin + near.span - 1e-3;
 	const [nearHeights, farHeights, nearImagery, farImagery, nearLights, farLights] = await Promise.all([
 		heights(near),
 		heights(far),
 		mosaic('imagery', 'jpg', near, 12, [11, 12], '#3a4048'),
 		mosaic('imagery', 'jpg', far, 8, [7, 8], '#3a4048'),
-		// NASA's VIIRS radiance (GIBS caps it at z8, ~600 m/px): a smooth glow under the points.
-		// aero-2's baked z11 lamp dots upscaled into amber and blue blocks.
-		mosaic('lights', 'png', near, 10, [8], '#000'),
+		// NASA's VIIRS radiance (GIBS caps it at z8, ~600 m/px), stretched smooth onto each
+		// patch's imagery grid so it can mask the imagery (nightGround). aero-2's baked z11
+		// lamp dots upscaled into amber and blue blocks.
+		mosaic('lights', 'png', near, 12, [8], '#000'),
 		mosaic('lights', 'png', far, 8, [8], '#000')
 	]);
 
+	const inNear = (mx: number, my: number) => nearEdge(mx, near.x0) && nearEdge(my, near.y0);
+	const heightAt = (mx: number, my: number) => (inNear(mx, my) ? nearHeights : farHeights)(mx, my);
+	// Read before nightGround rewrites the canvases in place.
+	const sites = lightSites(farLights, far, inNear, (mx, my) => {
+		const [x, z] = [(mx - mx0) * mPerMerc, -(my - my0) * mPerMerc];
+		return [x, heightAt(mx, my) - drop(x, z) + 10, z];
+	});
+	const imagery = crop(nearImagery, near, mercX(lon), mercY(lat), (mx, my) => [(mx - mx0) * mPerMerc, -(my - my0) * mPerMerc]);
+
 	// The 1e-3 tile slack keeps float32 border vertices on the border, not sunk.
-	const nearEdge = (m: number, origin: number) => m * 2 ** 10 > origin + 1e-3 && m * 2 ** 10 < origin + near.span - 1e-3;
-	const materials = [
+	const materials = await Promise.all([
 		patch('near', near, nearHeights, nearImagery, nearLights, 256),
 		// 160 subdivisions over 20 z10 tiles puts a vertex line on every z10 tile
 		// edge, so only vertices strictly inside the near patch sink under it.
-		patch('far', far, farHeights, farImagery, farLights, 160, (mx, my) => nearEdge(mx, near.x0) && nearEdge(my, near.y0))
-	];
+		patch('far', far, farHeights, farImagery, farLights, 160, inNear)
+	]);
 
 	return {
 		project,
 		drop,
 		/** Ground in scene metres under (x, z), curvature included. */
-		groundAt: (x: number, z: number) => nearHeights(mx0 + x / mPerMerc, my0 - z / mPerMerc) - drop(x, z),
-		materials
+		groundAt: (x: number, z: number) => heightAt(mx0 + x / mPerMerc, my0 - z / mPerMerc) - drop(x, z),
+		materials,
+		/** Far-ring towns from NASA's radiance: [x, y, z, radiance 0..1] per light (lights.ts). */
+		sites,
+		/** The imagery's RGB under (x, z) within CROP_M of the pin, else null (trees.ts). */
+		imagery
 	};
 }
 
@@ -160,23 +182,84 @@ async function fetchTile(url: string): Promise<ImageBitmap | null> {
 }
 
 const GLOW = 0.12; // NASA's radiance as a faint carpet: the points carry the detail
+const REVEAL = 0.3; // how much of the real ground a lit district shows at night
+const CROP_M = 6_000; // imagery kept for sampling (trees), either side of the pin
 
 /**
- * NASA's VIIRS radiance into a night texture, once at boot. aero-2's tint
- * (server/viirs-tint.ts) cut to its load-bearing part: a luminance knee at
- * 0.35..0.75, because raw VIIRS over a city is mid-bright almost everywhere and
- * anything lower pastes a cream sheet over it — kept as a faint amber glow.
- * Map data only: every individual light is a point from OSM (lights.ts).
+ * The night ground, once at boot, from NASA's VIIRS radiance alone: aero-2's
+ * luminance knee at 0.35..0.75 (raw VIIRS over a city is mid-bright almost
+ * everywhere, and anything lower pastes a cream sheet over it) as a faint amber
+ * glow, and the same radiance as a mask that lets the real imagery show through
+ * warm where a district is lit — streets, roofs and parks read under the lamps
+ * instead of a flat orange. `lights` is rewritten in place and returned.
  */
-function kneeLights(canvas: OffscreenCanvas) {
-	const ctx = canvas.getContext('2d')!;
-	const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-	const d = image.data;
+function nightGround(lights: OffscreenCanvas, imagery: OffscreenCanvas) {
+	const ctx = lights.getContext('2d')!;
+	const image = ctx.getImageData(0, 0, lights.width, lights.height);
+	const [d, ground] = [image.data, imagery.getContext('2d')!.getImageData(0, 0, imagery.width, imagery.height).data];
 	for (let i = 0; i < d.length; i += 4) {
 		const t = Math.max(d[i]!, d[i + 1]!, d[i + 2]!) / 255;
 		const k = smoothstep(0.35, 0.75, t) * (0.25 + 0.6 * t * t) * GLOW;
-		[d[i], d[i + 1], d[i + 2]] = [255 * k, 150 * k, 60 * k];
+		const lit = smoothstep(0.3, 0.8, t) * REVEAL;
+		d[i] = 255 * k + ground[i]! * lit;
+		d[i + 1] = 150 * k + ground[i + 1]! * lit * 0.8;
+		d[i + 2] = 60 * k + ground[i + 2]! * lit * 0.6;
 	}
 	ctx.putImageData(image, 0, 0);
-	return canvas;
+	return lights;
+}
+
+/**
+ * Towns beyond the road pack, from NASA's radiance: each bright far-ring pixel
+ * (~600 m) becomes a cluster of up to three lights, more the brighter it is,
+ * jittered inside the pixel by hash so every pane places the same ones. Derived
+ * from the map, not invented, and only where the road pack has no points.
+ */
+function lightSites(lights: OffscreenCanvas, grid: Grid, skip: (mx: number, my: number) => boolean, at: (mx: number, my: number) => [number, number, number]) {
+	const { data, width } = lights.getContext('2d')!.getImageData(0, 0, lights.width, lights.height);
+	const pxMerc = 1 / (2 ** grid.z * TILE);
+	const sites: number[] = [];
+	for (let py = 0; py < width; py++) {
+		for (let px = 0; px < width; px++) {
+			const t = data[(py * width + px) * 4]! / 255;
+			if (t < 0.5) continue; // towns, not the rural haze VIIRS also records
+			const [mx, my] = [grid.x0 / 2 ** grid.z + px * pxMerc, grid.y0 / 2 ** grid.z + py * pxMerc];
+			if (skip(mx, my)) continue;
+			const n = Math.floor(t * t * 3 + hash(py * width + px));
+			for (let k = 0; k < n; k++) {
+				const seed = (py * width + px) * 8 + k;
+				sites.push(...at(mx + hash(seed) * pxMerc, my + hash(seed + 0x9e37) * pxMerc), t);
+			}
+		}
+	}
+	return sites;
+}
+
+/** A small window of the near imagery around the pin, for sampling after the canvas is gone. */
+function crop(imagery: OffscreenCanvas, grid: Grid, pinMx: number, pinMy: number, toScene: (mx: number, my: number) => [number, number]) {
+	const pxMerc = 1 / (2 ** 12 * TILE);
+	const [cx, cy] = [(pinMx - grid.x0 / 2 ** grid.z) / pxMerc, (pinMy - grid.y0 / 2 ** grid.z) / pxMerc];
+	const [ex] = toScene(pinMx + pxMerc, pinMy);
+	const [ox] = toScene(pinMx, pinMy);
+	const pxM = ex - ox;
+	const half = Math.ceil(CROP_M / pxM);
+	const [x0, y0] = [Math.round(cx) - half, Math.round(cy) - half];
+	const { data } = imagery.getContext('2d')!.getImageData(x0, y0, half * 2, half * 2);
+	const [sx0, sz0] = toScene(grid.x0 / 2 ** grid.z + x0 * pxMerc, grid.y0 / 2 ** grid.z + y0 * pxMerc);
+	return (x: number, z: number): [number, number, number] | null => {
+		const [px, py] = [Math.floor((x - sx0) / pxM), Math.floor((sz0 - z) / pxM)];
+		if (px < 0 || py < 0 || px >= half * 2 || py >= half * 2) return null;
+		const i = (py * half * 2 + px) * 4;
+		return [data[i]!, data[i + 1]!, data[i + 2]!];
+	};
+}
+
+/** Integer hash to [0, 1) (lowbias32, public domain): seeded noise without a PRNG's state. */
+export function hash(n: number) {
+	n ^= n >>> 16;
+	n = Math.imul(n, 0x7feb352d);
+	n ^= n >>> 15;
+	n = Math.imul(n, 0x846ca68b);
+	n ^= n >>> 16;
+	return (n >>> 0) / 4294967296;
 }
