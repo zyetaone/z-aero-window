@@ -9,9 +9,9 @@
  * Params (all optional, so `frame-cost.mjs` can pin a scene):
  *   ?place=hyderabad  ?clock=6 (local solar hour)  ?yaw=0 (pane offset, deg)
  *   ?scale=1 (hardware scaling)  ?gpu=webgpu  ?hud=0  ?clouds=1 (cover, 0 = clear)
- *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=0.12 (VIIRS texture)
+ *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=1 (VIIRS texture)
  */
-import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
+import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, Scene, Vector3, WebGPUEngine, type AbstractEngine, type Mesh } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { buildings } from './buildings.ts';
 import { clouds } from './clouds.ts';
@@ -48,7 +48,7 @@ const paneYaw = Number(q.get('yaw') ?? 0) * RAD;
 const lampGain = Number(q.get('lamps') ?? 1);
 const twilightLift = Number(q.get('lift') ?? 8);
 // The baked VIIRS texture under the lamp points: a faint glow only, or it reads as blocky amber blobs.
-const carpet = Number(q.get('carpet') ?? 0.12);
+const carpet = Number(q.get('carpet') ?? 1);
 let pinnedHour = q.has('clock') ? Number(q.get('clock')) : null;
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
@@ -86,6 +86,8 @@ if (glow && lamps) {
 	glow.addIncludedOnlyMesh(lamps.mesh);
 	glow.referenceMeshToUseItsOwnMaterial(lamps.mesh);
 }
+// Lit windows halo too: the glow pass draws the city through its own emissive shader.
+for (const mesh of city?.getBindedMeshes() ?? []) glow?.addIncludedOnlyMesh(mesh as Mesh);
 
 const hud = q.get('hud') === '0' ? null : clockControls();
 if (q.has('debug')) Object.assign(globalThis, { scene, camera, world }); // for the console and frame-cost ablations
@@ -100,7 +102,7 @@ engine.runRenderLoop(() => {
 
 	// Lamps, window glow, stars and the eye's twilight adaptation all follow the sun, not the hour.
 	const dark = 1 - smoothstep(-8, 2, s.elevationDeg);
-	// The baked VIIRS carpet stays faint under the real lamp points; windows keep full gain.
+	// The VIIRS texture bakes its own balance (world.ts); ?carpet= scales it from there.
 	// The twilight lift multiplies emissive too, so divide it back out: 0.12 means 0.12 at night.
 	const exposure = 1 + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;

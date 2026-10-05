@@ -12,8 +12,9 @@ One reason to change per file:
   agree without talking), the time-of-day slider, the render loop.
 - `src/world.ts` — the ground. A 3×3 z10 detail patch (terrarium + z12 Sentinel-2, 3072 px: the
   Pi's 4096 px texture limit is the ceiling) inside a 5×5 z8
-  ring (~750 km, past the horizon), both bent by Earth's curvature. Night is raw VIIRS radiance as a
-  faint emissive glow through aero-2's luminance knee; the lamp points carry the detail.
+  ring (~750 km, past the horizon), both bent by Earth's curvature. Night is NASA's VIIRS radiance (GIBS,
+  capped at z8) through aero-2's luminance knee as a faint glow, scattered on the z12 grid into
+  seeded house-light specks where it is urban-bright; the lamp points carry the roads.
 - `src/buildings.ts` — OSM footprints extruded at boot into one mesh with a procedural window
   facade: concrete and glass by day, lit rooms at night, plus a baked ambient-occlusion
   lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
@@ -21,7 +22,7 @@ One reason to change per file:
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
 - `src/lights.ts` — streetlights as real points: a lamp every 32–55 m (by road class) along the
   road pack (`../data/roads`, ~120k for Hyderabad), one additive point cloud, aero-1's per-road
-  colour deal, bloomed by Babylon's `GlowLayer` at night only. The VIIRS carpet stays faint under it (`?carpet=0.12`).
+  colour deal, bloomed by Babylon's `GlowLayer` at night only, together with the buildings' lit windows. The VIIRS texture bakes its own balance (`?carpet=` scales it).
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, cirrus; per-tier wrap so wind never blows the deck off the place.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
@@ -44,7 +45,7 @@ One reason to change per file:
   the dusk sky white. It includes the lamp points only.
 - **120k additive points sum to a white sheet**: per-lamp alpha is ~0.2.
 - **The twilight exposure lift multiplies emissive too**, so emissive gains are divided by it:
-  `?carpet=0.12` means 0.12 at night, not 1.08.
+  `?carpet=1` means 1 at night, not 9.
 
 Units are metres, y up, x east, z north.
 

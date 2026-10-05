@@ -93,6 +93,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 	}
 
 	function patch(name: string, grid: Grid, heightAt: (mx: number, my: number) => number, imagery: OffscreenCanvas, lights: OffscreenCanvas, subdivisions: number, sink?: (mx: number, my: number) => boolean) {
+		const speckle = !sink; // the near patch gets house lights; the far ring stays a smooth glow
 		const sizeMerc = grid.span / 2 ** grid.z;
 		const size = sizeMerc * mPerMerc;
 		const [ox, oz] = [(grid.x0 / 2 ** grid.z + sizeMerc / 2 - mx0) * mPerMerc, -(grid.y0 / 2 ** grid.z + sizeMerc / 2 - my0) * mPerMerc];
@@ -113,7 +114,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 
 		const material = new PBRMaterial(name, scene);
 		material.albedoTexture = texture(`${name}-imagery`, imagery);
-		material.emissiveTexture = texture(`${name}-lights`, kneeLights(lights));
+		material.emissiveTexture = texture(`${name}-lights`, kneeLights(lights, speckle));
 		material.emissiveColor = Color3.White();
 		material.metallic = 0;
 		material.roughness = 1;
@@ -127,9 +128,10 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		heights(far),
 		mosaic('imagery', 'jpg', near, 12, [11, 12], '#3a4048'),
 		mosaic('imagery', 'jpg', far, 8, [7, 8], '#3a4048'),
-		// Raw VIIRS radiance only: a smooth glow under the lamp points. aero-2's baked z11 lamp
-		// dots upscaled into amber and blue blobs, and the points (lights.ts) do that job now.
-		mosaic('lights', 'png', near, 10, [8], '#000'),
+		// NASA's VIIRS radiance (GIBS caps it at z8, ~600 m/px) stretched onto the imagery's z12
+		// grid, where kneeLights scatters it into house lights. aero-2's baked z11 lamp dots
+		// upscaled into amber and blue blocks; the lamp points (lights.ts) carry the roads.
+		mosaic('lights', 'png', near, 12, [8], '#000'),
 		mosaic('lights', 'png', far, 8, [8], '#000')
 	]);
 
@@ -159,26 +161,50 @@ async function fetchTile(url: string): Promise<ImageBitmap | null> {
 	return res.ok ? createImageBitmap(await res.blob()) : null;
 }
 
+/** Sodium-majority house and yard lights, as the lamp points deal them. */
+const SPECKS: [number, number, number][] = [[255, 170, 80], [255, 170, 80], [255, 200, 130], [255, 226, 180], [210, 225, 255]];
+const GLOW = 0.12; // the smooth radiance under the specks
+
 /**
- * aero-2's VIIRS tint (server/viirs-tint.ts), cut to its two load-bearing
- * parts and run once at boot: a luminance knee at 0.35..0.75, because raw
- * VIIRS over a city is mid-bright almost everywhere and anything lower pastes
- * a cream sheet over it; and grey radiance dealt amber. Baked lamp pixels
- * already carry their road's colour and keep it.
+ * NASA's VIIRS radiance into a night texture, once at boot. aero-2's tint
+ * (server/viirs-tint.ts) cut to its load-bearing part: a luminance knee at
+ * 0.35..0.75, because raw VIIRS over a city is mid-bright almost everywhere and
+ * anything lower pastes a cream sheet over it — kept as a faint amber glow.
+ *
+ * On top, `speckle` scatters single lit pixels with probability rising with
+ * radiance: z8 radiance is 600 m blur, and what a window shows of a city is
+ * thousands of separate points. A hash of the pixel index seeds it, so every
+ * pane scatters the same lights; mipmaps fold the specks back into glow far off.
  */
-function kneeLights(canvas: OffscreenCanvas) {
+function kneeLights(canvas: OffscreenCanvas, speckle: boolean) {
 	const ctx = canvas.getContext('2d')!;
 	const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
 	const d = image.data;
 	for (let i = 0; i < d.length; i += 4) {
-		const [r, g, b] = [d[i]!, d[i + 1]!, d[i + 2]!];
-		const t = Math.max(r, g, b) / 255;
-		const k = smoothstep(0.35, 0.75, t) * (0.25 + 0.6 * t * t);
-		const grey = Math.max(r, g, b) - Math.min(r, g, b) < 24;
-		d[i] = (grey ? 255 : r) * k;
-		d[i + 1] = (grey ? 150 : g) * k;
-		d[i + 2] = (grey ? 60 : b) * k;
+		const t = Math.max(d[i]!, d[i + 1]!, d[i + 2]!) / 255;
+		const k = smoothstep(0.35, 0.75, t) * (0.25 + 0.6 * t * t) * GLOW;
+		let [r, g, b] = [255 * k, 150 * k, 60 * k];
+		if (speckle) {
+			const h = hash(i >> 2);
+			// Urban radiance only: rural VIIRS is ~0.3 and specks there read as sand.
+			if (h < smoothstep(0.5, 0.95, t) * 0.16) {
+				const [sr, sg, sb] = SPECKS[Math.floor((h * 1e4) % SPECKS.length)]!;
+				const gain = 0.3 + 0.4 * ((h * 1e6) % 1);
+				[r, g, b] = [sr * gain, sg * gain, sb * gain];
+			}
+		}
+		[d[i], d[i + 1], d[i + 2]] = [r, g, b];
 	}
 	ctx.putImageData(image, 0, 0);
 	return canvas;
+}
+
+/** Integer hash to [0, 1) (lowbias32, public domain): seeded noise without a PRNG's state. */
+function hash(n: number) {
+	n ^= n >>> 16;
+	n = Math.imul(n, 0x7feb352d);
+	n ^= n >>> 15;
+	n = Math.imul(n, 0x846ca68b);
+	n ^= n >>> 16;
+	return (n >>> 0) / 4294967296;
 }
