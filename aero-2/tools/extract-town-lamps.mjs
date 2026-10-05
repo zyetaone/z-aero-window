@@ -7,11 +7,15 @@
  * inside a few hundred kilometres — were raster smudge only: glow with no
  * structure. From cruise the window reads them as haze, not habitation.
  *
- * So this bakes them offline: for each city, every z7 VIIRS tile in a ±2°
- * box is scanned in 4×4-pixel blocks (~5 km cells), and blocks brighter
+ * So this bakes them offline: for each city, every z8 VIIRS tile in a ±2°
+ * box is scanned in 4×4-pixel blocks (~2.5 km cells), and blocks brighter
  * than TOWN_THRESHOLD become lamp points with an intensity. The renderer
  * (`Towns.svelte`) draws them as soft amber circles over the raster —
  * clusters of individual lamps where the photograph has no pixels to give.
+ *
+ * z8, not z7: the z7 lattice (~5 km cells) read as a random scatter from
+ * the low cruise band — one lamp per town. z8 quarters the cell, so a lit
+ * district resolves into its own cluster of lamps instead of one dot.
  *
  * Deterministic and idempotent: same pack, same bytes. Re-run after any
  * VIIRS refresh:
@@ -32,11 +36,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const VIIRS_DIR = join(here, '../data/tiles/viirs');
 const TOWNS_DIR = join(here, '../../data/towns');
 
-/** z7: 1.2 km/px — one pixel per hamlet, one block per town. */
-const SCAN_ZOOM = 7;
+/** z8: ~0.6 km/px at latitude 40 — a block is a street cluster, not a hamlet. */
+const SCAN_ZOOM = 8;
 /** Half-width of the regional box around each centre, degrees. */
 const BOX_DEG = 2;
-/** Block size, pixels: 4×4 ≈ 5 km cells. */
+/** Block size, pixels: 4×4 ≈ 2.5 km cells at z8. */
 const BLOCK = 4;
 /** Blocks dimmer than this are dark ground, not towns. */
 const TOWN_THRESHOLD = 0.25;
