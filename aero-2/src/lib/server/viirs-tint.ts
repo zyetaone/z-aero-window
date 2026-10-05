@@ -66,8 +66,17 @@ export function tintViirs(pngBytes: Uint8Array): Uint8Array {
 			}
 			const lum = (data[i] + data[i + 1] + data[i + 2]) / 3 / 255;
 			const t = Math.max(0, Math.min(1, lum));
-			let [r, g, b] = ramp(t);
-			if (t > 0.15) {
+			// Channel spread > 6: the bake stamped a road colour here (grayscale
+			// VIIRS and the white-map base always have equal channels). Keep it —
+			// the per-pixel deal would re-sprinkle one street in 2-px confetti.
+			// Only grain, luminance dim and the alpha knee below still apply.
+			const spread = Math.max(data[i], data[i + 1], data[i + 2]) - Math.min(data[i], data[i + 1], data[i + 2]);
+			let r, g, b;
+			if (spread > 6) {
+				[r, g, b] = [data[i], data[i + 1], data[i + 2]];
+			} else {
+				[r, g, b] = ramp(t);
+				if (t > 0.15) {
 				// Palette deal: position+luminance hash, so the same lamp
 				// reads the same bucket on every pane and every boot.
 				const s = Math.sin(x * 12.9898 + y * 78.233 + t * 37.719) * 43758.5453;
@@ -91,6 +100,7 @@ export function tintViirs(pngBytes: Uint8Array): Uint8Array {
 					g = lerp(g, 45, 0.6);
 					b = lerp(b, 20, 0.6);
 				}
+			}
 			}
 			const grain = grainValue(x & ~1, y & ~1) / 255;
 			// Colour scales with luminance too (Feb: light = colour * lum): mids dim, cores bright.

@@ -187,7 +187,7 @@ export const IMAGERY_GRADE = {
 	fadeDuration: 0
 };
 
-const VIIRS_TINT_VERSION = 3;
+const VIIRS_TINT_VERSION = 4;
 
 export function tileTemplates(prefix = '/api/tiles'): {
 	sentinel2: string[];

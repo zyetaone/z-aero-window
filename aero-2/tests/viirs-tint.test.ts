@@ -48,6 +48,21 @@ describe('tintViirs', () => {
 		expect(seen.size).toBeGreaterThan(3);
 	});
 
+	it('keeps baked road colours instead of re-dealing them (aero-1 port)', () => {
+		// bake-viirs-lamps stamps each lamp in its road's colour — e.g. the
+		// sodium #ff6a00. The old per-pixel deal would have pulled it toward
+		// amber/white/cool at pixel granularity, one street in 2-px confetti.
+		// The stamped hue must survive: red stays dominant, blue stays ~0.
+		const px = read(tintViirs(solid(4, 4, 255, 106, 0, 255)));
+		expect(px.r).toBeGreaterThan(px.g);
+		expect(px.g).toBeGreaterThan(px.b);
+		expect(px.b).toBeLessThan(60);
+		// A grayscale core of the same luminance still deals to the ramp
+		// (never the lamp's exact hue): the two paths must not have merged.
+		const grey = read(tintViirs(solid(4, 4, 120, 120, 120, 255)));
+		expect(grey.r).not.toBe(255);
+	});
+
 	it('sparks rare traffic-red in bright cores', () => {
 		const out = PNG.sync.read(Buffer.from(tintViirs(solid(32, 32, 255, 255, 255, 255))));
 		let reds = 0;

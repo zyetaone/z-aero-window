@@ -15,9 +15,11 @@
  *      keeps them dots at that zoom, weighted by the road's stamped `glow`;
  *   3. radiance is multiplied by (FLOOR + (DOT_GAIN - FLOOR) * dots): black
  *      between lamps, the district's own brightness on them;
- *   4. written raw (white map, alpha 255) in the pack's WMTS layout, so the
- *      tile route tints it exactly like a z8 tile. Tiles with no roads pass
- *      the parent through untouched.
+ *   4. written in the pack's WMTS layout with the lamp pixels already in
+ *      their road's colour (aero-1's per-road deal, below) and everything
+ *      else a white map, so the tile route's tint keeps the baked colour on
+ *      coloured pixels and deals the rest exactly like a z8 tile. Tiles with
+ *      no roads pass the parent through untouched.
  *
  * Environment artists call this a detail texture; X-Plane and FlightGear
  * place their night lights from the road vectors at data-prep time the same
@@ -56,6 +58,35 @@ const MIN_SPACING_PX = 4;
 /** Dot radius in pixels at z11 by class; scales down with zoom, never below 0.7. */
 const RADIUS_PX = { motorway: 1.4, trunk: 1.3, primary: 1.2, secondary: 1.1, tertiary: 1.0 };
 const RADIUS_DEFAULT_PX = 0.9;
+
+/**
+ * Per-road lamp colour — ported from aero-1's roads-geojson (roadLampIndex).
+ * A deterministic hash of the road's first vertex picks ONE colour for the
+ * whole road, sodium-majority. Fleet requirement, not style: the panes never
+ * talk, so the same street must land the same bin on every one of them.
+ *
+ * aero-1 notes these hexes are saturated ON PURPOSE — it reads them through
+ * a hard night desat; here the tint's luminance mult (0.25+0.6t²) is the
+ * equivalent brake, and the vector lamps above them use the same warm cast.
+ */
+const LAMP_COLORS = [
+	[255, 106, 0], // #ff6a00 sodium vapour — the dominant warm orange
+	[255, 166, 46], // #ffa62e mixed / older warm white
+	[143, 184, 255] // #8fb8ff LED retrofit — cold, the minority
+];
+const LAMP_WEIGHTS = [0, 0, 0, 1, 1, 2];
+
+function roadLampIndex(firstLon, firstLat) {
+	// Same integer hash as aero-1: ~1 m resolution, rounded so float noise in
+	// the extract cannot flip a road between bins.
+	const a = Math.round(firstLon * 1e5);
+	const b = Math.round(firstLat * 1e5);
+	let h = (a ^ (b << 1)) >>> 0;
+	h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+	h = Math.imul(h ^ (h >>> 12), 0x297a2d39) >>> 0;
+	h = (h ^ (h >>> 15)) >>> 0;
+	return LAMP_WEIGHTS[h % LAMP_WEIGHTS.length];
+}
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -122,7 +153,7 @@ function hash01(a, b) {
 	return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-function stampDot(mask, cx, cy, r, w) {
+function stampDot(channels, cx, cy, r, w, color) {
 	const x0 = Math.max(0, Math.floor(cx - r - 1));
 	const x1 = Math.min(SIZE - 1, Math.ceil(cx + r + 1));
 	const y0 = Math.max(0, Math.floor(cy - r - 1));
@@ -134,14 +165,26 @@ function stampDot(mask, cx, cy, r, w) {
 			const dy = yy + 0.5 - cy;
 			const v = w * Math.exp(-(dx * dx + dy * dy) * inv);
 			const i = yy * SIZE + xx;
-			if (v > mask[i]) mask[i] = v;
+			if (v > channels.mask[i]) {
+				// The brightest road owning the pixel also owns its colour, so
+				// an arterial over a service street reads as the arterial.
+				channels.mask[i] = v;
+				channels.cr[i] = color[0];
+				channels.cg[i] = color[1];
+				channels.cb[i] = color[2];
+			}
 		}
 	}
 }
 
-/** Lamp mask for one tile: dots along every road that crosses it. */
+/** Lamp mask for one tile: dots along every road that crosses it, each in its road's colour. */
 function lampMask(features, z, x, y, lat) {
-	const mask = new Float32Array(SIZE * SIZE);
+	const channels = {
+		mask: new Float32Array(SIZE * SIZE),
+		cr: new Float32Array(SIZE * SIZE),
+		cg: new Float32Array(SIZE * SIZE),
+		cb: new Float32Array(SIZE * SIZE)
+	};
 	const mpp = metresPerPixel(z, lat);
 	const radiusScale = Math.max(0.7 / RADIUS_DEFAULT_PX, 2 ** (z - 11));
 	const tx0 = x * SIZE;
@@ -156,6 +199,7 @@ function lampMask(features, z, x, y, lat) {
 		const spacing = Math.max(MIN_SPACING_PX, (SPACING_M[cls] ?? SPACING_DEFAULT_M) / mpp);
 		const r = Math.max(0.7, (RADIUS_PX[cls] ?? RADIUS_DEFAULT_PX) * radiusScale);
 		const w = Math.max(0.12, Math.min(1, f.properties.glow ?? 1));
+		const color = LAMP_COLORS[roadLampIndex(f.first[0], f.first[1])];
 		const pts = f.px[z];
 		// Walk the polyline, dropping a lamp every `spacing` px with a little
 		// jitter so parallel roads do not beat against each other.
@@ -171,7 +215,7 @@ function lampMask(features, z, x, y, lat) {
 				const cx = ax + (bx - ax) * t - tx0;
 				const cy = ay + (by - ay) * t - ty0;
 				if (cx > -margin && cx < SIZE + margin && cy > -margin && cy < SIZE + margin) {
-					stampDot(mask, cx, cy, r, w);
+					stampDot(channels, cx, cy, r, w, color);
 					any = true;
 				}
 				d += spacing * (0.85 + 0.3 * hash01(fi, i * 7919 + Math.floor(d)));
@@ -179,34 +223,45 @@ function lampMask(features, z, x, y, lat) {
 			carry = d - len;
 		}
 	});
-	return any ? mask : null;
+	return any ? channels : null;
 }
 
 function bakeTile(features, z, x, y, lat, outFile) {
 	const radiance = upsampledRadiance(z, x, y);
 	if (!radiance) return 'no-parent';
-	const mask = lampMask(features, z, x, y, lat);
+	const channels = lampMask(features, z, x, y, lat);
 	const png = new PNG({ width: SIZE, height: SIZE });
 	let out = radiance;
-	if (mask) {
+	if (channels) {
 		out = new Float32Array(SIZE * SIZE);
 		// ponytail: no energy-preserving rescale. An 8-bit tile clips, so a gain that
 		// keeps the sum lifts the floor instead; the z8→z9 crossfade dims a district
 		// slightly as it sharpens, which is what a descent looks like anyway.
 		for (let i = 0; i < out.length; i++) {
-			out[i] = Math.min(255, radiance[i] * (FLOOR + (DOT_GAIN - FLOOR) * mask[i]));
+			out[i] = Math.min(255, radiance[i] * (FLOOR + (DOT_GAIN - FLOOR) * channels.mask[i]));
 		}
 	}
 	for (let i = 0; i < SIZE * SIZE; i++) {
-		const v = Math.round(out[i]);
-		png.data[i * 4] = v;
-		png.data[i * 4 + 1] = v;
-		png.data[i * 4 + 2] = v;
+		const v = out[i];
+		if (channels && channels.mask[i] > 0) {
+			// The road's colour, scaled by the district's own radiance: the
+			// satellite still says HOW BRIGHT the string is, the road hash says
+			// WHAT KIND of lamp it is.
+			const k = v / 255;
+			png.data[i * 4] = Math.round(channels.cr[i] * k);
+			png.data[i * 4 + 1] = Math.round(channels.cg[i] * k);
+			png.data[i * 4 + 2] = Math.round(channels.cb[i] * k);
+		} else {
+			const g = Math.round(v);
+			png.data[i * 4] = g;
+			png.data[i * 4 + 1] = g;
+			png.data[i * 4 + 2] = g;
+		}
 		png.data[i * 4 + 3] = 255;
 	}
 	mkdirSync(dirname(outFile), { recursive: true });
 	writeFileSync(outFile, PNG.sync.write(png));
-	return mask ? 'lamps' : 'passthrough';
+	return channels ? 'lamps' : 'passthrough';
 }
 
 function loadCity(file) {
@@ -237,7 +292,7 @@ function loadCity(file) {
 				Math.max(...pts.map((p) => p[1]))
 			];
 		}
-		features.push({ properties: f.properties ?? {}, px, bboxPx });
+		features.push({ properties: f.properties ?? {}, first: coords[0], px, bboxPx });
 	}
 	return { features, bbox: [minLon, minLat, maxLon, maxLat] };
 }
@@ -279,7 +334,7 @@ function selfCheck() {
 	parent.data.fill(128);
 	parentCache.set('0/0', parent);
 	const z = 11;
-	const road = { properties: { class: 'primary', glow: 1 }, px: {}, bboxPx: {} };
+	const road = { properties: { class: 'primary', glow: 1 }, first: [-100.13, 51.5], px: {}, bboxPx: {} };
 	const x0 = 0,
 		y0 = 0;
 	road.px[z] = [
@@ -288,7 +343,8 @@ function selfCheck() {
 	];
 	road.bboxPx[z] = [x0 * SIZE + 10, y0 * SIZE + 128, x0 * SIZE + 246, y0 * SIZE + 128];
 	const radiance = upsampledRadiance(z, 0, 0);
-	const mask = lampMask([road], z, 0, 0, 25);
+	const channels = lampMask([road], z, 0, 0, 25);
+	const mask = channels.mask;
 	let dark = 0,
 		max = 0;
 	for (let i = 0; i < SIZE * SIZE; i++) {
