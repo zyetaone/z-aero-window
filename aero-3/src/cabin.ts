@@ -40,6 +40,32 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 	};
 }
 
+/**
+ * The cabin's sound: aero-2's synthesised drone (media/ambient-audio.ts), looped
+ * noise through a low-pass whose cutoff falls as the aircraft climbs. No files.
+ * A kiosk Chromium runs with autoplay allowed; anywhere else the first tap starts it.
+ */
+export function cabinDrone(volume = 0.6) {
+	const ctx = new AudioContext();
+	const gain = ctx.createGain();
+	gain.gain.value = volume * 0.35;
+	const filter = Object.assign(ctx.createBiquadFilter(), { type: 'lowpass' as const });
+	filter.Q.value = 2.5;
+	const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+	const data = buffer.getChannelData(0);
+	for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1; // ponytail: unsynced across panes, and inaudibly so
+	const noise = Object.assign(ctx.createBufferSource(), { buffer, loop: true });
+	noise.connect(filter).connect(gain).connect(ctx.destination);
+	noise.start();
+	addEventListener('pointerdown', () => ctx.resume(), { once: true });
+	return {
+		/** Lower and duller as the aircraft climbs: 220 Hz on the ground to 110 Hz at 12 km. */
+		setAltitude(altitudeM: number) {
+			filter.frequency.setTargetAtTime(220 - Math.min(1, Math.max(0, altitudeM / 12_000)) * 110, ctx.currentTime, 0.5);
+		}
+	};
+}
+
 /** aero-2's RainGlass beads (flat variant, no backdrop blur): a fixed seed, so every pane rains alike. */
 function beads(host: HTMLElement) {
 	const r = mulberry32(104729);

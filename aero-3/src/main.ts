@@ -11,6 +11,7 @@
  *   ?scale=1 (hardware scaling)  ?gpu=webgpu  ?hud=0  ?clouds=1 (cover, 0 = clear)
  *   ?weather=clear|fair|scattered|towering|cirrus (pin today's regime)
  *   ?role=left|center|right (pane in the wall)  ?wall=http://<center>:3300 (whose wall to follow)
+ *   ?audio=0 (no cabin drone; only centre/solo panes play it)
  *   ?blind=0 (no blind, no reload: hold one visit)  ?frame=0 (no window rim)
  *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=1 (VIIRS texture)
  */
@@ -24,7 +25,9 @@ import { streetlights } from './lights.ts';
 import { trees } from './trees.ts';
 import { destinationAt, DWELL_SEC, PLACES, slotAt } from './places.ts';
 import { haze } from './haze.ts';
-import { cabinOverlay } from './cabin.ts';
+import { cabinDrone, cabinOverlay } from './cabin.ts';
+import { moon } from './moon.ts';
+import { wing } from './wing.ts';
 import { stars } from './stars.ts';
 import { atSolarHour, solarHour, sunAt } from './sun.ts';
 import { createWorld } from './world.ts';
@@ -113,6 +116,10 @@ const [city, roads, deck, sky] = await Promise.all([
 	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + day.deckM, world.groundAt, world.drop, day, num('clouds', 1)),
 	stars(scene, camera, lat, lon)
 ]);
+const luna = moon(scene, camera, lat, lon);
+const plane = q.get('wing') === '0' ? null : await wing(scene);
+// One pane makes the sound: the centre (or a lone pane). ?audio=0 for silence.
+const drone = q.get('audio') !== '0' && !ROLE_YAW[q.get('role') ?? ''] ? cabinDrone() : null;
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
 // towns on the far ring past the roads (lights.ts).
 const lamps = streetlights(roads ?? [], world.project, world.groundAt, scene, city?.roofLights, world.sites, city?.windows);
@@ -135,11 +142,14 @@ if (glow && lamps) {
 	glow.referenceMeshToUseItsOwnMaterial(lamps.mesh);
 }
 // Lit windows halo too: the glow pass draws the city through its own emissive shader.
-for (const mesh of city?.meshes ?? []) glow?.addIncludedOnlyMesh(mesh);
+// The wing too: its unlit meshes draw black into the bloom, so the city's glow stops at its edge.
+for (const mesh of [...(city?.meshes ?? []), ...(plane?.meshes ?? [])]) glow?.addIncludedOnlyMesh(mesh);
 
 const hud = q.get('hud') === '0' ? null : clockControls();
 if (hud) lightsPanel(), placePicker();
-if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount, day }); // for the console and frame-cost ablations
+/** ?debug: set `aim.at` to a world point (or `aim.moon = true`) to hold the camera on it for a screenshot. */
+const aim: { at: Vector3 | null; moon: boolean } = { at: null, moon: false };
+if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount, day, aim, plane }); // for the console and frame-cost ablations
 let hudAt = 0;
 const toSun = new Vector3();
 const [aircraft, seat] = [new Quaternion(), new Quaternion()];
@@ -186,10 +196,15 @@ engine.runRenderLoop(() => {
 	Quaternion.RotationYawPitchRollToRef(p.heading, 0, -p.bank, aircraft);
 	Quaternion.RotationYawPitchRollToRef(p.look + paneYaw, SEAT_PITCH, 0, seat);
 	aircraft.multiplyToRef(seat, camera.rotationQuaternion!);
+	plane?.update(camera.position, aircraft, Math.sign(Math.sin(p.look)) || 1, now, dark);
+	if (aim.moon) aim.at = scene.getMeshByName('moon')!.position;
+	if (aim.at) camera.setTarget(aim.at);
 	cabin.update(now / 1000, dark);
 
 	deck.update(now, toSun.set(s.x, s.y, s.z), dark);
 	sky.update(skyMs, 1 - smoothstep(-14, -4, s.elevationDeg));
+	luna.update(skyMs, s, dark);
+	drone?.setAltitude(camera.position.y);
 	scene.render();
 
 	if (hud && now - hudAt > 250) {

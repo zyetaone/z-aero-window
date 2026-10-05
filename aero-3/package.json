@@ -10,6 +10,7 @@
   "dependencies": {
     "@babylonjs/addons": "9.29.0",
     "@babylonjs/core": "9.29.0",
+    "@babylonjs/loaders": "9.29.0",
     "earcut": "^3.2.4"
   },
   "scripts": {

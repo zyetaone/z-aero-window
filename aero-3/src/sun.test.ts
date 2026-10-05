@@ -25,3 +25,9 @@ test('sidereal angle: Greenwich at J2000 noon is 280.46 deg, and the sky gains ~
 	expect(siderealDeg(j2000, 0)).toBeCloseTo(280.46, 2);
 	expect((siderealDeg(j2000 + 86_400_000, 0) - siderealDeg(j2000, 0) + 360) % 360).toBeCloseTo(0.9856, 3);
 });
+
+test('the moon is full on 26 Oct 2026 and new on 10 Oct 2026', () => {
+	const { moonAt } = require('./sun.ts');
+	expect(moonAt(Date.parse('2026-10-26T04:00Z'), 17.44, 78.38).illumination).toBeGreaterThan(0.98);
+	expect(moonAt(Date.parse('2026-10-10T17:00Z'), 17.44, 78.38).illumination).toBeLessThan(0.02);
+});

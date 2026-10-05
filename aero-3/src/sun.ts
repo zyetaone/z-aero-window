@@ -53,3 +53,35 @@ export const atSolarHour = (ms: number, lonDeg: number, hour: number) =>
 /** Local sidereal angle in degrees: how far the sky has turned overhead. */
 export const siderealDeg = (ms: number, lonDeg: number) =>
 	(280.46061837 + 360.98564736629 * (ms / DAY_MS - 10_957.5) + lonDeg) % 360;
+
+export type Moon = Sun & { illumination: number };
+
+/**
+ * Unit vector to the moon (scene frame, as sunAt) and the lit fraction of its
+ * disc. aero-2's low-precision series (world/sun.ts moonPosition), good to
+ * about a degree: plenty for a disc in a window.
+ */
+export function moonAt(ms: number, latDeg: number, lonDeg: number): Moon {
+	const d = ms / DAY_MS - 10_957.5; // days since J2000.0
+	const L = (218.316 + 13.176396 * d) * RAD; // mean longitude
+	const M = (134.963 + 13.064993 * d) * RAD; // mean anomaly
+	const F = (93.272 + 13.22935 * d) * RAD; // argument of latitude
+	const lambda = L + 6.289 * RAD * Math.sin(M);
+	const beta = 5.128 * RAD * Math.sin(F);
+	const eps = 23.439 * RAD;
+	const dec = Math.asin(Math.sin(beta) * Math.cos(eps) + Math.cos(beta) * Math.sin(eps) * Math.sin(lambda));
+	const ra = Math.atan2(Math.sin(lambda) * Math.cos(eps) - Math.tan(beta) * Math.sin(eps), Math.cos(lambda));
+	const ha = siderealDeg(ms, lonDeg) * RAD - ra;
+	const lat = latDeg * RAD;
+	const alt = Math.asin(Math.sin(lat) * Math.sin(dec) + Math.cos(lat) * Math.cos(dec) * Math.cos(ha));
+	const az = Math.atan2(Math.sin(ha), Math.cos(ha) * Math.sin(lat) - Math.tan(dec) * Math.cos(lat)) + Math.PI; // from north, clockwise
+	const sunM = (357.528 + 0.9856003 * d) * RAD;
+	const sunLambda = (280.46 + 0.9856474 * d) * RAD + (1.915 * Math.sin(sunM) + 0.02 * Math.sin(2 * sunM)) * RAD;
+	return {
+		x: Math.sin(az) * Math.cos(alt),
+		y: Math.sin(alt),
+		z: Math.cos(az) * Math.cos(alt),
+		elevationDeg: alt / RAD,
+		illumination: (1 - Math.cos(lambda - sunLambda)) / 2
+	};
+}

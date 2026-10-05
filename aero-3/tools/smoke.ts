@@ -33,7 +33,7 @@ try {
 		// A place with no OSM pack (the Himalayas) has no buildings and no street lamps to check.
 		const city = (await fetch(`http://localhost:${port}/buildings/${place}.geojson`, { method: 'HEAD' })).ok;
 		await using view = new Bun.WebView({ width: 1280, height: 540 });
-		await view.navigate(`http://localhost:${port}/?place=${place}&clock=${clock}&blind=0&weather=scattered&debug`);
+		await view.navigate(`http://localhost:${port}/?place=${place}&clock=${clock}&blind=0&weather=scattered&audio=0&debug`);
 
 		// The HUD readout only fills once the render loop is running.
 		const started = Date.now();

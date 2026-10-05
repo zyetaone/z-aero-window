@@ -7,6 +7,7 @@
       "dependencies": {
         "@babylonjs/addons": "9.29.0",
         "@babylonjs/core": "9.29.0",
+        "@babylonjs/loaders": "9.29.0",
         "earcut": "^3.2.4",
       },
       "devDependencies": {
@@ -20,6 +21,8 @@
     "@babylonjs/addons": ["@babylonjs/addons@9.29.0", "", { "peerDependencies": { "@babylonjs/core": "^9.0.0" } }, "sha512-W6g6br9a5DCy0nC69GfVqv8jHgCaJ6RjpMZzDlpxe7i/pyWKueqyhYk0JOE/ZqNpK6Gyfdi6xs//Z0RnIFd3jg=="],
 
     "@babylonjs/core": ["@babylonjs/core@9.29.0", "", {}, "sha512-qWrtTRsZF0DO6IouYTEZrcQtUEJzlKbc3i/7Ek2T1INFJ+zp9fxO+CIRJ9HRInOG6HYjQl1i6RhxXVyUbx8yxQ=="],
+
+    "@babylonjs/loaders": ["@babylonjs/loaders@9.29.0", "", { "peerDependencies": { "@babylonjs/core": "^9.0.0", "babylonjs-gltf2interface": "^9.0.0" } }, "sha512-jShGlI0W6vJN6Nqe5ZiwdAzOGloaKbfz0Yj6CLprFJJmb8jTElQrMfIXTLMiGFxLqIu+MOjZ3IZpkHKfTCL90Q=="],
 
     "@types/bun": ["@types/bun@1.4.2", "", { "dependencies": { "bun-types": "1.4.2" } }, "sha512-GimotNn7+ZV0uVArItBbriZsR1oNf0+WTzPkdcFrzShI7k2norL0uzEaJT8T33dWr7O/c9ZDuAFQrctKCi72oQ=="],
 
@@ -66,6 +69,8 @@
     "@typescript/typescript-win32-arm64": ["@typescript/typescript-win32-arm64@7.0.2", "", { "os": "win32", "cpu": "arm64" }, "sha512-Gyl1Vy6OsWesLzmq+EP0Fb7b4Nid5232AvcA2SFcdYreldpNtYFFofPjnt62y9hQy7VTaZp65ICJjuAQRaVcIQ=="],
 
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
+
+    "babylonjs-gltf2interface": ["babylonjs-gltf2interface@9.29.0", "", {}, "sha512-DwC84cWAP8hJ/BdyOjczey2xz3ahIDcYWpf4lvoPop2oV089GdX0+F+qEG/Pe3xKe9w5lLaPmtakPj8leivyag=="],
 
     "bun-types": ["bun-types@1.4.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
 

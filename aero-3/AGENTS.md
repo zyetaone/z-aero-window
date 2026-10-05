@@ -17,7 +17,8 @@ One reason to change per file:
 - `src/day.ts` — one object per place and UTC day: regime (clear, fair, scattered, towering,
   cirrus, hazy, overcast), sun strength, haze, rain, cloud deck height and wind, heap and grey,
   night-light gain. `?weather=` pins the regime.
-- `src/cabin.ts` — DOM over the canvas (CSS in index.html): the window rim darkening with the
+- `src/cabin.ts` — aero-2's synthesised cabin drone (centre or solo pane only, `?audio=0` off,
+  cutoff falls with altitude), and DOM over the canvas (CSS in index.html): the window rim darkening with the
   light, aero-2's rain beads on rainy days (no backdrop-filter: a full-screen blur on the Pi), and
   the blind. The blind is closed in the markup, lifts after 30 frames and 12 s into the visit, and
   comes down 6 s before every 10-min slot boundary, where main.ts reloads into the next visit.
@@ -69,6 +70,15 @@ One reason to change per file:
   Panes read it at boot (2 s timeout, then none) from `?wall=<origin>` or their own server, poll
   every 5 s, and on a new version lower the blind and reload on its `applyAt` second (10 s ahead).
   URL params beat the wall. Panes take `?role=left|center|right` (±24°).
+- `src/wing.ts` — aero-2's 737 wing (CC-BY-4.0, credited in the file; served from
+  `../aero-2/static/models`, `MODELS_DIR`) on a seat node that follows heading and bank but not
+  the gaze or the pane's yaw. Drawn 10× size 10× further out, so it clears the 10 m near plane.
+  Mirrored for left-side windows; nav light (green starboard, red port) and aero-2's double-pulse
+  strobe on the wall clock. It sits in the glow pass so the city's bloom stops at its edge.
+  `?wing=0` to skip. 65 draw calls as loaded: merge by material if the Pi asks.
+- `src/moon.ts` — a phase-lit disc (each fragment a point on a sphere, lit toward the sun, faint
+  earthshine) 600 km out along `sun.ts` `moonAt` (aero-2's series), 3.5× true size, after the sky
+  like the stars.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
 - `src/sun.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
   (no time zones). Tested.
@@ -133,10 +143,8 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
 
 1. **Window** — done: flight, day character, blind, rim, rain, glass towers, map roofs.
 2. **Wall** — done: pane roles, the operator push, `/admin`, error-reload budget.
-3. **Cabin** — the wing (aero-2 `static/models/wing.glb` through `@babylonjs/loaders`, banking
-   with `flight.ts`, nav light and strobe on the wall clock); the cabin drone (aero-2
-   `media/ambient-audio.ts`, cutoff from altitude); the moon (aero-2 `world/sun.ts` moonPosition).
-   Live weather (Open-Meteo through the server, applied per visit) only if the fleet has internet.
+3. **Cabin** — done: the wing, the cabin drone, the moon. Left: live weather (Open-Meteo through
+   the server, applied per visit), only if the fleet has internet.
 4. **Ship** — `bun run compile` into `dist/aero-3`, a systemd unit and kiosk URL carrying
    `?role=` and `?wall=`, `install.sh --app aero-3` and the updater's `AERO_APP_SUBDIR`, a data
    pack per place (tiles, buildings, roads), thermal shedding from `/run/aero/thermal.json`

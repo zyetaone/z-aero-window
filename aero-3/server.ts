@@ -23,6 +23,8 @@ const LIGHTS_DIR = Bun.env.LIGHTS_DIR ?? '../aero-2/data/tiles/viirs';
 const BUILDINGS_DIR = Bun.env.BUILDINGS_DIR ?? './data/buildings';
 // The road packs aero-1 and aero-2 already ship (aero-1/tools/tile-packager/src/roads.ts), stamped with class.
 const ROADS_DIR = Bun.env.ROADS_DIR ?? '../data/roads';
+// aero-2's 737 wing, ~1 MB: CC-BY-4.0, by "A Random Modeler" on Sketchfab (credited in src/wing.ts).
+const MODELS_DIR = Bun.env.MODELS_DIR ?? '../aero-2/static/models';
 // The wall (src/wall.ts): what the operator last pushed, kept across restarts.
 const WALL_FILE = Bun.env.WALL_FILE ?? './data/wall.json';
 // Fails closed: with no token set, nothing can push.
@@ -65,7 +67,8 @@ const server = Bun.serve({
 		'/tiles/terrain/*': { dir: TERRAIN_DIR },
 		'/tiles/lights/*': { dir: LIGHTS_DIR },
 		'/buildings/*': { dir: BUILDINGS_DIR },
-		'/roads/*': { dir: ROADS_DIR }
+		'/roads/*': { dir: ROADS_DIR },
+		'/models/*': { dir: MODELS_DIR }
 	}
 });
 
