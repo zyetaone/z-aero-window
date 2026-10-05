@@ -355,6 +355,29 @@ rollback() {
     exit 1
 }
 
+# Restore HEAD to LOCAL after a pre-build skip, so the skipped release is
+# retried on the next poll instead of consumed.
+#
+# Shared by the two pre-build guards (free-disk, runtime floor), which both run
+# AFTER `git reset --hard` has already moved HEAD to REMOTE. Leaving HEAD there
+# means is_newer is false on every later poll and the device never retries the
+# release — even after the operator frees the disk or upgrades Bun, the log
+# says "nothing to apply" forever. The restore makes "skip" mean the same thing
+# in both places: retried next poll until the condition clears.
+#
+# Failing the restore is CRITICAL, not WARN: the update has been consumed and
+# nothing else will re-trigger it, which is exactly the harm the guards exist
+# to prevent. The device is still serving, so this still exits 0 — but the log
+# word has to match every other "a safety property failed, a human is needed"
+# case in this file, and WARN is that file's tier for self-correcting trouble.
+restore_head_after_skip() {
+    if [[ "$(git rev-parse HEAD)" == "${REMOTE}" ]]; then
+        git reset --hard "${LOCAL}" >/dev/null 2>&1 \
+            && log "      HEAD restored to ${LOCAL:0:8}; re-checked on every poll until then." \
+            || log "      CRITICAL: could not restore HEAD to ${LOCAL:0:8} — the next poll may not retry."
+    fi
+}
+
 # ─── 1. Check for updates ────────────────────────────────────────────────
 
 if [[ ! -d "${REPO_DIR}/.git" ]]; then
@@ -536,6 +559,10 @@ if [[ -n "${free_mb}" ]] && (( free_mb < MIN_FREE_MB )); then
     log "      the rollback build would hit the same wall — so the safe move is"
     log "      to keep serving ${LOCAL:0:8} and let an operator reclaim space."
     log "      Biggest consumers are usually the Chromium cache and data/tiles."
+    # HEAD was already moved to REMOTE by the reset above; restore it so this
+    # release is retried on the next poll once space is reclaimed, rather than
+    # consumed and never tried again (see restore_head_after_skip).
+    restore_head_after_skip
     exit 0
 fi
 
@@ -559,9 +586,20 @@ bun_meets_floor() {
     # `printf '%s\n%s\n' 1.4.0 unavailable | sort -V` puts 1.4.0 first because
     # sort orders digits before letters, so without this guard a runtime that
     # cannot even answer `--version` would be measured as being ABOVE the floor
-    # and waved through. The prefix form (not a full `^[0-9.]+$`) still accepts
-    # `1.4.2-canary.1`, which must not be blocked just because it has a suffix.
-    [[ "$1" =~ ^[0-9]+\.[0-9]+ ]] || return 1
+    # and waved through.
+    #
+    # The regex is ANCHORED, not the old prefix form: the prefix form accepted
+    # `1.4.0junk`, whose trailing garbage sorts above `1.4.0` and so waved a
+    # nonsense string through. The anchored form still admits a prerelease or
+    # build suffix (`1.4.2-canary.1`, `1.4.0+build.1`) — having a suffix must
+    # not, by itself, block a runtime.
+    [[ "$1" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?([-+][0-9A-Za-z.-]+)?$ ]] || return 1
+    # `sort -V` orders `1.4.0` BEFORE `1.4.0-beta` — the empty suffix sorts
+    # first — so the compare below would call a prerelease of the floor "at or
+    # above" it, while semver puts a prerelease BELOW its release. Reject a
+    # prerelease of exactly the floor so a beta cannot masquerade as stable.
+    # A canary ABOVE the floor (`1.4.2-canary.1`) does not match this and passes.
+    [[ "$1" != "${2}"-* ]] || return 1
     [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n 1)" == "$2" ]]
 }
 
@@ -570,7 +608,7 @@ bun_meets_floor() {
 # SHAPE of the failure without one, traced through this same script:
 #
 #   `bun run build` dies inside the adapter
-#     -> line 468 reads it as "build failed" -> rollback()
+#     -> the `bun run build` step reads it as "build failed" -> rollback()
 #     -> rollback resets to the previous commit, which builds fine on
 #        adapter-node, so the device looks healthy
 #     -> the sha is appended to bad-release on EVERY rollback
@@ -600,13 +638,21 @@ bun_meets_floor() {
 # HEAD back makes this skip mean what it says: retried on the next poll,
 # indefinitely, until the runtime is upgraded.
 #
-# (The free-disk guard just above exits WITHOUT restoring HEAD. That one is
-# survivable because a later release un-sticks it, so the device merely misses
-# one — but the same reasoning does not apply here, where "wait for a newer
-# release" is precisely the wrong answer to "you need to upgrade Bun".)
+# (Both pre-build guards restore HEAD through restore_head_after_skip, so the
+# skip contract is uniform: retried next poll until the condition clears. The
+# free-disk guard used to exit without restoring — a device whose disk stayed
+# full consumed every arriving release and served an ever-older build while
+# HEAD claimed currency, and "wait for a newer release" was as wrong an answer
+# to "you freed the disk" as it is to "you upgraded Bun".)
 if [[ -f "${APP_DIR}/package.json" ]] && command grep -q '"@sveltejs/adapter-bun"' "${APP_DIR}/package.json"; then
     BUN_FLOOR="1.4.0"
-    BUN_HAVE="$(as_app_user "${BUN_BIN}" --version 2>/dev/null || echo "unavailable")"
+    # `timeout` so a wedged runtime — corrupt binary, a hung sudo — cannot
+    # strand this run inside the reset→restore window, where the
+    # TimeoutStartSec SIGKILL would land with HEAD == REMOTE and consume the
+    # release exactly as if the guard did not exist. If `timeout` is absent
+    # or the version never comes back, `|| echo "unavailable"` fails the
+    # floor check and the run skips safely, which is the right direction.
+    BUN_HAVE="$(as_app_user timeout 10 "${BUN_BIN}" --version 2>/dev/null || echo "unavailable")"
     if ! bun_meets_floor "${BUN_HAVE}" "${BUN_FLOOR}"; then
         log "SKIP: this app builds with @sveltejs/adapter-bun, which needs Bun >= ${BUN_FLOOR}."
         log "      ${BUN_BIN} reports '${BUN_HAVE}'. Below that floor every build fails inside"
@@ -615,11 +661,7 @@ if [[ -f "${APP_DIR}/package.json" ]] && command grep -q '"@sveltejs/adapter-bun
         log "      discovered during it. The release is fine; the runtime is not."
         log "      Upgrade the runtime, then the next poll retries this commit:"
         log "        curl -fsSL https://bun.sh/install | bash -s 'bun-v${BUN_FLOOR}'"
-        if [[ "$(git rev-parse HEAD)" == "${REMOTE}" ]]; then
-            git reset --hard "${LOCAL}" >/dev/null 2>&1 \
-                && log "      HEAD restored to ${LOCAL:0:8}; re-checked on every poll until then." \
-                || log "      WARN: could not restore HEAD to ${LOCAL:0:8} — the next poll may not retry."
-        fi
+        restore_head_after_skip
         exit 0
     fi
 fi

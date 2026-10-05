@@ -105,6 +105,22 @@ describe('aero-updater bun_meets_floor', () => {
 		expect(meetsFloor('1.4.2-canary.1', '1.4.0')).toBe(true);
 		expect(meetsFloor('1.3.0-canary.1', '1.4.0')).toBe(false);
 	});
+
+	it('rejects a prerelease OF the floor, and trailing garbage', () => {
+		/**
+		 * `sort -V` orders `1.4.0` before `1.4.0-beta` — the empty suffix
+		 * sorts first — so without an explicit check a beta of the floor
+		 * would be waved through as "at or above" it, which semver says is
+		 * backwards: a prerelease is BELOW its release. And `1.4.0junk` is
+		 * the reason the parse regex is anchored: the old prefix form
+		 * accepted it, and its trailing garbage sorts above `1.4.0`, so it
+		 * passed too. Build metadata carries no precedence, so
+		 * `1.4.0+build.1` is exactly the floor and must still pass.
+		 */
+		expect(meetsFloor('1.4.0-beta', '1.4.0')).toBe(false);
+		expect(meetsFloor('1.4.0junk', '1.4.0')).toBe(false);
+		expect(meetsFloor('1.4.0+build.1', '1.4.0')).toBe(true);
+	});
 });
 
 describe('aero-updater runtime floor guard', () => {
@@ -128,16 +144,31 @@ describe('aero-updater runtime floor guard', () => {
 		expect(aero2).toContain('adapter-bun');
 	});
 
-	it('restores HEAD, so the release is retried rather than consumed', () => {
+	it('restores HEAD via the shared helper, so the release is retried', () => {
 		/**
 		 * `git reset --hard` has already moved HEAD to the incoming commit
 		 * before this guard runs. Exiting in place leaves HEAD == REMOTE, so
 		 * is_newer is false on every later poll and the log says "nothing to
 		 * apply" forever — the device would never build that release even
-		 * after Bun was upgraded. Without this assertion the line is one
-		 * refactor away from being dropped, and nothing would fail.
+		 * after Bun was upgraded. The restore now lives in one shared helper
+		 * (`restore_head_after_skip`) used by BOTH pre-build guards; this
+		 * asserts the floor guard actually calls it, because the call is one
+		 * refactor away from being dropped and nothing would fail.
 		 */
-		expect(guard).toContain('git reset --hard "${LOCAL}"');
+		expect(guard).toContain('restore_head_after_skip');
+	});
+
+	it('is called by both pre-build guards, so the skip contract is uniform', () => {
+		/**
+		 * The free-disk guard used to exit WITHOUT restoring HEAD, so a
+		 * device whose disk stayed full consumed every arriving release and
+		 * served an ever-older build while HEAD claimed currency. Both
+		 * guards now call restore_head_after_skip. Exactly two call sites —
+		 * the definition line carries a `() {` suffix and does not match
+		 * `^\s*restore_head_after_skip$`.
+		 */
+		const calls = script.match(/^\s*restore_head_after_skip$/gm) ?? [];
+		expect(calls.length, 'both pre-build guards must call the shared restore').toBe(2);
 	});
 
 	it('skips rather than rolling back or poisoning the release', () => {
@@ -148,5 +179,26 @@ describe('aero-updater runtime floor guard', () => {
 		expect(guard).toContain('exit 0');
 		expect(guard).not.toContain('|| rollback');
 		expect(guard).not.toContain('BAD_RELEASE_FILE');
+	});
+});
+
+describe('aero-updater restore_head_after_skip', () => {
+	const helper = script.match(/^restore_head_after_skip\(\) \{[\s\S]*?^\}/m)?.[0];
+
+	it('is present', () => {
+		expect(helper, 'restore_head_after_skip() not found in aero-updater.sh').toBeDefined();
+	});
+
+	it('restores HEAD, and says CRITICAL when it cannot', () => {
+		/**
+		 * The reset is the whole point of the helper; the CRITICAL tier is
+		 * the file's own convention for "a safety property failed and a
+		 * human is needed" (the rollback CRITICALs use the same word). A
+		 * failed restore means the update was consumed and nothing else
+		 * re-triggers it — WARN, the file's tier for self-correcting
+		 * trouble, would have understated that.
+		 */
+		expect(helper).toContain('git reset --hard "${LOCAL}"');
+		expect(helper).toContain('CRITICAL: could not restore HEAD');
 	});
 });
