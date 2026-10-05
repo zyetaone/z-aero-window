@@ -16,6 +16,8 @@ const TERRAIN_DIR = Bun.env.TERRAIN_DIR ?? '../aero-2/data/tiles/terrarium';
 const LIGHTS_DIR = Bun.env.LIGHTS_DIR ?? '../aero-2/data/tiles/viirs';
 // Written by `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
 const BUILDINGS_DIR = Bun.env.BUILDINGS_DIR ?? './data/buildings';
+// The road packs aero-1 and aero-2 already ship (aero-1/tools/tile-packager/src/roads.ts), stamped with class.
+const ROADS_DIR = Bun.env.ROADS_DIR ?? '../data/roads';
 
 const server = Bun.serve({
 	port: Number(Bun.env.PORT ?? 3300),
@@ -25,7 +27,8 @@ const server = Bun.serve({
 		'/tiles/imagery/*': { dir: IMAGERY_DIR },
 		'/tiles/terrain/*': { dir: TERRAIN_DIR },
 		'/tiles/lights/*': { dir: LIGHTS_DIR },
-		'/buildings/*': { dir: BUILDINGS_DIR }
+		'/buildings/*': { dir: BUILDINGS_DIR },
+		'/roads/*': { dir: ROADS_DIR }
 	}
 });
 

@@ -9,12 +9,13 @@
  * Params (all optional, so `frame-cost.mjs` can pin a scene):
  *   ?place=hyderabad  ?clock=6 (local solar hour)  ?yaw=0 (pane offset, deg)
  *   ?scale=1 (hardware scaling)  ?gpu=webgpu  ?hud=0  ?clouds=1 (cover, 0 = clear)
- *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)
+ *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)
  */
-import { Color4, DirectionalLight, Engine, FreeCamera, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
+import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { buildings } from './buildings.ts';
 import { clouds } from './clouds.ts';
+import { streetlights } from './lights.ts';
 import { stars } from './stars.ts';
 import { atSolarHour, solarHour, sunAt } from './sun.ts';
 import { createWorld, smoothstep } from './world.ts';
@@ -37,6 +38,8 @@ const CRUISE_M = 3500; // above ground
 const DECK_M = 1800; // cloud base above ground: the window looks down onto it
 const SPEED_M_S = 230; // ~450 kt
 const ORBIT_M = 9000;
+const LAMP_ALPHA = 0.22;
+const GLOW = 0.35;
 
 const q = new URLSearchParams(location.search);
 const placeId = q.get('place') && q.get('place')! in PLACES ? q.get('place')! : 'hyderabad';
@@ -64,12 +67,23 @@ camera.maxZ = 1_000_000;
 
 const world = await createWorld(scene, lat, lon);
 const [pinX, pinZ] = world.project(lon, lat);
-const [city, deck, sky] = await Promise.all([
+const [city, lamps, deck, sky] = await Promise.all([
 	loadCity(),
+	loadLamps(),
 	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + DECK_M, world.drop, Number(q.get('clouds') ?? 1)),
 	stars(scene, camera, lat, lon)
 ]);
 const glowing = [...world.materials, ...(city ? [city] : [])];
+
+// Babylon's bloom on everything emissive: lamps halo, windows and the city carpet glow.
+// Night only — by day it is switched off and costs nothing.
+const glow = q.get('glow') === '0' ? null : new GlowLayer('glow', scene, { mainTextureRatio: 0.25, blurKernelSize: 16 });
+// Lamps only: the glow pass re-renders whatever it includes, and re-rendering the ground's
+// atmosphere-plugin PBR materials blew the dusk sky to white.
+if (glow && lamps) {
+	glow.addIncludedOnlyMesh(lamps.mesh);
+	glow.referenceMeshToUseItsOwnMaterial(lamps.mesh);
+}
 
 const hud = q.get('hud') === '0' ? null : clockControls();
 if (q.has('debug')) Object.assign(globalThis, { scene, camera, world }); // for the console and frame-cost ablations
@@ -84,7 +98,17 @@ engine.runRenderLoop(() => {
 
 	// Lamps, window glow, stars and the eye's twilight adaptation all follow the sun, not the hour.
 	const dark = 1 - smoothstep(-8, 2, s.elevationDeg);
-	for (const m of glowing) m.emissiveIntensity = lampGain * dark;
+	// The baked VIIRS carpet stays faint under the real lamp points; windows keep full gain.
+	for (const m of glowing) m.emissiveIntensity = lampGain * dark * (lamps && m !== city ? 0.45 : 1);
+	if (lamps) {
+		lamps.mesh.setEnabled(dark > 0.01);
+		// Faint per lamp: 120k additive points sum to a white sheet at anything brighter.
+		lamps.material.alpha = Math.min(0.999, LAMP_ALPHA * lampGain * dark);
+	}
+	if (glow) {
+		glow.isEnabled = dark > 0.02;
+		glow.intensity = GLOW * dark;
+	}
 	if (atmosphere) atmosphere.exposure = 1 + twilightLift * dark;
 
 	// Counter-clockwise orbit around the pin: the left window faces the city.
@@ -119,6 +143,14 @@ async function loadCity() {
 	if (!res.ok) return null;
 	const { features } = await res.json();
 	return buildings(features, world.project, world.groundAt, scene);
+}
+
+/** Street lamps along the place's road pack (see lights.ts), if it has one. */
+async function loadLamps() {
+	const res = await fetch(`/roads/${placeId}.geojson`);
+	if (!res.ok) return null;
+	const { features } = await res.json();
+	return streetlights(features, world.project, world.groundAt, scene);
 }
 
 /** The time-of-day slider: drag to pin the sky to an hour, "Now" to follow the real sun again. */

@@ -17,6 +17,9 @@ One reason to change per file:
   facade: concrete and glass by day, lit rooms at night. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
+- `src/lights.ts` — streetlights as real points: a lamp every 32–55 m (by road class) along the
+  road pack (`../data/roads`, ~120k for Hyderabad), one additive point cloud, aero-1's per-road
+  colour deal, bloomed by Babylon's `GlowLayer` at night only. The VIIRS carpet stays faint under it.
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, cirrus; per-tier wrap so wind never blows the deck off the place.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
@@ -33,6 +36,11 @@ One reason to change per file:
 - **Point clouds built at the origin get frustum-culled** (bounding box inside the near plane):
   stars set `alwaysSelectAsActiveMesh`.
 - **A squashed sprite at a random angle reads as a flame.** Cloud cards stay near-upright.
+- **Unlit StandardMaterial puts vertex colour into the emissive term**: emissive white, diffuse
+  black, or the lamps render black.
+- **GlowLayer re-renders whatever it includes**; including the atmosphere-plugin PBR ground blew
+  the dusk sky white. It includes the lamp points only.
+- **120k additive points sum to a white sheet**: per-lamp alpha is ~0.2.
 
 Units are metres, y up, x east, z north.
 
@@ -55,7 +63,7 @@ On a Pi, run the binary from a directory where `../data/tiles/sentinel2`,
 `aero-2/tools/frame-cost.mjs` works on any page with a canvas. Pin the scene:
 `?place=hyderabad&clock=10&hud=0`. Also `?scale=2` (half resolution), `?gpu=webgpu`,
 `?yaw=<deg>` (pane offset), `?lamps=1` (lamp gain), `?lift=8` (twilight exposure), `?clouds=0..1`
-(cover), `?debug` (exposes `scene`, `camera`, `world` for ablations). Compare against aero-2 on the same Pi.
+(cover), `?glow=0` (no bloom), `?debug` (exposes `scene`, `camera`, `world` for ablations). Compare against aero-2 on the same Pi.
 
 ## Not built yet
 
