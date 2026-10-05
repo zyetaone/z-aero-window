@@ -75,7 +75,7 @@ One reason to change per file:
   the gaze or the pane's yaw. Drawn 10× size 10× further out, so it clears the 10 m near plane.
   Mirrored for left-side windows; nav light (green starboard, red port) and aero-2's double-pulse
   strobe on the wall clock. It sits in the glow pass so the city's bloom stops at its edge.
-  `?wing=0` to skip. 65 draw calls as loaded: merge by material if the Pi asks.
+  `?wing=0` to skip. Merged by material at load: 28 draw calls, not the export's 65.
 - `src/moon.ts` — a phase-lit disc (each fragment a point on a sphere, lit toward the sun, faint
   earthshine) 600 km out along `sun.ts` `moonAt` (aero-2's series), 3.5× true size, after the sky
   like the stars.

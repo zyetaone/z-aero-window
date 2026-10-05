@@ -1,6 +1,6 @@
 /**
- * The wing outside the window: aero-2's 737 wing model, fixed to the airframe.
- * It hangs off a seat node that follows the aircraft's heading and bank but not
+ * The wing outside the window: aero-2's 737 wing model, fixed to the airframe,
+ * merged to one draw call per material. It hangs off a seat node that follows the aircraft's heading and bank but not
  * the eye's pan or the pane's yaw, so the gaze moves across a still wing and the
  * side panes see it from their own angle, as side windows do.
  *
@@ -13,7 +13,7 @@
  * Model: CC-BY-4.0, by "A Random Modeler" on Sketchfab (danielskom111), via aero-2.
  */
 import '@babylonjs/loaders/glTF';
-import { ImportMeshAsync, MeshBuilder, PBRMaterial, Quaternion, StandardMaterial, TransformNode, Vector3, type Scene } from '@babylonjs/core';
+import { ImportMeshAsync, Mesh, MeshBuilder, PBRMaterial, Quaternion, StandardMaterial, TransformNode, Vector3, type Scene } from '@babylonjs/core';
 
 const WING_SCALE = 10;
 // In the model's own metres (root transform reset): the eye at the fuselage wall, just behind the
@@ -22,11 +22,23 @@ const EYE = new Vector3(-8.5, 2.4, -5.5);
 const TIP = new Vector3(7, 0.55, -3.5);
 
 export async function wing(scene: Scene) {
-	const { meshes } = await ImportMeshAsync('/models/wing.glb', scene);
-	const root = meshes[0]!;
+	const loaded = await ImportMeshAsync('/models/wing.glb', scene);
+	const root = loaded.meshes[0]!;
 	// The loader's handedness flip on the root is replaced by our own mapping: model x (span) out of
 	// the window; seat.scaling.x (update) puts the nose on the correct side.
 	root.rotationQuaternion = null;
+	root.rotation.setAll(0);
+	root.scaling.setAll(1);
+	// 65 meshes as exported, one draw call each: merge those sharing a material (in model space, while
+	// the root is identity) so the Pi draws one per material instead.
+	root.computeWorldMatrix(true);
+	const byMaterial = new Map<unknown, Mesh[]>();
+	for (const m of loaded.meshes) if (m instanceof Mesh && m.getTotalVertices() > 0) byMaterial.set(m.material, [...(byMaterial.get(m.material) ?? []), m]);
+	const meshes = [...byMaterial.values()].map((group) => {
+		const merged = group.length > 1 ? Mesh.MergeMeshes(group, true, true)! : group[0]!;
+		merged.setParent(root);
+		return merged;
+	});
 	root.rotation.set(0, -Math.PI / 2, 0);
 	root.scaling.setAll(WING_SCALE);
 	root.position.set(EYE.z * WING_SCALE, -EYE.y * WING_SCALE, -EYE.x * WING_SCALE);
@@ -53,7 +65,7 @@ export async function wing(scene: Scene) {
 
 	return {
 		/** Everything that should block the bloom, lights included. */
-		meshes: [...meshes.filter((m) => m.getTotalVertices() > 0), nav.ball, strobe.ball],
+		meshes: [...meshes, nav.ball, strobe.ball],
 		/** Follow the airframe: `eye` the camera's position, `aircraft` heading × bank, `side` +1 right window, -1 left. */
 		update(eye: Vector3, aircraft: Quaternion, side: number, nowMs: number, dark: number) {
 			seat.position.copyFrom(eye);
