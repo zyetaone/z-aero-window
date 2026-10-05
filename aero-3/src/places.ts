@@ -9,8 +9,8 @@
  */
 import { mulberry32 } from './math.ts';
 
-/** [lat, lon, ground elevation m] at each place's pin. */
-export const PLACES: Record<string, [number, number, number]> = {
+/** [lat, lon, ground elevation m, orbit radius m (default 9 km)] at each place's pin. */
+export const PLACES: Record<string, [number, number, number, number?]> = {
 	hyderabad: [17.4435, 78.3772, 500],
 	mumbai: [19.076, 72.8777, 10],
 	dubai: [25.2048, 55.2708, 5],
@@ -19,7 +19,7 @@ export const PLACES: Record<string, [number, number, number]> = {
 	las_vegas: [36.1699, -115.1398, 620],
 	denver: [39.8561, -104.6737, 1600],
 	chicago_midway: [41.7868, -87.7522, 190],
-	himalayas: [27.9881, 86.925, 5000]
+	himalayas: [27.9881, 86.925, 5000, 24_000] // a wide loop: ridges 8 km tall fill a tight one
 };
 
 export const DWELL_SEC = 600;

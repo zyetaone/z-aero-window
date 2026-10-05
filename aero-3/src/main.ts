@@ -28,7 +28,7 @@ import { RAD, smoothstep } from './math.ts';
 // id → [lat, lon, ground m]. Same coordinates as aero-2's catalog.
 
 const CRUISE_M = 3500; // above ground
-const CLEAR_M = 1_200; // over the highest terrain near the orbit
+const CLEAR_M = 2_000; // over the highest terrain within 8 km of the orbit
 const DECK_M = 1800; // cloud base above ground: the window looks down onto it
 const SPEED_M_S = 230; // ~450 kt
 const ORBIT_M = 9000;
@@ -37,11 +37,11 @@ const GLOW = 0.35;
 
 const q = new URLSearchParams(location.search);
 // ?place= pins a city; otherwise the wall-clock rotation picks it, the same on every pane.
-const pinnedPlace = q.get('place') && q.get('place')! in PLACES ? q.get('place')! : null;
+const pinnedPlace = q.get('place') && Object.hasOwn(PLACES, q.get('place')!) ? q.get('place')! : null;
 const placeId = pinnedPlace ?? destinationAt(Date.now() / 1000);
 // When the rotation moves on, start over in the next city: a reload frees every buffer of this one.
 if (!pinnedPlace) setInterval(() => destinationAt(Date.now() / 1000) !== placeId && location.reload(), 1000);
-const [lat, lon, groundM] = PLACES[placeId]!;
+const [lat, lon, groundM, orbitM = ORBIT_M] = PLACES[placeId]!;
 const paneYaw = Number(q.get('yaw') ?? 0) * RAD;
 const lampGain = Number(q.get('lamps') ?? 1);
 const twilightLift = Number(q.get('lift') ?? 8);
@@ -76,9 +76,9 @@ const world = await createWorld(scene, lat, lon);
 const weather = weatherFor(placeId, Date.now(), q.get('weather'));
 const [pinX, pinZ] = world.project(lon, lat);
 // Cruise over the place's ground, but never into it: in the mountains the orbit clears the highest
-// terrain within 15 km of it (sampled once) by CLEAR_M. Flat cities keep plain CRUISE_M.
-const peakM = Array.from({ length: 360 }, (_, i) => {
-	const [a, r] = [(i / 360) * 2 * Math.PI * 7, ORBIT_M + ((i % 7) - 3) * 2_000];
+// terrain in a band 8 km either side of it (sampled once, every ~1 km) by CLEAR_M. Flat cities keep plain CRUISE_M.
+const peakM = Array.from({ length: 17 * 180 }, (_, i) => {
+	const [a, r] = [((i % 180) / 180) * 2 * Math.PI, orbitM + (Math.floor(i / 180) - 8) * 1_000];
 	const [x, z] = [pinX + r * Math.cos(a), pinZ + r * Math.sin(a)];
 	return world.groundAt(x, z) + world.drop(x, z);
 }).reduce((a, b) => Math.max(a, b));
@@ -142,8 +142,8 @@ engine.runRenderLoop(() => {
 	}
 
 	// Counter-clockwise orbit around the pin: the left window faces the city.
-	const theta = ((now / 1000) * SPEED_M_S) / ORBIT_M;
-	const [x, z] = [pinX + ORBIT_M * Math.cos(theta), pinZ + ORBIT_M * Math.sin(theta)];
+	const theta = ((now / 1000) * SPEED_M_S) / orbitM;
+	const [x, z] = [pinX + orbitM * Math.cos(theta), pinZ + orbitM * Math.sin(theta)];
 	camera.position.set(x, cruiseM - world.drop(x, z), z);
 	camera.rotation.set(12 * RAD, Math.atan2(pinX - x, pinZ - z) + paneYaw, 0);
 
