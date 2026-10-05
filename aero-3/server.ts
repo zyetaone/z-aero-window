@@ -10,6 +10,7 @@
  * Defaults resolve from the working directory, not `import.meta.dir`: inside a
  * `--compile`d binary that is the embedded filesystem, where no tiles live.
  */
+import { existsSync } from 'node:fs';
 import { rename } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import index from './index.html';
@@ -70,12 +71,13 @@ const server = Bun.serve({
 				return Response.json(wall);
 			}
 		},
-		'/tiles/imagery/*': { dir: IMAGERY_DIR },
-		'/tiles/terrain/*': { dir: TERRAIN_DIR },
-		'/tiles/lights/*': { dir: LIGHTS_DIR },
-		'/buildings/*': { dir: BUILDINGS_DIR },
-		'/roads/*': { dir: ROADS_DIR },
-		'/models/*': { dir: MODELS_DIR }
+		// Only the data that is here: a { dir } route throws at startup on a missing folder, and a Pi
+		// without a tile pack (or CI, where data/ is gitignored) must still answer /api/status.
+		...Object.fromEntries(
+			Object.entries({ '/tiles/imagery/*': IMAGERY_DIR, '/tiles/terrain/*': TERRAIN_DIR, '/tiles/lights/*': LIGHTS_DIR, '/buildings/*': BUILDINGS_DIR, '/roads/*': ROADS_DIR, '/models/*': MODELS_DIR })
+				.filter(([, dir]) => existsSync(dir))
+				.map(([route, dir]) => [route, { dir }])
+		)
 	}
 });
 

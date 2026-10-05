@@ -19,6 +19,8 @@
     "test": "bun test",
     "check": "bunx tsc --noEmit",
     "compile": "bun build --compile --minify --target=bun-linux-arm64 server.ts --outfile dist/aero-3",
-    "smoke": "bun tools/smoke.ts"
+    "smoke": "bun tools/smoke.ts",
+    "build": "bun tools/build.ts",
+    "serve": "NODE_ENV=production bun build/index.js"
   }
 }

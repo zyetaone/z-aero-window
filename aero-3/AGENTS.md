@@ -124,7 +124,10 @@ bun run smoke [places…]     # every place day + night in Bun.WebView (~4 min),
 bun run compile             # dist/aero-3: one linux-arm64 binary, page bundled in
 ```
 
-On a Pi, run the binary from a directory where `../data/tiles/sentinel2`,
+On a Pi: `sudo bash deploy/pi/install.sh --app aero-3 --role left|center|right --wall
+http://<centre-pi>:3000` (the centre Pi holds the wall; `/admin` there). The data folders the server
+finds at startup are served, the rest 404, so a Pi without a pack still boots. Measure with
+`tools/pi-bench.ts` (usage in its header). Or run the binary from a directory where `../data/tiles/sentinel2`,
 `../aero-2/data/tiles/terrarium` and `../aero-2/data/tiles/viirs` exist, or set
 `IMAGERY_DIR` / `TERRAIN_DIR` / `LIGHTS_DIR`; buildings come from `./data/buildings`
 (`BUILDINGS_DIR`).
@@ -145,13 +148,13 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
 2. **Wall** — done: pane roles, the operator push, `/admin`, error-reload budget.
 3. **Cabin** — done: the wing, the cabin drone, the moon. Left: live weather (Open-Meteo through
    the server, applied per visit), only if the fleet has internet.
-4. **Ship** — aero-3 side done: `/api/status` (the updater's probe) and thermal shedding (reads
-   health-check.sh's `/run/aero/thermal.json` via `/api/thermal` every 30 s; on `shed`, 1.5×
-   hardware scaling, no bloom, no haze). Left, in shared `deploy/` (awaiting go-ahead):
-   `aero-app.service` ExecStart `bun server.ts` without the `build/index.js` condition, PORT from
-   config.env; `install.sh --app aero-3` (no vite build), `--wall`, `AERO_WALL_URL`; the kiosk URL
-   adds `&wall=` and the port; the updater skips its `build/` snapshot for aero-3; a CI `aero-3`
-   job in `promote.needs`; a data pack per place.
+4. **Ship** — done: aero-3 fits the existing deploy contract unchanged (`bun run build` writes a
+   two-line `build/index.js`, `bun run serve` runs it, `/api/status` answers the updater's probe),
+   so `aero-app.service` and `aero-updater.sh` need no edits. `install.sh --app aero-3 --wall
+   http://<centre-pi>:3000` stores `AERO_WALL_URL` (validated, kept across re-runs) and the kiosk
+   URL carries `&wall=`. CI's `aero-3` job gates `release`. Thermal shedding reads
+   health-check.sh's `/run/aero/thermal.json` via `/api/thermal`. Left: a data pack per place on
+   the Pi (`aero-3/data/buildings` is gitignored; without it the page boots with no buildings).
 5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.
    Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
    lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.

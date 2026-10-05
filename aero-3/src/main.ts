@@ -175,7 +175,10 @@ setInterval(async () => {
 	setTimeout(() => location.reload(), Math.max(0, wait));
 }, 5_000);
 
+let frames = 0;
 engine.runRenderLoop(() => {
+	// tools/pi-bench.ts waits for this: the scene is built and drawing, so it measures running, not booting.
+	if (++frames === 60) document.documentElement.dataset.ready = '1';
 	const now = Date.now();
 	const skyMs = pinnedHour === null ? now : atSolarHour(now, lon, pinnedHour);
 	const s = sunAt(skyMs, lat, lon);
