@@ -89,6 +89,23 @@ component and 7 in `peer-sync`.
 | structural tests | 7 files | 6 files |
 | browser smoke in CI | yes (added recently) | yes (added recently) |
 
+The two `check` scripts are wired differently too, and the difference is
+shape, not coverage:
+
+- **aero-1** chains five checker binaries after `svelte-check`:
+  `check-cycles` · `check-cesium-isolation` · `check-determinism` ·
+  `check-rune-naming` · `check-route-exports`.
+- **aero-2** folds cycles + rune-naming + the tracked→untracked rule into one
+  `check-repo.mjs`, so it runs `svelte-check` + `check-repo` +
+  `check-route-exports`.
+
+Same job, two shapes. Not a defect — aero-2 consolidated what aero-1 built up
+one checker at a time, and the Cesium-specific checks (isolation, determinism)
+have no aero-2 counterpart to fold in. The per-app tool duplication itself
+(`check-route-exports.mjs`, `tools/lib/strip-comments.mjs`, `smoke-routes.mjs`
+exist in both trees) is deliberate: each app must stay independently checkable,
+and the two pin different SvelteKit versions (2.70.3 vs 3.0.0-next.30).
+
 This is the difference that compounds. aero-2 states ten invariants and
 each names the check that fails when it is broken — determinism scans
 source for `Math.random` and `+= dt`; the tile rule is asserted against
