@@ -11,12 +11,18 @@
 			body { margin: 0; background: var(--ground); color: var(--ink); font: 16px/1.5 ui-sans-serif, system-ui, sans-serif; }
 			main { max-width: 26rem; margin: 0 auto; padding: 32px 16px; display: grid; gap: 20px; }
 			h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; }
+			h2 { margin: 12px 0 0; font-size: 1.1rem; font-weight: 600; }
 			p { margin: 0; color: var(--muted); }
 			form { display: grid; gap: 14px; }
 			label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 			select, input { font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 10px; text-transform: none; letter-spacing: 0; }
 			button { font: inherit; font-weight: 600; color: var(--on-accent); background: var(--accent); border: 0; border-radius: 6px; padding: 12px; cursor: pointer; }
 			:is(select, input, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+			table { width: 100%; border-collapse: collapse; font: 13px/1.4 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+			th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+			th { color: var(--muted); font-weight: 400; }
+			.stale { color: var(--muted); }
+			footer { font-size: 0.75rem; color: var(--muted); }
 			output { font: 14px/1.5 ui-monospace, monospace; color: var(--muted); font-variant-numeric: tabular-nums; white-space: pre-wrap; }
 		</style>
 	</head>
@@ -33,6 +39,9 @@
 				<button type="submit">Push to wall</button>
 			</form>
 			<output aria-live="polite"></output>
+			<h2>Panes</h2>
+			<p id="fleet">No heartbeats yet: each Pi's health check reports every few minutes.</p>
+			<footer></footer>
 		</main>
 		<script type="module" src="./src/admin.ts"></script>
 	</body>

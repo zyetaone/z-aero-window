@@ -38,6 +38,11 @@ One reason to change per file:
   districts. The far ring sinks 3 km under the detail patch (z8's coarse peaks overshoot z10's in
   the mountains). Textures upload from JPEG blobs, so no CPU canvas outlives boot;
   `scene.clearCachedVertexData()` drops the mesh copies after build.
+- `server.ts` fleet: `/api/status` carries `fps` (the page POSTs `/api/fps` from loopback every 30 s)
+  and `commit` for `deploy/pi/health-check.sh`; `/api/fleet/heartbeat` takes its heartbeat (bearer
+  `AERO_FLEET_TOKEN`, fail-closed; dev loopback open) into an in-memory table `/admin` shows.
+  The same 30 s tick reloads a visible page that drew no frame (through `recover()`'s budget).
+  `src/credits.ts` is the one attribution list: the blind (while down) and `/admin`'s footer.
 - `src/ground-maps.ts` — the maps baked from those tiles, pure canvas in, canvas out: night ground
   (VIIRS × imagery × road mask × noise), light dome (haze), water mask, far-ring town lights, the
   imagery crop trees sample, roads painted into the imagery, the tiling detail map.

@@ -246,6 +246,16 @@ engine.runRenderLoop(() => {
 });
 addEventListener('resize', () => engine.resize());
 
+// Every 30 s: this pane's frame rate to its own server (/api/status, so health-check.sh reports
+// it), and a stall check. A visible page that drew no frame in 30 s is wedged (a GPU hang, a lost
+// context that never fired its event): reload through recover()'s budget. Hidden tabs throttle rAF.
+let framesAt = 0;
+setInterval(() => {
+	if (!document.hidden && frames === framesAt) recover();
+	framesAt = frames;
+	fetch('/api/fps', { method: 'POST', body: String(engine.getFps()) }).catch(() => {});
+}, 30_000);
+
 /**
  * Reload after a failure, but not in a loop: at most three error reloads an hour, then one every
  * five minutes. The count lives in sessionStorage, which survives a reload of the same tab.

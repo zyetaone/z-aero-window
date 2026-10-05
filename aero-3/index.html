@@ -74,6 +74,7 @@
 				transition: transform 2.4s cubic-bezier(0.6, 0, 0.3, 1);
 			}
 			#blind time { font-size: 0.8em; letter-spacing: 0.1em; font-variant-numeric: tabular-nums; }
+			#blind small { position: absolute; inset: auto 0 4%; font-size: 0.45em; letter-spacing: 0.06em; text-transform: none; }
 			#blind.open { transform: translateY(-101%); }
 			/* The admin QR: hold the glass 15 s (cabin.ts). The ring says "keep going". */
 			#hold { z-index: 5; display: grid; place-items: center; }
@@ -91,7 +92,7 @@
 		<canvas id="world"></canvas>
 		<div id="rain" class="cabin" hidden aria-hidden="true"></div>
 		<div id="frame" class="cabin" aria-hidden="true"></div>
-		<div id="blind" class="cabin" aria-hidden="true"><span></span><time></time></div>
+		<div id="blind" class="cabin" aria-hidden="true"><span></span><time></time><small></small></div>
 		<div id="hold" class="cabin" hidden aria-hidden="true"></div>
 		<div id="qr" class="cabin" hidden role="dialog" aria-label="Open the wall controls on a phone"><div></div><p></p></div>
 		<div id="hud" hidden>

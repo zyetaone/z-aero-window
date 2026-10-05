@@ -6,6 +6,7 @@
  * its first seconds, and it comes down ahead of every slot boundary, where
  * main.ts reloads into the next visit. All of it from the wall clock.
  */
+import { CREDITS } from './credits.ts';
 import { qrSvg } from './vendor/qr.ts';
 import { mulberry32 } from './math.ts';
 import { DWELL_SEC, placeName } from './places.ts';
@@ -24,6 +25,7 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 	const [blind, drops] = ['#blind', '#rain'].map((s) => document.querySelector<HTMLElement>(s)!) as [HTMLElement, HTMLElement];
 	blind.hidden = !blinds;
 	blind.querySelector('span')!.textContent = placeName(place);
+	blind.querySelector('small')!.textContent = CREDITS.join(' · '); // on the blind only: the open window stays a window
 	if (rain) beads(drops, pane);
 
 	let [frames, last, held, night, clock] = [0, 0, false, '', ''];
