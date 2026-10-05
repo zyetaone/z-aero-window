@@ -153,8 +153,9 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
    so `aero-app.service` and `aero-updater.sh` need no edits. `install.sh --app aero-3 --wall
    http://<centre-pi>:3000` stores `AERO_WALL_URL` (validated, kept across re-runs) and the kiosk
    URL carries `&wall=`. CI's `aero-3` job gates `release`. Thermal shedding reads
-   health-check.sh's `/run/aero/thermal.json` via `/api/thermal`. Left: a data pack per place on
-   the Pi (`aero-3/data/buildings` is gitignored; without it the page boots with no buildings).
+   health-check.sh's `/run/aero/thermal.json` via `/api/thermal`. `tools/ship-pack.sh <user@pi>` rsyncs
+   the ~320 MB aero-3 reads (Sentinel-2 z7/8/11/12, Terrarium z8/10, VIIRS z8, roads, OSM
+   buildings), restarts the app and checks `/api/status` `data` lists every route.
 5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.
    Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
    lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.

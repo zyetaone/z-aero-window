@@ -34,6 +34,10 @@ let wall: Wall = await Bun.file(WALL_FILE).json().catch(() => NO_WALL);
 // deploy/pi/health-check.sh writes the Pi's temperature and shed state here every few minutes.
 const THERMAL_FILE = Bun.env.AERO_THERMAL_STATE_PATH ?? '/run/aero/thermal.json';
 const startedAt = Date.now();
+// Only the data that is here: a { dir } route throws at startup on a missing folder, and a Pi
+// without a pack (or CI, where data/ is gitignored) must still answer /api/status.
+const DATA = { '/tiles/imagery/*': IMAGERY_DIR, '/tiles/terrain/*': TERRAIN_DIR, '/tiles/lights/*': LIGHTS_DIR, '/buildings/*': BUILDINGS_DIR, '/roads/*': ROADS_DIR, '/models/*': MODELS_DIR };
+const mounted = Object.entries(DATA).filter(([, dir]) => existsSync(dir));
 
 /** A bearer check that takes the same time whatever the guess. */
 function authorised(req: Request) {
@@ -49,7 +53,7 @@ const server = Bun.serve({
 		'/': index,
 		'/admin': admin,
 		// The updater's health probe (deploy/aero-updater.sh) and health-check.sh read this.
-		'/api/status': () => Response.json({ ok: true, app: 'aero-3', uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version }),
+		'/api/status': () => Response.json({ ok: true, app: 'aero-3', uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version, data: mounted.map(([route]) => route.slice(1, -2)) }),
 		// { action: 'ok' | 'shed', tempC, ... } from health-check.sh; 'ok' when there is no file (a Mac, a fresh boot).
 		'/api/thermal': async () => Response.json(await Bun.file(THERMAL_FILE).json().catch(() => ({ action: 'ok' })), { headers: { 'Cache-Control': 'no-store' } }),
 		'/api/wall': {
@@ -71,13 +75,7 @@ const server = Bun.serve({
 				return Response.json(wall);
 			}
 		},
-		// Only the data that is here: a { dir } route throws at startup on a missing folder, and a Pi
-		// without a tile pack (or CI, where data/ is gitignored) must still answer /api/status.
-		...Object.fromEntries(
-			Object.entries({ '/tiles/imagery/*': IMAGERY_DIR, '/tiles/terrain/*': TERRAIN_DIR, '/tiles/lights/*': LIGHTS_DIR, '/buildings/*': BUILDINGS_DIR, '/roads/*': ROADS_DIR, '/models/*': MODELS_DIR })
-				.filter(([, dir]) => existsSync(dir))
-				.map(([route, dir]) => [route, { dir }])
-		)
+		...Object.fromEntries(mounted.map(([route, dir]) => [route, { dir }]))
 	}
 });
 
