@@ -53,10 +53,17 @@ const CRUISE_KM = 3.5; // above ground
 const SPEED_KM_S = 0.23; // ~450 kt
 const ORBIT_KM = 28;
 
+const smoothstep = (a: number, b: number, x: number) => {
+	const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+	return t * t * (3 - 2 * t);
+};
+
 const q = new URLSearchParams(location.search);
 const [lat, lon, groundM] = PLACES[q.get('place') ?? ''] ?? PLACES.hyderabad!;
 const clock = q.has('clock') ? Number(q.get('clock')) : undefined;
 const paneYaw = Number(q.get('yaw') ?? 0) * RAD;
+const lampGain = Number(q.get('lamps') ?? 1);
+const twilightLift = Number(q.get('lift') ?? 8);
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const engine = await createEngine(canvas, q.get('gpu') === 'webgpu');
@@ -67,7 +74,7 @@ scene.clearColor = new Color4(0, 0, 0, 1);
 scene.skipPointerMovePicking = true;
 
 const sunLight = new DirectionalLight('sun', new Vector3(0, -1, 0), scene);
-if (Atmosphere.IsSupported(engine)) new Atmosphere('atmosphere', scene, [sunLight]);
+const atmosphere = Atmosphere.IsSupported(engine) ? new Atmosphere('atmosphere', scene, [sunLight]) : null;
 
 const camera = new FreeCamera('window', Vector3.Zero(), scene);
 camera.fov = 45 * RAD;
@@ -80,8 +87,13 @@ const cx = Math.floor(((lon + 180) / 360) * n);
 const cy = Math.floor(((1 - Math.asinh(Math.tan(lat * RAD)) / Math.PI) / 2) * n);
 const patchKm = (SPAN * 40_075.017 * Math.cos(lat * RAD)) / n;
 
-const [heights, imagery] = await Promise.all([loadHeights(), loadImagery()]);
-buildGround(heights, imagery);
+const [heights, imagery, lights] = await Promise.all([
+	loadHeights(),
+	mosaic('imagery', 'jpg', IMAGERY_Z, [IMAGERY_Z], '#3a4048').then((c) => texture('imagery', c)),
+	// Raw VIIRS radiance at z8 under the whole patch, aero-2's baked lamp dots at z11 over the core.
+	mosaic('lights', 'png', IMAGERY_Z, [8, IMAGERY_Z], '#000').then((c) => texture('lights', kneeLights(c)))
+]);
+const groundMaterial = buildGround(heights, imagery, lights);
 
 const altitudeKm = groundM / 1000 + CRUISE_KM;
 const hud = q.get('hud') === '0' ? null : document.querySelector('output');
@@ -91,6 +103,11 @@ engine.runRenderLoop(() => {
 	const now = Date.now();
 	const s = sunAt(now, lat, lon, clock);
 	sunLight.direction.set(-s.x, -s.y, -s.z);
+	// Lamps come on through civil twilight, as aero-2's nightAmount does.
+	const dark = 1 - smoothstep(-8, 2, s.elevationDeg);
+	groundMaterial.emissiveIntensity = lampGain * dark;
+	// The eye adapts: lift the sky through twilight so the afterglow reads instead of going black.
+	if (atmosphere) atmosphere.exposure = 1 + twilightLift * dark;
 
 	// Position from the wall clock alone, so three panes agree without talking.
 	const theta = ((now / 1000) * SPEED_KM_S) / ORBIT_KM;
@@ -122,32 +139,41 @@ async function tile(url: string): Promise<ImageBitmap | null> {
 	return res.ok ? createImageBitmap(await res.blob()) : null;
 }
 
-/** Draw a `{z}/{y}/{x}` grid onto one canvas, north at the top. */
-async function mosaic(layer: string, z: number, background: string) {
-	const k = 2 ** (z - TERRAIN_Z);
-	const side = SPAN * k;
-	const canvas = new OffscreenCanvas(side * TILE, side * TILE);
+/**
+ * Stack `{z}/{y}/{x}` tiles onto one canvas at `outZ` resolution, north at the
+ * top. Zooms draw coarse to fine, so a fine layer that only covers the city
+ * core (the baked lamps) sits on a coarse one that covers the whole patch.
+ */
+async function mosaic(layer: string, ext: string, outZ: number, zooms: number[], background: string) {
+	const side = SPAN * 2 ** (outZ - TERRAIN_Z) * TILE;
+	const canvas = new OffscreenCanvas(side, side);
 	const ctx = canvas.getContext('2d', { willReadFrequently: layer === 'terrain' })!;
 	ctx.fillStyle = background;
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	ctx.fillRect(0, 0, side, side);
 
-	const x0 = (cx - RADIUS) * k;
-	const y0 = (cy - RADIUS) * k;
-	await Promise.all(
-		Array.from({ length: side * side }, async (_, i) => {
-			const col = i % side;
-			const row = Math.floor(i / side);
-			const bitmap = await tile(`/tiles/${layer}/${z}/${y0 + row}/${x0 + col}.${layer === 'terrain' ? 'png' : 'jpg'}`);
-			if (bitmap) ctx.drawImage(bitmap, col * TILE, row * TILE);
-			bitmap?.close();
-		})
-	);
+	for (const z of zooms) {
+		const f = 2 ** (z - TERRAIN_Z);
+		const size = TILE * 2 ** (outZ - z); // one z-tile in output pixels
+		const [lo, hi] = [Math.floor((cx - RADIUS) * f), Math.ceil((cx + RADIUS + 1) * f) - 1];
+		const [top, bottom] = [Math.floor((cy - RADIUS) * f), Math.ceil((cy + RADIUS + 1) * f) - 1];
+		const bitmaps = await Promise.all(
+			Array.from({ length: (bottom - top + 1) * (hi - lo + 1) }, async (_, i) => {
+				const [x, y] = [lo + (i % (hi - lo + 1)), top + Math.floor(i / (hi - lo + 1))];
+				return { x, y, bitmap: await tile(`/tiles/${layer}/${z}/${y}/${x}.${ext}`) };
+			})
+		);
+		for (const { x, y, bitmap } of bitmaps) {
+			if (!bitmap) continue;
+			ctx.drawImage(bitmap, x * size - (cx - RADIUS) * f * size, y * size - (cy - RADIUS) * f * size, size, size);
+			bitmap.close();
+		}
+	}
 	return canvas;
 }
 
 async function loadHeights() {
 	// #800000 is terrarium's 0 m, so a missing tile reads as sea level, not -32 km.
-	const canvas = await mosaic('terrain', TERRAIN_Z, '#800000');
+	const canvas = await mosaic('terrain', 'png', TERRAIN_Z, [TERRAIN_Z], '#800000');
 	const { data, width } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
 	/** Height in km at (u, v), u east and v south, both 0..1. */
 	return (u: number, v: number) => {
@@ -156,15 +182,38 @@ async function loadHeights() {
 	};
 }
 
-async function loadImagery() {
-	const canvas = await mosaic('imagery', IMAGERY_Z, '#3a4048');
-	const texture = new DynamicTexture('imagery', { width: canvas.width, height: canvas.height }, scene, true);
-	texture.getContext().drawImage(canvas, 0, 0);
-	texture.update();
-	return texture;
+/**
+ * aero-2's VIIRS tint (server/viirs-tint.ts), cut to its two load-bearing
+ * parts and run once at boot: a luminance knee at 0.35..0.75, because raw
+ * VIIRS over a city is mid-bright almost everywhere and anything lower pastes
+ * a cream sheet over it; and grey radiance dealt amber. Baked lamp pixels
+ * already carry their road's colour and keep it.
+ */
+function kneeLights(canvas: OffscreenCanvas) {
+	const ctx = canvas.getContext('2d')!;
+	const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+	const d = image.data;
+	for (let i = 0; i < d.length; i += 4) {
+		const [r, g, b] = [d[i]!, d[i + 1]!, d[i + 2]!];
+		const t = Math.max(r, g, b) / 255;
+		const k = smoothstep(0.35, 0.75, t) * (0.25 + 0.6 * t * t);
+		const grey = Math.max(r, g, b) - Math.min(r, g, b) < 24;
+		d[i] = (grey ? 255 : r) * k;
+		d[i + 1] = (grey ? 150 : g) * k;
+		d[i + 2] = (grey ? 60 : b) * k;
+	}
+	ctx.putImageData(image, 0, 0);
+	return canvas;
 }
 
-function buildGround(heightAt: (u: number, v: number) => number, imagery: DynamicTexture) {
+function texture(name: string, canvas: OffscreenCanvas) {
+	const tex = new DynamicTexture(name, { width: canvas.width, height: canvas.height }, scene, true);
+	tex.getContext().drawImage(canvas, 0, 0);
+	tex.update();
+	return tex;
+}
+
+function buildGround(heightAt: (u: number, v: number) => number, imagery: DynamicTexture, lights: DynamicTexture) {
 	// ponytail: one 256² grid over the patch (~730 m spacing), no LOD. Add
 	// rings of coarser tiles if the flat skirt past ~90 km reads as fake.
 	const ground = MeshBuilder.CreateGround(
@@ -183,6 +232,8 @@ function buildGround(heightAt: (u: number, v: number) => number, imagery: Dynami
 
 	const material = new PBRMaterial('ground', scene);
 	material.albedoTexture = imagery;
+	material.emissiveTexture = lights;
+	material.emissiveColor = Color3.White();
 	material.metallic = 0;
 	material.roughness = 1;
 	ground.material = material;
@@ -198,4 +249,5 @@ function buildGround(heightAt: (u: number, v: number) => number, imagery: Dynami
 	flat.roughness = 1;
 	skirt.material = flat;
 	skirt.freezeWorldMatrix();
+	return material;
 }

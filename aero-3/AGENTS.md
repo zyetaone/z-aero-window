@@ -9,6 +9,9 @@ The fleet still runs aero-1. Nothing here is wired into `deploy/`.
 - `index.html` → `src/main.ts` — one city's 5×5 z10 terrain patch (terrarium) draped with z11
   Sentinel-2 imagery, a flat skirt to the horizon, Babylon's physically based atmosphere, and
   a camera orbiting the city from the wall clock (so panes agree without talking).
+- Night: aero-2's VIIRS tree as the ground's emissive texture — raw z8 radiance under the patch,
+  baked z11 lamp dots over the core, through aero-2's luminance knee once at boot. Lamps and a
+  twilight exposure lift ramp in with the sun's elevation (−8°..2°).
 - `src/sun.ts` — solar position from UTC + longitude (no time zones). Tested.
 
 Units are km, y up, x east, z north.
@@ -22,16 +25,17 @@ bun test && bun run check   # TypeScript 7
 bun run compile             # dist/aero-3: one linux-arm64 binary, page bundled in
 ```
 
-On a Pi, run the binary from a directory where `../data/tiles/sentinel2` and
-`../aero-2/data/tiles/terrarium` exist, or set `IMAGERY_DIR` / `TERRAIN_DIR`.
+On a Pi, run the binary from a directory where `../data/tiles/sentinel2`,
+`../aero-2/data/tiles/terrarium` and `../aero-2/data/tiles/viirs` exist, or set
+`IMAGERY_DIR` / `TERRAIN_DIR` / `LIGHTS_DIR`.
 
 ## Measuring
 
 `aero-2/tools/frame-cost.mjs` works on any page with a canvas. Pin the scene:
 `?place=hyderabad&clock=10&hud=0`. Also `?scale=2` (half resolution), `?gpu=webgpu`,
-`?yaw=<deg>` (pane offset). Compare against aero-2 on the same Pi.
+`?yaw=<deg>` (pane offset), `?lamps=1` (lamp gain), `?lift=8` (twilight exposure). Compare against aero-2 on the same Pi.
 
 ## Not built yet
 
-Night (VIIRS lights, twilight exposure), clouds, wing, fleet sync, admin. Add them only
+Clouds, wing, fleet sync, admin. Add them only
 after the Pi numbers say this stack is worth growing.
