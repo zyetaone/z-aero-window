@@ -145,10 +145,13 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
 2. **Wall** — done: pane roles, the operator push, `/admin`, error-reload budget.
 3. **Cabin** — done: the wing, the cabin drone, the moon. Left: live weather (Open-Meteo through
    the server, applied per visit), only if the fleet has internet.
-4. **Ship** — `bun run compile` into `dist/aero-3`, a systemd unit and kiosk URL carrying
-   `?role=` and `?wall=`, `install.sh --app aero-3` and the updater's `AERO_APP_SUBDIR`, a data
-   pack per place (tiles, buildings, roads), thermal shedding from `/run/aero/thermal.json`
-   (raise `?scale`, drop the glow and haze), the existing reboot and dimming crons.
+4. **Ship** — aero-3 side done: `/api/status` (the updater's probe) and thermal shedding (reads
+   health-check.sh's `/run/aero/thermal.json` via `/api/thermal` every 30 s; on `shed`, 1.5×
+   hardware scaling, no bloom, no haze). Left, in shared `deploy/` (awaiting go-ahead):
+   `aero-app.service` ExecStart `bun server.ts` without the `build/index.js` condition, PORT from
+   config.env; `install.sh --app aero-3` (no vite build), `--wall`, `AERO_WALL_URL`; the kiosk URL
+   adds `&wall=` and the port; the updater skips its `build/` snapshot for aero-3; a CI `aero-3`
+   job in `promote.needs`; a data pack per place.
 5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.
    Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
    lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.

@@ -79,7 +79,15 @@ const engine = await createEngine(canvas, q.get('gpu') === 'webgpu');
 // retries, and a lost GL context reloads: clearCachedVertexData below leaves nothing to rebuild from.
 addEventListener('unhandledrejection', recover, { once: true });
 engine.onContextLostObservable.add(recover);
-engine.setHardwareScalingLevel(Math.max(0.25, num('scale', 1)));
+const baseScale = Math.max(0.25, num('scale', 1));
+engine.setHardwareScalingLevel(baseScale);
+// A hot Pi sheds (health-check.sh, served at /api/thermal): fewer pixels, no bloom, no haze, until it cools.
+let shedding = false;
+setInterval(async () => {
+	const state = await fetch('/api/thermal').then((r) => r.json()).catch(() => null);
+	shedding = state?.action === 'shed';
+	engine.setHardwareScalingLevel(shedding ? baseScale * 1.5 : baseScale);
+}, 30_000);
 
 const scene = new Scene(engine);
 scene.clearColor = new Color4(0, 0, 0, 1);
@@ -180,12 +188,12 @@ engine.runRenderLoop(() => {
 	const exposure = 1 + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;
 	for (const m of skyLit) m.ambientColor.setAll(1 - dark);
-	cityHaze((mix.haze * day.haze * dark) / exposure); // emissive, so it rides the exposure lift too
+	cityHaze(shedding ? 0 : (mix.haze * day.haze * dark) / exposure); // emissive, so it rides the exposure lift too
 	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (world.materials.includes(m) ? carpet : 1)) / exposure;
 	// Faint per lamp: ~200k additive points sum to a white sheet at anything brighter.
 	lamps?.update(camera.position, now, Math.min(0.999, LAMP_ALPHA * lampGain * day.lights * dark), mix);
 	if (glow) {
-		glow.isEnabled = dark > 0.02;
+		glow.isEnabled = dark > 0.02 && !shedding;
 		glow.intensity = mix.glow * dark;
 	}
 

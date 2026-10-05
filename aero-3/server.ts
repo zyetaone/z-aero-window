@@ -30,6 +30,9 @@ const WALL_FILE = Bun.env.WALL_FILE ?? './data/wall.json';
 // Fails closed: with no token set, nothing can push.
 const ADMIN_TOKEN = Bun.env.AERO_ADMIN_TOKEN ?? '';
 let wall: Wall = await Bun.file(WALL_FILE).json().catch(() => NO_WALL);
+// deploy/pi/health-check.sh writes the Pi's temperature and shed state here every few minutes.
+const THERMAL_FILE = Bun.env.AERO_THERMAL_STATE_PATH ?? '/run/aero/thermal.json';
+const startedAt = Date.now();
 
 /** A bearer check that takes the same time whatever the guess. */
 function authorised(req: Request) {
@@ -44,6 +47,10 @@ const server = Bun.serve({
 	routes: {
 		'/': index,
 		'/admin': admin,
+		// The updater's health probe (deploy/aero-updater.sh) and health-check.sh read this.
+		'/api/status': () => Response.json({ ok: true, app: 'aero-3', uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version }),
+		// { action: 'ok' | 'shed', tempC, ... } from health-check.sh; 'ok' when there is no file (a Mac, a fresh boot).
+		'/api/thermal': async () => Response.json(await Bun.file(THERMAL_FILE).json().catch(() => ({ action: 'ok' })), { headers: { 'Cache-Control': 'no-store' } }),
 		'/api/wall': {
 			// The other panes poll this from their own origin.
 			GET: () => Response.json(wall, { headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' } }),
