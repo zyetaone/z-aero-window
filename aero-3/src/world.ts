@@ -118,8 +118,14 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 			texture(`${name}-imagery`, imagery),
 			texture(`${name}-lights`, nightGround(lights, imagery))
 		]);
+		// Water from the imagery itself: smooth where it reads as water, so lakes, rivers and
+		// the sea catch the sun as a glint, and stay matt land everywhere else.
+		material.metallicTexture = await texture(`${name}-water`, waterMask(imagery));
+		material.useRoughnessFromMetallicTextureGreen = true;
+		material.useMetallnessFromMetallicTextureBlue = true;
+		material.ambientColor = Color3.White(); // take the sky's light, like the buildings and trees
 		material.emissiveColor = Color3.White();
-		material.metallic = 0;
+		material.metallic = 1; // multipliers on the mask: metal stays 0, roughness comes from G
 		material.roughness = 1;
 		mesh.material = material;
 		mesh.freezeWorldMatrix();
@@ -144,11 +150,12 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 	// heights and the two meshes meet instead of stepping z10 against z8.
 	const onNear = (mx: number, my: number) => [mx * 2 ** 10 - near.x0, my * 2 ** 10 - near.y0].every((t) => t >= -1e-3 && t <= near.span + 1e-3);
 	const heightAt = (mx: number, my: number) => (onNear(mx, my) ? nearHeights : farHeights)(mx, my);
-	// Read before nightGround rewrites the canvases in place.
-	const sites = lightSites(farLights, far, inNear, (mx, my) => {
+	// Read before nightGround rewrites the canvases in place: towns on the far ring.
+	const at = (mx: number, my: number): [number, number, number] => {
 		const [x, z] = [(mx - mx0) * mPerMerc, -(my - my0) * mPerMerc];
 		return [x, heightAt(mx, my) - drop(x, z) + 10, z];
-	});
+	};
+	const sites = lightSites(farLights, far, 8, 1, inNear, at);
 	const imagery = crop(nearImagery, near, mercX(lon), mercY(lat), (mx, my) => [(mx - mx0) * mPerMerc, -(my - my0) * mPerMerc]);
 
 	// The 1e-3 tile slack keeps float32 border vertices on the border, not sunk.
@@ -213,25 +220,49 @@ function nightGround(lights: OffscreenCanvas, imagery: OffscreenCanvas) {
 }
 
 /**
+ * Water as a metallic-roughness map (G roughness, B metal = 0): dark,
+ * green-or-teal Sentinel-2 pixels read as water and get roughness ~0.12, land 1.
+ * A soft edge keeps shores from aliasing into a hard outline.
+ */
+function waterMask(imagery: OffscreenCanvas) {
+	const { width, height } = imagery;
+	const src = imagery.getContext('2d')!.getImageData(0, 0, width, height).data;
+	const mask = new OffscreenCanvas(width, height);
+	const ctx = mask.getContext('2d')!;
+	const out = ctx.createImageData(width, height);
+	for (let i = 0; i < src.length; i += 4) {
+		const [r, g, b] = [src[i]!, src[i + 1]!, src[i + 2]!];
+		// Measured: lakes (50,59,38) (89,103,77), sea (69,101,98) (31,96,102); dry land and city
+		// run red-over-green, canopy runs blue under ~0.55 of green. Some dark canopy still passes.
+		const water = smoothstep(320, 230, r + g + b) * smoothstep(-2, 8, g - r) * smoothstep(0.55, 0.68, b / (g + 1));
+		out.data[i + 1] = 255 * (1 - 0.88 * water);
+		out.data[i + 3] = 255;
+	}
+	ctx.putImageData(out, 0, 0);
+	return mask;
+}
+
+/**
  * Towns beyond the road pack, from NASA's radiance: each bright far-ring pixel
  * (~600 m) becomes a cluster of up to three lights, more the brighter it is,
  * jittered inside the pixel by hash so every pane places the same ones. Derived
  * from the map, not invented, and only where the road pack has no points.
  */
-function lightSites(lights: OffscreenCanvas, grid: Grid, skip: (mx: number, my: number) => boolean, at: (mx: number, my: number) => [number, number, number]) {
+function lightSites(lights: OffscreenCanvas, grid: Grid, outZ: number, stride: number, skip: (mx: number, my: number) => boolean, at: (mx: number, my: number) => [number, number, number]) {
 	const { data, width } = lights.getContext('2d')!.getImageData(0, 0, lights.width, lights.height);
-	const pxMerc = 1 / (2 ** grid.z * TILE);
+	const pxMerc = 1 / (2 ** outZ * TILE);
+	const cell = pxMerc * stride;
 	const sites: number[] = [];
-	for (let py = 0; py < width; py++) {
-		for (let px = 0; px < width; px++) {
+	for (let py = 0; py < width; py += stride) {
+		for (let px = 0; px < width; px += stride) {
 			const t = data[(py * width + px) * 4]! / 255;
-			if (t < 0.5) continue; // towns, not the rural haze VIIRS also records
+			if (t < 0.6) continue; // towns, not the rural haze VIIRS also records: dark land between
 			const [mx, my] = [grid.x0 / 2 ** grid.z + px * pxMerc, grid.y0 / 2 ** grid.z + py * pxMerc];
 			if (skip(mx, my)) continue;
-			const n = Math.floor(t * t * 3 + hash(py * width + px));
+			const n = Math.floor(t * t * 2.5 + hash(py * width + px));
 			for (let k = 0; k < n; k++) {
 				const seed = (py * width + px) * 8 + k;
-				sites.push(...at(mx + hash(seed) * pxMerc, my + hash(seed + 0x9e37) * pxMerc), t);
+				sites.push(...at(mx + hash(seed) * cell, my + hash(seed + 0x9e37) * cell), t);
 			}
 		}
 	}

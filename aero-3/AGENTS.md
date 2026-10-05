@@ -21,22 +21,32 @@ One reason to change per file:
   lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
-- `src/lights.ts` — every light is a single point from map data: a lamp every 32–55 m along the
-  road pack (`../data/roads`), one on each OSM building's roof, and clusters from NASA's VIIRS for
-  the towns on the far ring past the roads (~200k in all for Hyderabad), one
-  additive point cloud on a small shader that fades each light toward the horizon and twinkles it
-  faintly. Mix: sodium 65%, warm white 15%, white 10%, red 5%, blue 5%, dealt per road by hash.
-  Bloomed by Babylon's `GlowLayer` at night only, together with the buildings' lit windows.
+- `src/lights.ts` — every light is a single point from map data, in three groups: street lamps
+  every 32–55 m along the road pack (`../data/roads`); building lights, one per ~1,200 m² of flat
+  roof and a few lit windows on walls of buildings 12 m and up (buildings.ts); and far-ring towns
+  from bright NASA VIIRS pixels past the roads (world.ts). One additive point cloud on a small
+  shader: each light fades and reddens toward the horizon and twinkles faintly. Mix: sodium 65%,
+  warm white 15%, white 10%, red 5%, blue 5%. The HUD's Lights panel sets each group's gain and
+  the bloom live. `GlowLayer` blooms the lamps and the buildings' lit windows, at night only.
 - `src/trees.ts` — low-poly cones in clusters wherever the imagery within 5 km of the pin reads
   green: thin instances, one draw call (`?trees=0` to skip).
+- **Water** comes from the imagery too: dark, green-or-teal pixels get a smooth roughness map
+  (world.ts `waterMask`), so lakes and sea catch the sun as a glint.
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
-  systems, cirrus; per-tier wrap so wind never blows the deck off the place.
+  systems, flat banks on the horizon, cirrus; per-tier wrap so wind never blows the deck off the
+  place. Each place gets a weather regime per UTC day (clear, fair, scattered, towering, cirrus),
+  the same on every pane; `?weather=` pins one. No card reaches below the ground, or the terrain
+  clips it flat.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
 - `src/sun.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
   (no time zones). Tested.
 - `src/math.ts` — `RAD`, `smoothstep`, and the two seeded noises (`hash`, `mulberry32`) every module shares.
 
 ## Traps (each cost a debugging pass)
+
+- **PBR `ambientColor` defaults to black**, which throws away the sky light the atmosphere writes
+  to `scene.ambientColor`: shaded walls went near-black. Ground, buildings and trees set it white
+  by day and fade it out with darkness, or the twilight exposure lift turns night ground grey.
 
 - **`clearCachedVertexData` leaves nothing to rebuild a lost GL context from**, so a context loss
   reloads the page (main.ts), and so does a failed boot after 10 s: a kiosk has no one to press F5.

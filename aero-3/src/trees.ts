@@ -53,6 +53,7 @@ export function trees(
 	const tree = MeshBuilder.CreateCylinder('trees', { height: 1, diameterTop: 0, diameterBottom: 1, tessellation: 5 }, scene);
 	const material = new PBRMaterial('trees', scene);
 	material.albedoColor = Color3.White(); // the instance colour carries the green
+	material.ambientColor = Color3.White(); // take the sky's light in shade (see buildings.ts)
 	material.metallic = 0;
 	material.roughness = 0.9;
 	tree.material = material;

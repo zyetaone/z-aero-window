@@ -9,12 +9,13 @@
  * Params (all optional, so `frame-cost.mjs` can pin a scene):
  *   ?place=hyderabad  ?clock=6 (local solar hour)  ?yaw=0 (pane offset, deg)
  *   ?scale=1 (hardware scaling)  ?gpu=webgpu  ?hud=0  ?clouds=1 (cover, 0 = clear)
+ *   ?weather=clear|fair|scattered|towering|cirrus (pin today's regime)
  *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=1 (VIIRS texture)
  */
-import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
+import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, PBRMaterial, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { buildings } from './buildings.ts';
-import { clouds } from './clouds.ts';
+import { clouds, weatherFor } from './clouds.ts';
 import { streetlights } from './lights.ts';
 import { trees } from './trees.ts';
 import { stars } from './stars.ts';
@@ -51,6 +52,8 @@ const twilightLift = Number(q.get('lift') ?? 8);
 // The baked VIIRS texture under the lamp points: a faint glow only, or it reads as blocky amber blobs.
 const carpet = Number(q.get('carpet') ?? 1);
 let pinnedHour = q.has('clock') ? Number(q.get('clock')) : null;
+// The Lights panel's live gains (lightsPanel): street lamps, building lights, far towns, bloom.
+const mix = { street: 1, building: 1, far: 1, glow: GLOW };
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const engine = await createEngine(canvas, q.get('gpu') === 'webgpu');
@@ -73,19 +76,25 @@ camera.minZ = 10;
 camera.maxZ = 1_000_000;
 
 const world = await createWorld(scene, lat, lon);
+// Today's sky for this place: the same on every pane, different tomorrow. ?weather= pins a regime.
+const weather = weatherFor(placeId, Date.now(), q.get('weather'));
 const [pinX, pinZ] = world.project(lon, lat);
 const [city, roads, deck, sky] = await Promise.all([
 	loadCity(),
 	fetchPack('roads'),
-	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + DECK_M, world.drop, Number(q.get('clouds') ?? 1)),
+	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + DECK_M, groundM, world.drop, weather, Number(q.get('clouds') ?? 1)),
 	stars(scene, camera, lat, lon)
 ]);
-// Street lamps along the road pack, one light per building, NASA-derived towns past them (lights.ts).
-const lamps = streetlights(roads ?? [], world.project, world.groundAt, scene, city?.tops, world.sites);
+// Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
+// towns on the far ring past the roads (lights.ts).
+const lamps = streetlights(roads ?? [], world.project, world.groundAt, scene, city?.roofLights, world.sites, city?.windows);
 const treeCount = q.get('trees') === '0' ? 0 : trees(scene, [pinX, pinZ], world.imagery, world.groundAt);
 // Everything is built: drop the CPU copies of vertex data (the GPU has them; nothing here picks or edits).
 scene.clearCachedVertexData();
 const glowing = [...world.materials, ...(city ? [city.material] : [])];
+// Everything that takes the sky's ambient light by day (ambientColor white); faded out after dusk,
+// where the twilight exposure lift would otherwise turn the night sky's faint light into grey.
+const skyLit = [...glowing, scene.getMaterialByName('trees')].filter((m) => m instanceof PBRMaterial);
 
 // Babylon's bloom on everything emissive: lamps halo, windows and the city carpet glow.
 // Night only — by day it is switched off and costs nothing.
@@ -100,7 +109,8 @@ if (glow && lamps) {
 if (city) glow?.addIncludedOnlyMesh(city.mesh);
 
 const hud = q.get('hud') === '0' ? null : clockControls();
-if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount }); // for the console and frame-cost ablations
+if (hud) lightsPanel();
+if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount, weather }); // for the console and frame-cost ablations
 let hudAt = 0;
 const toSun = new Vector3();
 
@@ -116,12 +126,13 @@ engine.runRenderLoop(() => {
 	// The twilight lift multiplies emissive too, so divide it back out: 0.12 means 0.12 at night.
 	const exposure = 1 + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;
+	for (const m of skyLit) m.ambientColor.setAll(1 - dark);
 	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (m !== city?.material ? carpet : 1)) / exposure;
 	// Faint per lamp: ~200k additive points sum to a white sheet at anything brighter.
-	lamps?.update(camera.position, now, Math.min(0.999, LAMP_ALPHA * lampGain * dark));
+	lamps?.update(camera.position, now, Math.min(0.999, LAMP_ALPHA * lampGain * dark), mix);
 	if (glow) {
 		glow.isEnabled = dark > 0.02;
-		glow.intensity = GLOW * dark;
+		glow.intensity = mix.glow * dark;
 	}
 
 	// Counter-clockwise orbit around the pin: the left window faces the city.
@@ -163,6 +174,15 @@ async function fetchPack(kind: 'buildings' | 'roads') {
 }
 
 /** The time-of-day slider: drag to pin the sky to an hour, "Now" to follow the real sun again. */
+/** The Lights panel: each slider writes one gain in `mix`, read by the render loop. */
+function lightsPanel() {
+	for (const input of document.querySelectorAll<HTMLInputElement>('#lights input')) {
+		const key = input.name as keyof typeof mix;
+		input.value = String(mix[key]);
+		input.addEventListener('input', () => (mix[key] = Number(input.value)));
+	}
+}
+
 function clockControls() {
 	const panel = document.querySelector<HTMLElement>('#hud')!;
 	const slider = panel.querySelector<HTMLInputElement>('input')!;

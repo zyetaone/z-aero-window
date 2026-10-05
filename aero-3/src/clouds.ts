@@ -14,11 +14,12 @@
  * sun colour it transmitted to the light, the sky's ambient) instead of
  * hand-tuned golden-hour tables, and cards are squashed vertically so a puff
  * stays between the hills and the window. Seeded layout and wall-clock wind
- * keep three panes identical without talking. Draws in rendering group 1,
+ * keep three panes identical without talking, and the weather changes daily:
+ * `weatherFor` deals each place a regime per UTC day. Draws in rendering group 1,
  * after the atmosphere composites the sky, so the sky cannot paint over it.
  */
 import { Color3, Color4, Sprite, SpriteManager, Vector3, type Camera, type DirectionalLight, type Scene } from '@babylonjs/core';
-import { mulberry32, smoothstep } from './math.ts';
+import { hash, mulberry32, smoothstep } from './math.ts';
 import cloud from './assets/cloud.webp';
 import cloudDark from './assets/cloud-dark.webp';
 import cloudSmoke from './assets/cloud-smoke.webp';
@@ -31,11 +32,42 @@ const NIGHT_FLOOR = new Color3(0.03, 0.035, 0.05);
 type Puff = { sprite: Sprite; x: number; z: number; y: number; alpha: number; shade: number; normal: Vector3; wrap: number };
 
 /** aero-2's three tiers, resized for a window 1.7 km above the deck. */
+/**
+ * A day's weather: [weight, near cumulus, horizon systems, cirrus, puff size].
+ * The cover numbers scale each tier's cluster count.
+ */
+const REGIMES: Record<string, [number, number, number, number, number]> = {
+	clear: [0.15, 0.1, 0.3, 0.3, 1],
+	fair: [0.35, 0.6, 0.8, 0.6, 0.9],
+	scattered: [0.3, 1, 1, 1, 1],
+	towering: [0.12, 1.3, 1.3, 0.5, 1.35],
+	cirrus: [0.08, 0.3, 0.6, 2.5, 1]
+};
+export type Weather = { name: string; seed: number; cover: [number, number, number]; size: number };
+
+/** The place's weather for the UTC day holding `ms`, or a named regime (`?weather=`). */
+export function weatherFor(place: string, ms: number, named?: string | null): Weather {
+	const day = Math.floor(ms / 86_400_000);
+	const seed = Math.floor(hash(day * 0x9e3779b1 + [...place].reduce((h, c) => h * 31 + c.charCodeAt(0), 7)) * 2 ** 31);
+	let name = named && named in REGIMES ? named : '';
+	if (!name) {
+		let [u, acc] = [hash(seed), 0];
+		name = Object.keys(REGIMES).find((k) => u < (acc += REGIMES[k]![0])) ?? 'fair';
+	}
+	const [, near, far, cirrus, size] = REGIMES[name]!;
+	return { name, seed, cover: [near, far, cirrus], size };
+}
+
+// Which of a regime's three covers (near, horizon, cirrus) drives each tier: banks follow the horizon.
+const COVER_OF = [0, 1, 1, 2];
+
 const TIERS = [
 	// near cumulus passing below the window
 	{ r0: 3_000, rs: 45_000, s0: 1_200, ss: 1_400, n0: 4, ns: 5, lonely: 0.12, lift: 0, squash: 0.6, count: 40, cells: [0, 1] },
 	// big systems out to the horizon
 	{ r0: 40_000, rs: 180_000, s0: 6_000, ss: 7_000, n0: 6, ns: 7, lonely: 0.05, lift: 300, squash: 0.45, count: 45, cells: [0, 1] },
+	// long flat banks sitting on the horizon
+	{ r0: 120_000, rs: 110_000, s0: 10_000, ss: 10_000, n0: 4, ns: 4, lonely: 0, lift: 1_200, squash: 0.2, count: 30, cells: [0, 1] },
 	// thin cirrus above the aircraft
 	{ r0: 20_000, rs: 140_000, s0: 9_000, ss: 12_000, n0: 3, ns: 4, lonely: 0.2, lift: 6_500, squash: 0.25, count: 12, cells: [2] }
 ];
@@ -46,27 +78,35 @@ export async function clouds(
 	sun: DirectionalLight,
 	center: [x: number, z: number],
 	deckM: number,
+	/** The ground under the deck: no card may reach below it, or the terrain clips it flat. */
+	groundM: number,
 	drop: (x: number, z: number) => number,
+	weather: Weather,
 	cover = 1
 ) {
-	const manager = new SpriteManager('clouds', await spriteSheet(), 1500, CELL, scene);
+	const manager = new SpriteManager('clouds', await spriteSheet(), 2500, CELL, scene);
 	manager.disableDepthWrite = true;
 	manager.isPickable = false;
 	manager.renderingGroupId = 1;
 	scene.setRenderingAutoClearDepthStencil(1, false); // keep group 0's depth: the terrain still hides what is behind it
 
-	const random = mulberry32(0xc10d5);
+	const random = mulberry32(weather.seed);
 	const puffs: Puff[] = [];
-	for (const t of TIERS) {
-		for (let c = 0; c < Math.round(t.count * cover); c++) {
+	for (const [tier, t] of TIERS.entries()) {
+		const tierCover = weather.cover[COVER_OF[tier]!]!;
+		for (let c = 0; c < Math.round(t.count * cover * tierCover); c++) {
 			const [a, d] = [random() * Math.PI * 2, t.r0 + Math.sqrt(random()) * t.rs];
 			const [cx, cz, cy] = [center[0] + Math.cos(a) * d, center[1] + Math.sin(a) * d, deckM + t.lift + (random() - 0.5) * 400];
-			const base = t.s0 + random() * t.ss;
+			// Mostly modest, a few big: squaring the draw skews sizes the way a real deck does.
+			const base = (t.s0 + random() ** 2 * t.ss * 1.3) * (tier < TIERS.length - 1 ? weather.size : 1);
 			const n = random() < t.lonely ? 1 : t.n0 + Math.floor(random() * t.ns);
 			for (let i = 0; i < n; i++) {
 				const [theta, r] = [random() * Math.PI * 2, i === 0 ? 0 : (0.2 + random() * 0.8) * base * 1.6];
-				const [x, z, y] = [cx + Math.cos(theta) * r, cz + Math.sin(theta) * r, cy + (i === 0 ? 0 : (random() - 0.5) * base * 0.35 * t.squash)];
 				const size = base * (i === 0 ? 1.25 : 0.85 + random() * 0.55);
+				// Keep the card's visible body above the ground: a big puff dipping into the terrain is cut
+				// off by its depth as a hard horizontal line (0.4 of the height: the PNGs fade at the rim).
+				const lowest = groundM + 300 + size * t.squash * 0.4;
+				const [x, z, y] = [cx + Math.cos(theta) * r, cz + Math.sin(theta) * r, Math.max(lowest, cy + (i === 0 ? 0 : (random() - 0.5) * base * 0.35 * t.squash))];
 				const sprite = new Sprite('puff', manager);
 				sprite.cellIndex = t.cells[Math.floor(random() * t.cells.length)]!;
 				// Near-upright with a mirror for variety: a squashed card at a random angle reads as a flame.
@@ -114,7 +154,7 @@ export async function clouds(
 					Math.min(1, (ambient.g + sunColor.g * lit) * p.shade + NIGHT_FLOOR.g + UNDERGLOW.g * dark),
 					Math.min(1, (ambient.b + sunColor.b * lit) * p.shade + NIGHT_FLOOR.b + UNDERGLOW.b * dark),
 					// No aerial perspective on sprites, so fade the distant ones into the haze.
-					p.alpha * Math.max(0, edge) * (1 - smoothstep(150_000, 230_000, far))
+					p.alpha * Math.max(0, edge) * (1 - smoothstep(190_000, 300_000, far))
 				);
 			}
 			// Alpha blending wants back-to-front; the deck drifts slowly, so re-sort now and then.

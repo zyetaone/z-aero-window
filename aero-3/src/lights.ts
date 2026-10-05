@@ -15,11 +15,11 @@
  * data only, no invented noise.
  *
  * One small shader does what an unlit material cannot: each light dims with
- * distance, fading out toward the horizon (no atmosphere touches unlit points,
+ * distance, fading out and reddening toward the horizon (no atmosphere touches unlit points,
  * so far motorways otherwise blaze as bright as the core), and twinkles faintly
  * at its own slow rate, the scintillation a city shows through 3 km of warm air. All of it runs off wall-clock seconds: panes agree.
  */
-import { Constants, Effect, Mesh, ShaderMaterial, VertexData, type Scene, type Vector3 } from '@babylonjs/core';
+import { Constants, Effect, Mesh, ShaderMaterial, Vector3, VertexData, type Scene } from '@babylonjs/core';
 
 type Road = { geometry: { coordinates: number[][] }; properties: { class: string } };
 
@@ -52,6 +52,7 @@ uniform mat4 worldViewProjection;
 uniform vec3 eye;
 uniform float time;
 uniform float fade;
+uniform vec3 groups; // gains for streets, buildings, far towns (the Lights panel)
 varying vec3 vColor;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
@@ -60,7 +61,11 @@ void main() {
 	float h = hash(floor(position.xz));
 	float far = 1.0 / (1.0 + pow(distance(position, eye) / fade, 2.0));
 	float twinkle = 0.92 + 0.08 * sin(time * (0.4 + 1.2 * h) + h * 6.2832);
-	vColor = color.rgb * far * twinkle;
+	// Haze dims distant lights and reddens them: blue scatters out of the path first.
+	vec3 hazed = mix(color.rgb * vec3(1.0, 0.72, 0.45), color.rgb, far);
+	// colour.a carries the group: 1 street, 2 building, 3 far town.
+	float group = color.a < 1.5 ? groups.x : color.a < 2.5 ? groups.y : groups.z;
+	vColor = hazed * far * twinkle * group;
 }`;
 Effect.ShadersStore.lampsFragmentShader = `
 precision highp float;
@@ -73,10 +78,12 @@ export function streetlights(
 	project: (lon: number, lat: number) => [x: number, z: number],
 	groundAt: (x: number, z: number) => number,
 	scene: Scene,
-	/** Building roofs: [x, roof y, z, height]; one light each. */
-	roofs: [number, number, number, number][] = [],
-	/** Far-ring towns: flat [x, y, z, radiance] (world.ts lightSites). */
-	sites: number[] = []
+	/** Lights on the flat roofs: flat [x, y, z] (buildings.ts). */
+	roofs: number[] = [],
+	/** VIIRS-derived towns and villages: flat [x, y, z, radiance] (world.ts lightSites). */
+	sites: number[] = [],
+	/** Lit windows on building walls: flat [x, y, z] (buildings.ts). */
+	windows: number[] = []
 ) {
 	const positions: number[] = [];
 	const colors: number[] = [];
@@ -99,25 +106,32 @@ export function streetlights(
 		}
 	}
 
-	// One light per building, dealt from the same mix by hash.
-	for (const [x, y, z] of roofs) {
-		const [r, g, b] = kindFor([x, z]);
-		positions.push(x, y + 1, z);
-		colors.push(r * 0.6, g * 0.6, b * 0.6, 1);
+	// Roof lights, dealt from the same mix by hash, dimmer than the streets.
+	for (let i = 0; i < roofs.length; i += 3) {
+		const [r, g, b] = kindFor([roofs[i]!, roofs[i + 2]!]);
+		positions.push(roofs[i]!, roofs[i + 1]!, roofs[i + 2]!);
+		colors.push(r * 0.45, g * 0.45, b * 0.45, 2);
+	}
+
+	// Lit rooms: warm, mostly, with the odd cool screen-lit one.
+	for (let i = 0; i < windows.length; i += 3) {
+		const cool = (i / 3) % 7 === 0;
+		positions.push(windows[i]!, windows[i + 1]!, windows[i + 2]!);
+		colors.push(cool ? 0.45 : 0.68, cool ? 0.52 : 0.47, cool ? 0.68 : 0.22, 2);
 	}
 
 	// Far towns, dealt from the same mix, brighter where NASA measured more light.
 	for (let i = 0; i < sites.length; i += 4) {
 		const [r, g, b] = kindFor([sites[i]!, sites[i + 2]!]);
-		const k = 0.5 + 0.5 * sites[i + 3]!;
+		const k = (0.5 + 0.5 * sites[i + 3]!) * 0.55; // fainter than the city: they are far and small
 		positions.push(sites[i]!, sites[i + 1]!, sites[i + 2]!);
-		colors.push(r * k, g * k, b * k, 1);
+		colors.push(r * k, g * k, b * k, 3);
 	}
 
 	// Additive points, the night gain folded into the colour.
 	const material = new ShaderMaterial('lamps', scene, 'lamps', {
 		attributes: ['position', 'color'],
-		uniforms: ['worldViewProjection', 'eye', 'time', 'fade', 'gain'],
+		uniforms: ['worldViewProjection', 'eye', 'time', 'fade', 'gain', 'groups'],
 		needAlphaBlending: true
 	});
 	material.pointsCloud = true;
@@ -126,6 +140,7 @@ export function streetlights(
 	material.backFaceCulling = false;
 	material.setFloat('fade', FADE_M);
 
+	const groupGains = new Vector3();
 	const mesh = new Mesh('streetlights', scene);
 	Object.assign(new VertexData(), { positions, colors }).applyToMesh(mesh);
 	mesh.isPickable = false;
@@ -135,7 +150,9 @@ export function streetlights(
 	return {
 		mesh,
 		count: positions.length / 3,
-		update(eye: Vector3, nowMs: number, gain: number) {
+		/** Per-group gains from the Lights panel: streets, buildings, far towns. */
+		update(eye: Vector3, nowMs: number, gain: number, groups: { street: number; building: number; far: number }) {
+			material.setVector3('groups', groupGains.set(groups.street, groups.building, groups.far));
 			material.setVector3('eye', eye);
 			material.setFloat('time', (nowMs / 1000) % 86_400); // a day keeps float32 to ~8 ms; one wrap at UTC midnight
 			material.setFloat('gain', gain);

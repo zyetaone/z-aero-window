@@ -24,6 +24,24 @@ const CELLS = 16; // windows per texture side
 const CELL_PX = 16;
 const FACADE_M = CELLS * 3; // one texture repeat is 16 windows of 3 m
 const AO_M = 40; // occlusion fades out this far up a wall
+/**
+ * Paint, dealt one per building: whitewash and cream most, then the ochres,
+ * yellows and light browns of plaster and stone, a little bare concrete and
+ * pink. Linear multipliers on the near-white facade texture.
+ */
+const PAINTS: [weight: number, rgb: [number, number, number]][] = [
+	[0.22, [1, 0.98, 0.92]], // whitewash
+	[0.2, [1, 0.9, 0.7]], // cream
+	[0.16, [1, 0.82, 0.5]], // pale yellow
+	[0.14, [0.93, 0.66, 0.38]], // ochre
+	[0.12, [0.74, 0.56, 0.4]], // light brown
+	[0.1, [0.74, 0.72, 0.69]], // bare concrete
+	[0.06, [0.96, 0.74, 0.68]] // dusty pink
+];
+const ROOF: [number, number, number] = [0.86, 0.84, 0.8]; // flat concrete, sun-bleached
+const WINDOW_M2 = 320; // one lit window point per this much wall, on buildings WINDOW_MIN_M up
+const ROOF_M2 = 1_200; // one roof light (stair heads, terrace bulbs, signs) per this much flat roof
+const WINDOW_MIN_M = 12;
 
 export function buildings(
 	features: Footprint[],
@@ -35,8 +53,10 @@ export function buildings(
 	const normals: number[] = [];
 	const uvs: number[] = [];
 	const uvs2: number[] = []; // lightmap: v is height up the wall, 0 at the street
+	const colors: number[] = [];
 	const indices: number[] = [];
-	const tops: [x: number, y: number, z: number, height: number][] = [];
+	const roofLights: number[] = []; // flat [x, y, z]: lights on the flat roofs (lights.ts)
+	const windows: number[] = []; // flat [x, y, z]: lit windows as points (lights.ts), crisp at range
 	const random = mulberry32(0xae3);
 
 	for (const { geometry, properties } of features) {
@@ -46,7 +66,11 @@ export function buildings(
 		const base = groundAt(...ring[0]!);
 		const top = base + properties.height;
 		const vTop = properties.height / FACADE_M;
-		tops.push([ring[0]![0], top, ring[0]![1], properties.height]);
+		// One paint per building, a little lighter or darker so a street of cream isn't one block.
+		const [pr, pg, pb] = paint(random());
+		const shade = 0.88 + random() * 0.2;
+		const wall = [pr * shade, pg * shade, pb * shade, 1];
+		const roof = [(ROOF[0] + pr) / 2 * shade, (ROOF[1] + pg) / 2 * shade, (ROOF[2] + pb) / 2 * shade, 1];
 		// A whole-window shift per building, so neighbours don't light the same rooms.
 		const [u0, v0] = [Math.floor(random() * CELLS) / CELLS, Math.floor(random() * CELLS) / CELLS];
 
@@ -68,8 +92,15 @@ export function buildings(
 			uvs.push(along, v0, u1, v0, u1, v0 + vTop, along, v0 + vTop);
 			const aoTop = Math.min(1, properties.height / AO_M);
 			uvs2.push(0.5, 0, 0.5, 0, 0.5, aoTop, 0.5, aoTop);
-			for (let k = 0; k < 4; k++) normals.push(nx, 0, nz);
+			for (let k = 0; k < 4; k++) normals.push(nx, 0, nz), colors.push(...wall);
 			indices.push(v, v + 1, v + 2, v, v + 2, v + 3);
+			// A few lit rooms on this wall: a point a metre proud of it, on a whole floor.
+			if (properties.height >= WINDOW_MIN_M) {
+				for (let w = Math.floor((len * properties.height) / WINDOW_M2 + random()); w > 0; w--) {
+					const [t, floor] = [random(), Math.floor(random() * (properties.height / 3 - 1)) + 1];
+					windows.push(x0 + (x1 - x0) * t + nx, base + floor * 3 + 1.5, z0 + (z1 - z0) * t + nz);
+				}
+			}
 			along = u1;
 		}
 
@@ -77,14 +108,28 @@ export function buildings(
 		for (const [x, z] of ring) {
 			positions.push(x, top, z);
 			normals.push(0, 1, 0);
+			colors.push(...roof);
 			uvs.push(u0 + 0.5 / (CELLS * CELL_PX), v0 + 0.5 / (CELLS * CELL_PX)); // a wall texel: roofs read as slab
 			uvs2.push(0.5, 1); // roofs are open sky: unoccluded
 		}
-		for (const i of earcut(ring.flat())) indices.push(v + i);
+		const tris = earcut(ring.flat());
+		for (const i of tris) indices.push(v + i);
+		// Roof lights scattered over the roof's triangles by area: at least one per building,
+		// more on the big flat ones. Barycentric draws stay inside the footprint.
+		let lit = 0;
+		for (let k = 0; k < tris.length; k += 3) {
+			const [a, b, c] = [ring[tris[k]!]!, ring[tris[k + 1]!]!, ring[tris[k + 2]!]!];
+			const area = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
+			for (let n = Math.floor(area / ROOF_M2 + random()) || (k === 0 && !lit ? 1 : 0); n > 0; n--, lit++) {
+				let [s, t] = [random(), random()];
+				if (s + t > 1) [s, t] = [1 - s, 1 - t];
+				roofLights.push(a[0] + (b[0] - a[0]) * s + (c[0] - a[0]) * t, top + 1, a[1] + (b[1] - a[1]) * s + (c[1] - a[1]) * t);
+			}
+		}
 	}
 
 	const mesh = new Mesh('buildings', scene);
-	Object.assign(new VertexData(), { positions, normals, uvs, uvs2, indices }).applyToMesh(mesh);
+	Object.assign(new VertexData(), { positions, normals, uvs, uvs2, colors, indices }).applyToMesh(mesh);
 	mesh.freezeWorldMatrix();
 
 	const [albedo, lit] = facade(scene);
@@ -94,17 +139,30 @@ export function buildings(
 	material.emissiveColor = Color3.White();
 	material.lightmapTexture = occlusion(scene);
 	material.useLightmapAsShadowmap = true; // multiplies the lighting rather than adding to it
+	// Shaded walls take the sky's light: the atmosphere writes it to scene.ambientColor, and a
+	// PBR material's ambientColor (default black) multiplies it away.
+	material.ambientColor = Color3.White();
 	material.metallic = 0;
 	material.roughness = 0.85;
 	// ponytail: earcut's roof winding isn't checked against Babylon's; both sides drawn. Cull once verified.
 	material.backFaceCulling = false;
 	mesh.material = material;
-	return { material, mesh, tops };
+	return { material, mesh, roofLights, windows };
+}
+
+/** Pick a paint from PAINTS by a uniform draw. */
+function paint(u: number) {
+	let acc = 0;
+	for (const [weight, rgb] of PAINTS) if (u < (acc += weight)) return rgb;
+	return PAINTS[0]![1];
 }
 
 /**
- * Two 256² tiles of the same window grid: concrete and dark glass for the day,
- * and the night's lit rooms — about a third, in sodium, warm and cool white.
+ * Two 256² tiles of the same window grid. Day: near-white plaster (the paint
+ * comes from vertex colour) washed with fine grain and rain streaks under the
+ * sills, so a wall reads as weathered paint rather than plastic; glass that
+ * catches a little sky. Night: the lit rooms — about a third, in sodium, warm
+ * and cool white.
  */
 function facade(scene: Scene): [DynamicTexture, DynamicTexture] {
 	const random = mulberry32(0xf4c4de);
@@ -114,16 +172,41 @@ function facade(scene: Scene): [DynamicTexture, DynamicTexture] {
 		return tex;
 	}) as [DynamicTexture, DynamicTexture];
 	const [dc, nc] = [day.getContext(), night.getContext()];
-	dc.fillStyle = '#9b968c';
-	dc.fillRect(0, 0, CELLS * CELL_PX, CELLS * CELL_PX);
+	const side = CELLS * CELL_PX;
+	dc.fillStyle = '#e4ddd0';
+	dc.fillRect(0, 0, side, side);
+	// Paint wash: per-texel grain, then soft blotches of uneven coats.
+	const wash = dc.getImageData(0, 0, side, side);
+	for (let i = 0; i < wash.data.length; i += 4) {
+		const g = (random() - 0.5) * 18;
+		wash.data[i] += g;
+		wash.data[i + 1] += g;
+		wash.data[i + 2] += g * 0.9;
+	}
+	dc.putImageData(wash, 0, 0);
+	for (let k = 0; k < 40; k++) {
+		const [x, y, r] = [random() * side, random() * side, 10 + random() * 30];
+		dc.fillStyle = random() < 0.5 ? 'rgba(120,100,80,0.06)' : 'rgba(255,250,240,0.08)';
+		dc.beginPath();
+		dc.arc(x, y, r, 0, Math.PI * 2);
+		dc.fill();
+	}
 	nc.fillStyle = '#000';
 	nc.fillRect(0, 0, CELLS * CELL_PX, CELLS * CELL_PX);
 	const lamps = ['#ffb35c', '#ffd9a0', '#fff1d6', '#cfe0ff'];
 	for (let row = 0; row < CELLS; row++) {
 		for (let col = 0; col < CELLS; col++) {
 			const [x, y] = [col * CELL_PX + 3, row * CELL_PX + 4];
-			dc.fillStyle = random() < 0.15 ? '#46505c' : '#2c3642';
+			dc.fillStyle = random() < 0.2 ? '#6a7682' : '#3c4854';
 			dc.fillRect(x, y, 10, 8);
+			// A rain streak under some sills, fading down the wall.
+			if (random() < 0.4) {
+				const streak = dc.createLinearGradient(0, y + 8, 0, y + 8 + CELL_PX * 0.8);
+				streak.addColorStop(0, 'rgba(70,60,50,0.22)');
+				streak.addColorStop(1, 'rgba(70,60,50,0)');
+				dc.fillStyle = streak;
+				dc.fillRect(x + 1 + random() * 6, y + 8, 2 + random() * 3, CELL_PX * 0.8);
+			}
 			if (random() < 0.33) {
 				nc.fillStyle = lamps[Math.floor(random() * lamps.length)]!;
 				nc.fillRect(x, y, 10, 8);

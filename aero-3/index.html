@@ -15,7 +15,14 @@
 			#hud input { width: min(40vw, 360px); accent-color: #ffb35c; }
 			#hud button { font: inherit; color: inherit; background: #fff2; border: 0; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
 			#hud button:disabled { opacity: 0.4; cursor: default; }
-			#hud button:focus-visible, #hud input:focus-visible { outline: 2px solid #ffb35c; outline-offset: 2px; }
+			#hud button:focus-visible, #hud input:focus-visible, #hud summary:focus-visible { outline: 2px solid #ffb35c; outline-offset: 2px; }
+			#lights { position: relative; }
+			#lights summary { cursor: pointer; padding: 4px 8px; border-radius: 4px; background: #fff2; list-style: none; }
+			#lights[open] > div {
+				position: absolute; bottom: calc(100% + 10px); left: 0; display: grid; grid-template-columns: auto 160px; gap: 8px 12px;
+				align-items: center; padding: 10px 12px; border-radius: 8px; background: #000c;
+			}
+			#lights[open] input { width: 160px; }
 		</style>
 	</head>
 	<body>
@@ -23,6 +30,15 @@
 		<div id="hud" hidden>
 			<input type="range" min="0" max="24" step="0.05" aria-label="Time of day (local solar hour)" />
 			<button type="button">Now</button>
+			<details id="lights">
+				<summary>Lights</summary>
+				<div>
+					<label for="l-street">Streets</label><input id="l-street" name="street" type="range" min="0" max="2" step="0.05" />
+					<label for="l-building">Buildings</label><input id="l-building" name="building" type="range" min="0" max="2" step="0.05" />
+					<label for="l-far">Far towns</label><input id="l-far" name="far" type="range" min="0" max="2" step="0.05" />
+					<label for="l-glow">Glow</label><input id="l-glow" name="glow" type="range" min="0" max="1" step="0.05" />
+				</div>
+			</details>
 			<output></output>
 		</div>
 		<script type="module" src="./src/main.ts"></script>
