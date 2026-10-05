@@ -7,12 +7,24 @@
 		<style>
 			html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
 			canvas { display: block; width: 100%; height: 100%; outline: none; }
-			#hud { position: fixed; left: 8px; bottom: 8px; font: 12px/1.4 ui-monospace, monospace; color: #fff8; }
+			#hud {
+				position: fixed; left: 12px; bottom: 12px; display: flex; gap: 10px; align-items: center;
+				padding: 6px 10px; border-radius: 8px; background: #0008; color: #fffc;
+				font: 12px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums;
+			}
+			#hud input { width: min(40vw, 360px); accent-color: #ffb35c; }
+			#hud button { font: inherit; color: inherit; background: #fff2; border: 0; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
+			#hud button:disabled { opacity: 0.4; cursor: default; }
+			#hud button:focus-visible, #hud input:focus-visible { outline: 2px solid #ffb35c; outline-offset: 2px; }
 		</style>
 	</head>
 	<body>
 		<canvas id="world"></canvas>
-		<output id="hud"></output>
+		<div id="hud" hidden>
+			<input type="range" min="0" max="24" step="0.05" aria-label="Time of day (local solar hour)" />
+			<button type="button">Now</button>
+			<output></output>
+		</div>
 		<script type="module" src="./src/main.ts"></script>
 	</body>
 </html>

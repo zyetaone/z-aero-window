@@ -1,23 +1,23 @@
 /**
- * Where the sun is, as a unit vector in the scene's frame (x east, y up, z north).
+ * The sky's clock: where the sun is, and how far the stars have turned.
  *
  * Solar time, not the clock on the wall: the hour angle comes from UTC plus
  * longitude, so no time zone table is needed and three panes computing from the
- * same wall second agree. `clockHours` pins local solar time (the `?clock=`
- * param) so a frame-cost run sees the same sky every time. Accurate to about a
- * degree, which is far below what the sky shows.
+ * same wall second agree. A pinned hour (the `?clock=` param, the slider) is
+ * turned into a moment with `atSolarHour`, so sun and stars move together.
+ * Accurate to about a degree, which is far below what the sky shows.
  */
 const RAD = Math.PI / 180;
+const DAY_MS = 86_400_000;
 
 export type Sun = { x: number; y: number; z: number; elevationDeg: number };
 
-export function sunAt(ms: number, latDeg: number, lonDeg: number, clockHours?: number): Sun {
+/** Unit vector to the sun in the scene frame (x east, y up, z north). */
+export function sunAt(ms: number, latDeg: number, lonDeg: number): Sun {
 	const date = new Date(ms);
-	const dayOfYear = (ms - Date.UTC(date.getUTCFullYear(), 0, 0)) / 86_400_000;
+	const dayOfYear = (ms - Date.UTC(date.getUTCFullYear(), 0, 0)) / DAY_MS;
 	const declination = -23.44 * Math.cos(((2 * Math.PI) / 365) * (dayOfYear + 10)) * RAD;
-	const utcHours = (ms / 3_600_000) % 24;
-	const solarHours = clockHours ?? (utcHours + lonDeg / 15 + 24) % 24;
-	const hourAngle = (solarHours - 12) * 15 * RAD;
+	const hourAngle = (solarHour(ms, lonDeg) - 12) * 15 * RAD;
 	const lat = latDeg * RAD;
 
 	const elevation = Math.asin(
@@ -37,3 +37,14 @@ export function sunAt(ms: number, latDeg: number, lonDeg: number, clockHours?: n
 		elevationDeg: elevation / RAD
 	};
 }
+
+/** Local solar hour, 0..24. */
+export const solarHour = (ms: number, lonDeg: number) => (((ms / 3_600_000 + lonDeg / 15) % 24) + 24) % 24;
+
+/** The moment today (UTC) when it is `hour` local solar time at `lonDeg`. */
+export const atSolarHour = (ms: number, lonDeg: number, hour: number) =>
+	Math.floor(ms / DAY_MS) * DAY_MS + (hour - lonDeg / 15) * 3_600_000;
+
+/** Local sidereal angle in degrees: how far the sky has turned overhead. */
+export const siderealDeg = (ms: number, lonDeg: number) =>
+	(280.46061837 + 360.98564736629 * (ms / DAY_MS - 10_957.5) + lonDeg) % 360;

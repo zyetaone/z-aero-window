@@ -18,7 +18,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
+    "noUncheckedIndexedAccess": false, // aero-2's star catalog is imported as-is and does not opt in
     "noImplicitOverride": true,
 
     // Some stricter flags (disabled by default)
