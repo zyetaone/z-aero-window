@@ -130,7 +130,10 @@ export function buildings(
 			positions.push(x, top, z);
 			normals.push(0, 1, 0);
 			colors.push(...roof);
-			uvs.push(u0 + 0.5 / (CELLS * CELL_PX), v0 + 0.5 / (CELLS * CELL_PX)); // a wall texel: roofs read as slab
+			// One texel of the wall for the whole roof: plaster's wash, or a glass tower's spandrel grey
+			// (its texel 0 is the near-black mullion, which made every tower roof read as a hole).
+			const [tu, tv] = tower ? [2.5, 12.5] : [0.5, 0.5];
+			uvs.push(u0 + tu / (CELLS * CELL_PX), v0 + tv / (CELLS * CELL_PX));
 			uvs2.push(0.5, 1); // roofs are open sky: unoccluded
 		}
 		const tris = earcut(ring.flat());

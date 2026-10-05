@@ -49,6 +49,9 @@ const num = (name: string, fallback: number) => (q.has(name) && Number.isFinite(
 // before anything is chosen; unreachable within 2 s means no wall. URL params still win.
 const wallOrigin = q.get('wall') ?? '';
 const wall = await fetchWall(wallOrigin);
+// A push not yet due: wait for its second (the blind is closed in the markup), so a pane that boots
+// in the 10 s lead does not show the new scene before the others change over.
+if (wall.applyAt * 1000 > Date.now()) await new Promise((r) => setTimeout(r, wall.applyAt * 1000 - Date.now()));
 // ?place= (or the wall) pins a city; otherwise the wall-clock rotation picks it, the same on every pane.
 const asked = q.get('place') ?? wall.place;
 const pinnedPlace = asked && Object.hasOwn(PLACES, asked) ? asked : null;
@@ -153,7 +156,8 @@ if (glow && lamps) {
 // The wing too: its unlit meshes draw black into the bloom, so the city's glow stops at its edge.
 for (const mesh of [...(city?.meshes ?? []), ...(plane?.meshes ?? [])]) glow?.addIncludedOnlyMesh(mesh);
 
-const hud = q.get('hud') === '0' ? null : clockControls();
+// Off on a wall pane (the kiosk URL carries ?role=): a touch on one pane's slider would split the wall.
+const hud = (q.get('hud') ?? (q.has('role') ? '0' : '1')) === '0' ? null : clockControls();
 if (hud) lightsPanel(), placePicker();
 /** ?debug: set `aim.at` to a world point (or `aim.moon = true`) to hold the camera on it for a screenshot. */
 const aim: { at: Vector3 | null; moon: boolean } = { at: null, moon: false };
@@ -162,7 +166,7 @@ let hudAt = 0;
 const toSun = new Vector3();
 const [aircraft, seat] = [new Quaternion(), new Quaternion()];
 camera.rotationQuaternion = new Quaternion();
-const cabin = cabinOverlay(blinds, day.rain, placeId, lon);
+const cabin = cabinOverlay(blinds, day.rain, placeId, lon, ['left', 'center', 'right'].indexOf(q.get('role') ?? '') + 1, wall.applyAt);
 document.querySelector<HTMLElement>('#frame')!.hidden = q.get('frame') === '0';
 adminQr(wallOrigin);
 // A new push: every pane lowers the blind and reloads into it on the wall's applyAt second.

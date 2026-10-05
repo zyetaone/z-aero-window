@@ -31,7 +31,8 @@
 			/* !important: an id rule's display (#qr, #hold) would otherwise beat the hidden attribute. */
 			[hidden] { display: none !important; }
 			#hud { z-index: 4; }
-			#frame { --night: 0; z-index: 2; box-shadow: inset 0 0 60px 18px #0009, inset 0 0 12px 2px #ffffff0d; }
+			:root { --night: 0; }
+			#frame { z-index: 2; box-shadow: inset 0 0 60px 18px #0009, inset 0 0 12px 2px #ffffff0d; }
 			#frame::before {
 				content: ''; position: absolute; inset: 0;
 				background: radial-gradient(ellipse at 50% 50%, transparent 55%,
@@ -42,22 +43,25 @@
 				content: ''; position: absolute; inset: 0; /* a soft glint across the top right of the glass */
 				background: linear-gradient(225deg, #ffffff0c 0%, #ffffff05 22%, transparent 42%);
 			}
-			#rain { z-index: 1; opacity: 0.75; }
+			/* Rain on the glass: still drops painted once to a canvas (cabin.ts), plus a few that run.
+			   Water lenses the scene upside down: dark above, a bright rim below, one glint. Dimmer at night. */
+			#rain { z-index: 1; }
+			#rain canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: calc(1 - 0.65 * var(--night)); }
 			#rain span {
-				position: absolute; border-radius: 50%; width: var(--s); height: var(--s);
-				background: linear-gradient(135deg, #dcebff38, #b4c8e614 55%, #ffffff0a);
-				box-shadow: inset 1.5px 2px 3px #fff6, inset -2px -3px 5px #0000004d, 0 2px 4px #00000026;
-				animation: bead var(--dur) ease-in-out var(--delay) infinite;
+				position: absolute; width: var(--s); height: calc(var(--s) * 1.15);
+				border-radius: 50% 50% 50% 50% / 58% 58% 42% 42%;
+				background: radial-gradient(ellipse at 50% 30%, #0a101a40, #ffffff10 60%, #ffffff55 88%, transparent 92%);
+				animation: run var(--dur) linear var(--delay) infinite;
 			}
-			#rain span::before {
-				content: ''; position: absolute; top: 16%; left: 20%; width: 30%; height: 30%; border-radius: 50%;
-				background: radial-gradient(circle, #ffffffeb, transparent 70%);
+			#rain span::after { /* the wet trail it leaves */
+				content: ''; position: absolute; left: 35%; bottom: 90%; width: 30%; height: calc(var(--slide) * 0.35);
+				background: linear-gradient(#ffffff00, #ffffff1c); border-radius: 2px;
 			}
-			@keyframes bead {
-				0% { opacity: 0; transform: translateY(-2px) scale(0.6); }
-				12% { opacity: var(--o); transform: none; }
-				68% { opacity: var(--o); transform: translateY(calc(var(--slide) * 0.12)); }
-				100% { opacity: 0; transform: translateY(var(--slide)) scale(0.96); }
+			@keyframes run {
+				0%, 55% { opacity: 0; transform: none; }
+				60% { opacity: calc(var(--o) * (1 - 0.65 * var(--night))); transform: none; }
+				92% { opacity: calc(var(--o) * (1 - 0.65 * var(--night))); transform: translate(var(--drift), var(--slide)); }
+				100% { opacity: 0; transform: translate(var(--drift), var(--slide)); }
 			}
 			/* Closed in the markup, so a fresh load paints the blind before anything else. */
 			#blind {

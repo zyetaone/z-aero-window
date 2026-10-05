@@ -15,13 +15,18 @@ const LEAD_SEC = 6; // down this long before the boundary (aero-2's BLIND_LEAD_S
 const LAG_SEC = 12; // and up no sooner than this after it, so panes lift together
 const READY_FRAMES = 30; // and not before the scene has drawn this many frames
 
-export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon: number) {
-	const [frame, blind, drops] = ['#frame', '#blind', '#rain'].map((s) => document.querySelector<HTMLElement>(s)!) as [HTMLElement, HTMLElement, HTMLElement];
+/**
+ * `pane` seeds this window's rain. `openAfter` (wall seconds) is the wall push this page loaded into:
+ * the blind lifts LAG_SEC after the later of it and the slot start, so after a push every pane
+ * reveals on the same second rather than whenever its own scene finished building.
+ */
+export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon: number, pane: number, openAfter = 0) {
+	const [blind, drops] = ['#blind', '#rain'].map((s) => document.querySelector<HTMLElement>(s)!) as [HTMLElement, HTMLElement];
 	blind.hidden = !blinds;
 	blind.querySelector('span')!.textContent = place.replace('_', ' ');
-	if (rain) beads(drops);
+	if (rain) beads(drops, pane);
 
-	let [frames, last, held] = [0, 0, false];
+	let [frames, last, held, night, clock] = [0, 0, false, '', ''];
 	return {
 		/** Down now and stay down: a wall push is about to reload the page. */
 		hold() {
@@ -32,11 +37,15 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 		update(wallSec: number, dark: number) {
 			if (++frames < READY_FRAMES || wallSec - last < 0.25 || held) return;
 			last = wallSec;
-			frame.style.setProperty('--night', dark.toFixed(2));
+			// Steps of 0.05, and only on change: each write repaints the full-pane rim and rain.
+			const n = (Math.round(dark * 20) / 20).toFixed(2);
+			if (n !== night) document.documentElement.style.setProperty('--night', (night = n));
 			const phase = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
-			blind.classList.toggle('open', phase < DWELL_SEC - LEAD_SEC && phase >= LAG_SEC);
+			const since = wallSec - Math.max(wallSec - phase, openAfter);
+			blind.classList.toggle('open', phase < DWELL_SEC - LEAD_SEC && since >= LAG_SEC);
 			const hour = solarHour(wallSec * 1000, lon);
-			blind.querySelector('time')!.textContent = `${Math.floor(hour)}`.padStart(2, '0') + ':' + `${Math.floor((hour % 1) * 60)}`.padStart(2, '0');
+			const t = `${Math.floor(hour)}`.padStart(2, '0') + ':' + `${Math.floor((hour % 1) * 60)}`.padStart(2, '0');
+			if (t !== clock) blind.querySelector('time')!.textContent = clock = t;
 		}
 	};
 }
@@ -108,20 +117,58 @@ export function adminQr(wallOrigin: string) {
 	for (const end of ['pointerup', 'pointercancel', 'pointerleave'] as const) addEventListener(end, stop);
 }
 
-/** aero-2's RainGlass beads (flat variant, no backdrop blur): a fixed seed, so every pane rains alike. */
-function beads(host: HTMLElement) {
-	const r = mulberry32(104729);
+/**
+ * Rain on the glass. Still drops are painted once to a canvas, so they cost nothing per frame:
+ * mostly tiny, a few large, gathered in clusters the way water beads on a window, each shaded as
+ * a lens (dark above, bright rim below, one glint). A handful run down with a trail. Seeded per
+ * pane, so neighbouring windows do not rain in the same places.
+ */
+function beads(host: HTMLElement, seed: number) {
+	const r = mulberry32(104729 ^ seed);
 	const between = (a: number, b: number) => a + r() * (b - a);
-	for (let i = 0; i < 14; i++) {
-		const runner = r() < 0.25;
+	const dpr = Math.min(2, devicePixelRatio || 1);
+	const canvas = Object.assign(document.createElement('canvas'), { width: innerWidth * dpr, height: innerHeight * dpr });
+	const ctx = canvas.getContext('2d')!;
+	ctx.scale(dpr, dpr);
+	const centres = Array.from({ length: 10 }, () => [between(0.05, 0.95) * innerWidth, between(0.05, 0.95) * innerHeight] as const);
+	for (let i = 0; i < 180; i++) {
+		// Two in three drops sit in a cluster, the rest anywhere; radius skewed small.
+		const [cx, cy] = r() < 0.66 ? centres[Math.floor(r() * centres.length)]! : [r() * innerWidth, r() * innerHeight];
+		const spread = r() < 0.66 ? 90 : 0;
+		const [x, y] = [cx + (r() + r() - 1) * spread, cy + (r() + r() - 1) * spread];
+		const rad = 0.8 + 6 * r() ** 3;
+		const [rx, ry] = [rad, rad * between(1, 1.2)];
+		const body = ctx.createLinearGradient(0, y - ry, 0, y + ry);
+		body.addColorStop(0, 'rgba(8,12,20,0.30)');
+		body.addColorStop(0.6, 'rgba(255,255,255,0.04)');
+		body.addColorStop(1, 'rgba(255,255,255,0.22)');
+		ctx.fillStyle = body;
+		ctx.beginPath();
+		ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+		ctx.fill();
+		ctx.strokeStyle = 'rgba(255,255,255,0.45)'; // the rim catching light from below
+		ctx.lineWidth = Math.max(0.5, rad * 0.16);
+		ctx.beginPath();
+		ctx.ellipse(x, y, rx * 0.86, ry * 0.86, 0, Math.PI * 0.15, Math.PI * 0.85);
+		ctx.stroke();
+		if (rad > 1.6) {
+			ctx.fillStyle = 'rgba(255,255,255,0.75)'; // one glint
+			ctx.beginPath();
+			ctx.arc(x - rx * 0.35, y - ry * 0.4, Math.max(0.5, rad * 0.18), 0, Math.PI * 2);
+			ctx.fill();
+		}
+	}
+	host.append(canvas);
+	for (let i = 0; i < 5; i++) {
 		const bead = document.createElement('span');
-		Object.assign(bead.style, { left: `${between(6, 94)}%`, top: `${between(8, 86)}%` });
+		Object.assign(bead.style, { left: `${between(5, 95)}%`, top: `${between(0, 60)}%` });
 		for (const [k, v] of Object.entries({
-			'--s': `${between(8, 22)}px`,
-			'--o': between(0.5, 0.85).toFixed(2),
-			'--slide': `${runner ? between(40, 130) : between(2, 9)}px`,
-			'--dur': `${between(7, 15)}s`,
-			'--delay': `${-between(0, 12)}s`
+			'--s': `${between(7, 12)}px`,
+			'--o': between(0.6, 0.9).toFixed(2),
+			'--slide': `${between(80, 260)}px`,
+			'--drift': `${between(-40, 40)}px`,
+			'--dur': `${between(14, 26)}s`,
+			'--delay': `${-between(0, 26)}s`
 		}))
 			bead.style.setProperty(k, v);
 		host.append(bead);

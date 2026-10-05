@@ -19,9 +19,14 @@ One reason to change per file:
   night-light gain. `?weather=` pins the regime.
 - `src/cabin.ts` — aero-2's synthesised cabin drone (centre or solo pane only, `?audio=0` off,
   cutoff falls with altitude), and DOM over the canvas (CSS in index.html): the window rim darkening with the
-  light, aero-2's rain beads on rainy days (no backdrop-filter: a full-screen blur on the Pi), and
-  the blind. The blind is closed in the markup, lifts after 30 frames and 12 s into the visit, and
-  comes down 6 s before every 10-min slot boundary, where main.ts reloads into the next visit.
+  light, rain on rainy days (still drops painted once to a canvas, seeded per pane, plus five
+  runners; no backdrop-filter), and the blind. The blind is closed in the markup, lifts after 30
+  frames and 12 s after the later of the slot start and the wall push it loaded into (so panes lift
+  together), and comes down 6 s before every 10-min slot boundary, where main.ts reloads.
+  A pane that boots inside a push's 10 s lead waits for its applyAt before building.
+- The HUD is off on a wall pane (any `?role=`), on elsewhere; `?hud=0|1` overrides.
+- `/api/status` answers 503 (`page: building|failed`) until the server has bundled the page once
+  at startup, so a page that fails to build fails the updater's probe and rolls back.
   `?blind=0` holds one visit (screenshots, smoke).
 - `src/places.ts` — the place table and aero-2's rotation, ported as is: 600 s per city, the day's
   order a Fisher-Yates shuffle seeded by the day number. Each slot is a visit: with no `?place=`

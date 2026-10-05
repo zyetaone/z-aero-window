@@ -121,6 +121,8 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		// Water from the imagery itself: smooth where it reads as water, so lakes, rivers and
 		// the sea catch the sun as a glint, and stay matt land everywhere else.
 		material.metallicTexture = await texture(`${name}-water`, waterMask(imagery));
+		// Lights and water are soft: anisotropic filtering (Babylon's default 4) buys them nothing on a Pi.
+		material.emissiveTexture!.anisotropicFilteringLevel = material.metallicTexture.anisotropicFilteringLevel = 1;
 		material.useRoughnessFromMetallicTextureGreen = true;
 		material.useMetallnessFromMetallicTextureBlue = true;
 		material.ambientColor = Color3.White(); // take the sky's light, like the buildings and trees

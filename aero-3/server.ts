@@ -37,8 +37,13 @@ let wall: Wall = await Bun.file(WALL_FILE).json().catch(() => NO_WALL);
 // deploy/pi/health-check.sh writes the Pi's temperature and shed state here every few minutes.
 const THERMAL_FILE = Bun.env.AERO_THERMAL_STATE_PATH ?? '/run/aero/thermal.json';
 const startedAt = Date.now();
-// This device's LAN address, for the kiosk's admin QR (a phone cannot reach "localhost").
-const lan = Object.values(networkInterfaces()).flat().find((a) => a?.family === 'IPv4' && !a.internal)?.address ?? null;
+// This device's LAN address, for the kiosk's admin QR (a phone cannot reach "localhost"). Per
+// request: on a Pi the network can come up after the server.
+const lan = () => Object.values(networkInterfaces()).flat().find((a) => a?.family === 'IPv4' && !a.internal)?.address ?? null;
+// Bun bundles the page on its first request. The server asks for it at startup, so the first kiosk
+// load is warm, and /api/status says 503 until the page has built: a bundle that fails to build
+// fails the updater's probe and rolls back, instead of passing it with a dead page.
+let page: 'building' | 'ok' | 'failed' = 'building';
 // Only the data that is here: a { dir } route throws at startup on a missing folder, and a Pi
 // without a pack (or CI, where data/ is gitignored) must still answer /api/status.
 const DATA = { '/tiles/imagery/*': IMAGERY_DIR, '/tiles/terrain/*': TERRAIN_DIR, '/tiles/lights/*': LIGHTS_DIR, '/buildings/*': BUILDINGS_DIR, '/roads/*': ROADS_DIR, '/models/*': MODELS_DIR };
@@ -53,12 +58,19 @@ function authorised(req: Request) {
 const PORT = Number(Bun.env.PORT ?? 3300);
 const server = Bun.serve({
 	port: PORT,
-	development: DEV,
+	// No in-page hot swap: the page reloads whole every visit anyway, and a long-running --hot
+	// server's HMR graph broke on a newly added import from outside the app (Oct 6).
+	development: DEV ? { hmr: false } : false,
 	routes: {
 		'/': index,
 		'/admin': admin,
 		// The updater's health probe (deploy/aero-updater.sh) and health-check.sh read this.
-		'/api/status': () => Response.json({ ok: true, app: 'aero-3', uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version, lan, port: PORT, data: mounted.map(([route]) => route.slice(1, -2)) }),
+		'/api/status': () =>
+			Response.json(
+				{ ok: page === 'ok', app: 'aero-3', page, uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version, lan: lan(), port: PORT, data: mounted.map(([route]) => route.slice(1, -2)) },
+				// The side panes read it from the centre Pi for the admin QR.
+				{ status: page === 'ok' ? 200 : 503, headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' } }
+			),
 		// { action: 'ok' | 'shed', tempC, ... } from health-check.sh; 'ok' when there is no file (a Mac, a fresh boot).
 		'/api/thermal': async () => Response.json(await Bun.file(THERMAL_FILE).json().catch(() => ({ action: 'ok' })), { headers: { 'Cache-Control': 'no-store' } }),
 		'/api/wall': {
@@ -77,8 +89,9 @@ const server = Bun.serve({
 				} catch {}
 				if (!push) return new Response('expected { place, weather, clock }: a known place, a known regime, an hour 0-24, or null', { status: 400 });
 				wall = { ...push, version: wall.version + 1, applyAt: Math.ceil(Date.now() / 1000) + LEAD_SEC };
-				await Bun.write(`${WALL_FILE}.tmp`, JSON.stringify(wall));
-				await rename(`${WALL_FILE}.tmp`, WALL_FILE); // whole or not at all, across a power cut
+				const tmp = `${WALL_FILE}.${wall.version}.tmp`; // one per push: two overlapping pushes must not share it
+				await Bun.write(tmp, JSON.stringify(wall));
+				await rename(tmp, WALL_FILE); // whole or not at all, across a crash
 				return Response.json(wall);
 			}
 		},
@@ -86,4 +99,6 @@ const server = Bun.serve({
 	}
 });
 
-console.info(`aero-3 on ${server.url}`);
+fetch(server.url)
+	.then(async (r) => ((page = r.ok && (await r.text()).includes('<script') ? 'ok' : 'failed'), console.info(`aero-3 on ${server.url}, page ${page}`)))
+	.catch((e) => ((page = 'failed'), console.error('page failed to build', e)));

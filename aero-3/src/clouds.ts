@@ -127,12 +127,13 @@ export async function clouds(
 				const mie = Math.max(0, Vector3.Dot(view, toSun)) ** 6 * mieGain;
 				const sunSide = Math.max(0, Vector3.Dot(p.normal, toSun)) * (1 - dark) * 0.35;
 				const lit = p.shade * (0.7 + sunSide + mie * 1.5);
+				const alpha = p.alpha * Math.max(0, edge) * (1 - smoothstep(190_000, 300_000, far));
+				s.isVisible = alpha > 0.01; // faded out at the wrap edge or past 190 km: skip the draw
 				s.color!.set(
 					Math.min(1, (ambient.r + sunColor.r * lit) * p.shade + NIGHT_FLOOR.r + UNDERGLOW.r * dark),
 					Math.min(1, (ambient.g + sunColor.g * lit) * p.shade + NIGHT_FLOOR.g + UNDERGLOW.g * dark),
 					Math.min(1, (ambient.b + sunColor.b * lit) * p.shade + NIGHT_FLOOR.b + UNDERGLOW.b * dark),
-					// No aerial perspective on sprites, so fade the distant ones into the haze.
-					p.alpha * Math.max(0, edge) * (1 - smoothstep(190_000, 300_000, far))
+					alpha // no aerial perspective on sprites, so the distant ones fade into the haze
 				);
 			}
 			// Alpha blending wants back-to-front; the deck drifts slowly, so re-sort now and then.
