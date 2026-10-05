@@ -35,6 +35,7 @@ export function buildings(
 	const uvs: number[] = [];
 	const uvs2: number[] = []; // lightmap: v is height up the wall, 0 at the street
 	const indices: number[] = [];
+	const tops: [x: number, y: number, z: number, height: number][] = [];
 	const random = mulberry32(0xae3);
 
 	for (const { geometry, properties } of features) {
@@ -44,6 +45,7 @@ export function buildings(
 		const base = groundAt(...ring[0]!);
 		const top = base + properties.height;
 		const vTop = properties.height / FACADE_M;
+		tops.push([ring[0]![0], top, ring[0]![1], properties.height]);
 		// A whole-window shift per building, so neighbours don't light the same rooms.
 		const [u0, v0] = [Math.floor(random() * CELLS) / CELLS, Math.floor(random() * CELLS) / CELLS];
 
@@ -96,7 +98,7 @@ export function buildings(
 	// ponytail: earcut's roof winding isn't checked against Babylon's; both sides drawn. Cull once verified.
 	material.backFaceCulling = false;
 	mesh.material = material;
-	return material;
+	return { material, mesh, tops };
 }
 
 /**

@@ -11,7 +11,7 @@
  *   ?scale=1 (hardware scaling)  ?gpu=webgpu  ?hud=0  ?clouds=1 (cover, 0 = clear)
  *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=1 (VIIRS texture)
  */
-import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, Scene, Vector3, WebGPUEngine, type AbstractEngine, type Mesh } from '@babylonjs/core';
+import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { buildings } from './buildings.ts';
 import { clouds } from './clouds.ts';
@@ -69,13 +69,15 @@ camera.maxZ = 1_000_000;
 
 const world = await createWorld(scene, lat, lon);
 const [pinX, pinZ] = world.project(lon, lat);
-const [city, lamps, deck, sky] = await Promise.all([
+const [city, roads, deck, sky] = await Promise.all([
 	loadCity(),
-	loadLamps(),
+	fetchPack('roads'),
 	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + DECK_M, world.drop, Number(q.get('clouds') ?? 1)),
 	stars(scene, camera, lat, lon)
 ]);
-const glowing = [...world.materials, ...(city ? [city] : [])];
+// Street lamps along the road pack, one light per building, beacons on the towers (lights.ts).
+const lamps = roads && streetlights(roads, world.project, world.groundAt, scene, city?.tops);
+const glowing = [...world.materials, ...(city ? [city.material] : [])];
 
 // Babylon's bloom on everything emissive: lamps halo, windows and the city carpet glow.
 // Night only — by day it is switched off and costs nothing.
@@ -87,7 +89,7 @@ if (glow && lamps) {
 	glow.referenceMeshToUseItsOwnMaterial(lamps.mesh);
 }
 // Lit windows halo too: the glow pass draws the city through its own emissive shader.
-for (const mesh of city?.getBindedMeshes() ?? []) glow?.addIncludedOnlyMesh(mesh as Mesh);
+if (city) glow?.addIncludedOnlyMesh(city.mesh);
 
 const hud = q.get('hud') === '0' ? null : clockControls();
 if (q.has('debug')) Object.assign(globalThis, { scene, camera, world }); // for the console and frame-cost ablations
@@ -106,12 +108,9 @@ engine.runRenderLoop(() => {
 	// The twilight lift multiplies emissive too, so divide it back out: 0.12 means 0.12 at night.
 	const exposure = 1 + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;
-	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (lamps && m !== city ? carpet : 1)) / exposure;
-	if (lamps) {
-		lamps.mesh.setEnabled(dark > 0.01);
-		// Faint per lamp: 120k additive points sum to a white sheet at anything brighter.
-		lamps.material.alpha = Math.min(0.999, LAMP_ALPHA * lampGain * dark);
-	}
+	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (m !== city?.material ? carpet : 1)) / exposure;
+	// Faint per lamp: 120k additive points sum to a white sheet at anything brighter.
+	lamps?.update(camera.position, now, Math.min(0.999, LAMP_ALPHA * lampGain * dark));
 	if (glow) {
 		glow.isEnabled = dark > 0.02;
 		glow.intensity = GLOW * dark;
@@ -145,18 +144,14 @@ async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean): Pro
 
 /** The place's OSM footprints, if it has a pack (see buildings.ts). */
 async function loadCity() {
-	const res = await fetch(`/buildings/${placeId}.geojson`);
-	if (!res.ok) return null;
-	const { features } = await res.json();
-	return buildings(features, world.project, world.groundAt, scene);
+	const features = await fetchPack('buildings');
+	return features && buildings(features, world.project, world.groundAt, scene);
 }
 
-/** Street lamps along the place's road pack (see lights.ts), if it has one. */
-async function loadLamps() {
-	const res = await fetch(`/roads/${placeId}.geojson`);
-	if (!res.ok) return null;
-	const { features } = await res.json();
-	return streetlights(features, world.project, world.groundAt, scene);
+/** A place's GeoJSON pack's features, or null when the place has none. */
+async function fetchPack(kind: 'buildings' | 'roads') {
+	const res = await fetch(`/${kind}/${placeId}.geojson`);
+	return res.ok ? (await res.json()).features : null;
 }
 
 /** The time-of-day slider: drag to pin the sky to an hour, "Now" to follow the real sun again. */

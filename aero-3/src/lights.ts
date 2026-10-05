@@ -9,8 +9,16 @@
  * street reads as one string of light, not confetti. Babylon's GlowLayer
  * (main.ts) then blooms them, and the ground's VIIRS emissive stays underneath
  * as the faint carpet of everything the road pack leaves out.
+ *
+ * Every OSM building adds one light of its own on the roof — map data only,
+ * no noise.
+ *
+ * One small shader does what an unlit material cannot: each light dims with
+ * distance, fading out toward the horizon (no atmosphere touches unlit points,
+ * so far motorways otherwise blaze as bright as the core), and twinkles faintly
+ * at its own slow rate, the scintillation a city shows through 3 km of warm air. All of it runs off wall-clock seconds: panes agree.
  */
-import { Color3, Constants, Mesh, StandardMaterial, VertexData, type Scene } from '@babylonjs/core';
+import { Constants, Effect, Mesh, ShaderMaterial, VertexData, type Scene, type Vector3 } from '@babylonjs/core';
 
 type Road = { geometry: { coordinates: number[][] }; properties: { class: string } };
 
@@ -23,19 +31,49 @@ const CLASS: Record<string, [spacing: number, gain: number]> = {
 	tertiary: [45, 0.7],
 	residential: [55, 0.5]
 };
-// Sodium-majority, the way Indian and older US streets still mostly are.
+// Sodium-majority, the way Indian and older US streets still mostly are, with a few
+// signal reds and blue-white LEDs.
 const KINDS: [weight: number, colour: [number, number, number]][] = [
-	[0.6, [1, 0.62, 0.25]],
-	[0.25, [1, 0.85, 0.62]],
-	[0.15, [0.82, 0.88, 1]]
+	[0.65, [1, 0.62, 0.25]], // sodium
+	[0.15, [1, 0.85, 0.62]], // warm white
+	[0.1, [1, 1, 1]], // white
+	[0.05, [1, 0.12, 0.08]], // red
+	[0.05, [0.45, 0.6, 1]] // blue
 ];
 const LAMP_HEIGHT_M = 10;
+const FADE_M = 18_000; // a lamp this far away reads half as bright
+
+Effect.ShadersStore.lampsVertexShader = `
+precision highp float;
+attribute vec3 position;
+attribute vec4 color;
+uniform mat4 worldViewProjection;
+uniform vec3 eye;
+uniform float time;
+uniform float fade;
+varying vec3 vColor;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void main() {
+	gl_Position = worldViewProjection * vec4(position, 1.0);
+	gl_PointSize = 2.0;
+	float h = hash(floor(position.xz));
+	float far = 1.0 / (1.0 + pow(distance(position, eye) / fade, 2.0));
+	float twinkle = 0.92 + 0.08 * sin(time * (0.4 + 1.2 * h) + h * 6.2832);
+	vColor = color.rgb * far * twinkle;
+}`;
+Effect.ShadersStore.lampsFragmentShader = `
+precision highp float;
+uniform float gain;
+varying vec3 vColor;
+void main() { gl_FragColor = vec4(vColor * gain, 1.0); }`;
 
 export function streetlights(
 	roads: Road[],
 	project: (lon: number, lat: number) => [x: number, z: number],
 	groundAt: (x: number, z: number) => number,
-	scene: Scene
+	scene: Scene,
+	/** Building roofs: [x, roof y, z, height]; one light each. */
+	roofs: [number, number, number, number][] = []
 ) {
 	const positions: number[] = [];
 	const colors: number[] = [];
@@ -58,24 +96,41 @@ export function streetlights(
 		}
 	}
 
+	// One light per building, dealt from the same mix by hash.
+	for (const [x, y, z] of roofs) {
+		const [r, g, b] = kindFor([x, z]);
+		positions.push(x, y + 1, z);
+		colors.push(r * 0.6, g * 0.6, b * 0.6, 1);
+	}
+
+	// Additive points, the night gain folded into the colour.
+	const material = new ShaderMaterial('lamps', scene, 'lamps', {
+		attributes: ['position', 'color'],
+		uniforms: ['worldViewProjection', 'eye', 'time', 'fade', 'gain'],
+		needAlphaBlending: true
+	});
+	material.pointsCloud = true;
+	material.alphaMode = Constants.ALPHA_ONEONE;
+	material.disableDepthWrite = true;
+	material.backFaceCulling = false;
+	material.setFloat('fade', FADE_M);
+
 	const mesh = new Mesh('streetlights', scene);
 	Object.assign(new VertexData(), { positions, colors }).applyToMesh(mesh);
 	mesh.isPickable = false;
 	mesh.freezeWorldMatrix();
-
-	// Unlit, additive points: the vertex colour is the light. With lighting off, Babylon's
-	// standard shader multiplies vertex colour into the EMISSIVE term, so emissive is white.
-	const material = new StandardMaterial('streetlights', scene);
-	material.disableLighting = true;
-	material.emissiveColor = Color3.White();
-	material.diffuseColor = Color3.Black();
-	material.pointsCloud = true;
-	material.pointSize = 2;
-	material.alphaMode = Constants.ALPHA_ADD;
-	material.disableDepthWrite = true;
 	mesh.material = material;
-	mesh.hasVertexAlpha = false;
-	return { mesh, material, count: positions.length / 3 };
+
+	return {
+		mesh,
+		count: positions.length / 3,
+		update(eye: Vector3, nowMs: number, gain: number) {
+			material.setVector3('eye', eye);
+			material.setFloat('time', (nowMs / 1000) % 3600); // stay well inside float precision
+			material.setFloat('gain', gain);
+			mesh.setEnabled(gain > 0.002);
+		}
+	};
 }
 
 /** One lamp kind per road, from a hash of its first vertex: every pane deals the same. */

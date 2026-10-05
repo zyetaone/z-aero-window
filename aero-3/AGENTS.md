@@ -11,18 +11,19 @@ One reason to change per file:
 - `src/main.ts` — scene, light, camera orbiting the place's pin at 9 km on the wall clock (panes
   agree without talking), the time-of-day slider, the render loop.
 - `src/world.ts` — the ground. A 3×3 z10 detail patch (terrarium + z12 Sentinel-2, 3072 px: the
-  Pi's 4096 px texture limit is the ceiling) inside a 5×5 z8
-  ring (~750 km, past the horizon), both bent by Earth's curvature. Night is NASA's VIIRS radiance (GIBS,
-  capped at z8) through aero-2's luminance knee as a faint glow, scattered on the z12 grid into
-  seeded house-light specks where it is urban-bright; the lamp points carry the roads.
+  Pi's 4096 px texture limit is the ceiling) inside a 5×5 z8 ring (~750 km, past the horizon), both
+  bent by Earth's curvature. Night is NASA's VIIRS radiance (GIBS, capped at z8) through aero-2's
+  luminance knee as a faint glow. Map data only: no procedural noise in any texture.
 - `src/buildings.ts` — OSM footprints extruded at boot into one mesh with a procedural window
   facade: concrete and glass by day, lit rooms at night, plus a baked ambient-occlusion
   lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
-- `src/lights.ts` — streetlights as real points: a lamp every 32–55 m (by road class) along the
-  road pack (`../data/roads`, ~120k for Hyderabad), one additive point cloud, aero-1's per-road
-  colour deal, bloomed by Babylon's `GlowLayer` at night only, together with the buildings' lit windows. The VIIRS texture bakes its own balance (`?carpet=` scales it).
+- `src/lights.ts` — every light is a single point from map data: a lamp every 32–55 m along the
+  road pack (`../data/roads`) plus one on each OSM building's roof (~140k for Hyderabad), one
+  additive point cloud on a small shader that fades each light toward the horizon and twinkles it
+  faintly. Mix: sodium 65%, warm white 15%, white 10%, red 5%, blue 5%, dealt per road by hash.
+  Bloomed by Babylon's `GlowLayer` at night only, together with the buildings' lit windows.
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, cirrus; per-tier wrap so wind never blows the deck off the place.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
@@ -39,8 +40,8 @@ One reason to change per file:
 - **Point clouds built at the origin get frustum-culled** (bounding box inside the near plane):
   stars set `alwaysSelectAsActiveMesh`.
 - **A squashed sprite at a random angle reads as a flame.** Cloud cards stay near-upright.
-- **Unlit StandardMaterial puts vertex colour into the emissive term**: emissive white, diffuse
-  black, or the lamps render black.
+- **Fragment output is clamped to 1 before blending**: an additive shader that puts its gain in
+  alpha (`ALPHA_ADD`, src·α) can never exceed the gain. Fold the gain into the colour (`ALPHA_ONEONE`).
 - **GlowLayer re-renders whatever it includes**; including the atmosphere-plugin PBR ground blew
   the dusk sky white. It includes the lamp points only.
 - **120k additive points sum to a white sheet**: per-lamp alpha is ~0.2.
