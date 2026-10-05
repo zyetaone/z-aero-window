@@ -4,8 +4,10 @@ import { atSolarHour, siderealDeg, solarHour, sunAt } from './sun.ts';
 const MARCH_EQUINOX = Date.UTC(2026, 2, 20);
 const at = (hour: number, lon = 78.4) => atSolarHour(MARCH_EQUINOX, lon, hour);
 
-test('equator at solar noon on the equinox: sun overhead', () => {
-	expect(sunAt(at(12, 0), 0, 0).elevationDeg).toBeGreaterThan(88);
+test('equator on the equinox: the sun is overhead at apparent noon, ~7.5 min after mean noon', () => {
+	// The equation of time is about -7.5 min in late March: the real sun runs late.
+	expect(sunAt(at(12 + 7.5 / 60, 0), 0, 0).elevationDeg).toBeGreaterThan(89);
+	expect(sunAt(at(12, 0), 0, 0).elevationDeg).toBeLessThan(88.5);
 });
 
 test('morning sun is east, evening sun is west, midnight is below the horizon', () => {

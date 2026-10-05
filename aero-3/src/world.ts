@@ -8,8 +8,8 @@
  * world), so the two patches, the buildings and the pin share one projection.
  */
 import { Color3, MeshBuilder, PBRMaterial, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
+import { hash, RAD, smoothstep } from './math.ts';
 
-const RAD = Math.PI / 180;
 const TILE = 256;
 const EARTH_M = 6_371_000;
 
@@ -19,10 +19,6 @@ type Grid = { z: number; x0: number; y0: number; span: number };
 const mercX = (lon: number) => (lon + 180) / 360;
 const mercY = (lat: number) => (1 - Math.asinh(Math.tan(lat * RAD)) / Math.PI) / 2;
 
-export const smoothstep = (a: number, b: number, x: number) => {
-	const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-	return t * t * (3 - 2 * t);
-};
 
 export async function createWorld(scene: Scene, lat: number, lon: number) {
 	const tile10 = (z: number, m: number) => Math.floor(m * 2 ** z);
@@ -144,7 +140,10 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 	]);
 
 	const inNear = (mx: number, my: number) => nearEdge(mx, near.x0) && nearEdge(my, near.y0);
-	const heightAt = (mx: number, my: number) => (inNear(mx, my) ? nearHeights : farHeights)(mx, my);
+	// Inclusive of the border, so far-ring vertices on the near patch's edge take the near
+	// heights and the two meshes meet instead of stepping z10 against z8.
+	const onNear = (mx: number, my: number) => [mx * 2 ** 10 - near.x0, my * 2 ** 10 - near.y0].every((t) => t >= -1e-3 && t <= near.span + 1e-3);
+	const heightAt = (mx: number, my: number) => (onNear(mx, my) ? nearHeights : farHeights)(mx, my);
 	// Read before nightGround rewrites the canvases in place.
 	const sites = lightSites(farLights, far, inNear, (mx, my) => {
 		const [x, z] = [(mx - mx0) * mPerMerc, -(my - my0) * mPerMerc];
@@ -157,7 +156,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		patch('near', near, nearHeights, nearImagery, nearLights, 256),
 		// 160 subdivisions over 20 z10 tiles puts a vertex line on every z10 tile
 		// edge, so only vertices strictly inside the near patch sink under it.
-		patch('far', far, farHeights, farImagery, farLights, 160, inNear)
+		patch('far', far, heightAt, farImagery, farLights, 160, inNear)
 	]);
 
 	return {
@@ -199,6 +198,10 @@ function nightGround(lights: OffscreenCanvas, imagery: OffscreenCanvas) {
 	const [d, ground] = [image.data, imagery.getContext('2d')!.getImageData(0, 0, imagery.width, imagery.height).data];
 	for (let i = 0; i < d.length; i += 4) {
 		const t = Math.max(d[i]!, d[i + 1]!, d[i + 2]!) / 255;
+		if (t < 0.3) {
+			d[i] = d[i + 1] = d[i + 2] = 0; // most of the map is dark: skip the maths
+			continue;
+		}
 		const k = smoothstep(0.35, 0.75, t) * (0.25 + 0.6 * t * t) * GLOW;
 		const lit = smoothstep(0.3, 0.8, t) * REVEAL;
 		d[i] = 255 * k + ground[i]! * lit;
@@ -252,14 +255,4 @@ function crop(imagery: OffscreenCanvas, grid: Grid, pinMx: number, pinMy: number
 		const i = (py * half * 2 + px) * 4;
 		return [data[i]!, data[i + 1]!, data[i + 2]!];
 	};
-}
-
-/** Integer hash to [0, 1) (lowbias32, public domain): seeded noise without a PRNG's state. */
-export function hash(n: number) {
-	n ^= n >>> 16;
-	n = Math.imul(n, 0x7feb352d);
-	n ^= n >>> 15;
-	n = Math.imul(n, 0x846ca68b);
-	n ^= n >>> 16;
-	return (n >>> 0) / 4294967296;
 }

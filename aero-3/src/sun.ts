@@ -5,9 +5,11 @@
  * longitude, so no time zone table is needed and three panes computing from the
  * same wall second agree. A pinned hour (the `?clock=` param, the slider) is
  * turned into a moment with `atSolarHour`, so sun and stars move together.
- * Accurate to about a degree, which is far below what the sky shows.
+ * Apparent solar time: the equation of time (the sun runs up to ~16 minutes
+ * ahead of or behind the mean clock through the year) is applied, so the sun
+ * stands where it really does; the HUD's hour stays mean solar time.
  */
-const RAD = Math.PI / 180;
+import { RAD } from './math.ts';
 const DAY_MS = 86_400_000;
 
 export type Sun = { x: number; y: number; z: number; elevationDeg: number };
@@ -17,7 +19,10 @@ export function sunAt(ms: number, latDeg: number, lonDeg: number): Sun {
 	const date = new Date(ms);
 	const dayOfYear = (ms - Date.UTC(date.getUTCFullYear(), 0, 0)) / DAY_MS;
 	const declination = -23.44 * Math.cos(((2 * Math.PI) / 365) * (dayOfYear + 10)) * RAD;
-	const hourAngle = (solarHour(ms, lonDeg) - 12) * 15 * RAD;
+	// Equation of time in minutes (Spencer's three-term fit, within ~30 s).
+	const b = ((2 * Math.PI) / 365) * (dayOfYear - 81);
+	const eotMin = 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
+	const hourAngle = (solarHour(ms, lonDeg) + eotMin / 60 - 12) * 15 * RAD;
 	const lat = latDeg * RAD;
 
 	const elevation = Math.asin(

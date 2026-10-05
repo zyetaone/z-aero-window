@@ -5,11 +5,11 @@
  * than punching dark dots in it, and the terrain's depth hides those below the
  * horizon.
  */
+import { RAD } from './math.ts';
 import { Color4, Constants, PointsCloudSystem, type Camera, type Scene } from '@babylonjs/core';
 import { yaleCatalog } from '../../aero-2/src/lib/display/world/yale-stars.ts';
 import { siderealDeg } from './sun.ts';
 
-const RAD = Math.PI / 180;
 const SKY_M = 800_000; // inside the camera's 1000 km far plane, past the horizon
 
 export async function stars(scene: Scene, camera: Camera, latDeg: number, lonDeg: number) {

@@ -18,8 +18,7 @@
  * after the atmosphere composites the sky, so the sky cannot paint over it.
  */
 import { Color3, Color4, Sprite, SpriteManager, Vector3, type Camera, type DirectionalLight, type Scene } from '@babylonjs/core';
-import { mulberry32 } from './buildings.ts';
-import { smoothstep } from './world.ts';
+import { mulberry32, smoothstep } from './math.ts';
 import cloud from './assets/cloud.webp';
 import cloudDark from './assets/cloud-dark.webp';
 import cloudSmoke from './assets/cloud-smoke.webp';

@@ -16,6 +16,7 @@
  */
 import earcut from 'earcut';
 import { Color3, DynamicTexture, Mesh, PBRMaterial, Texture, VertexData, type Scene } from '@babylonjs/core';
+import { mulberry32 } from './math.ts';
 
 type Footprint = { geometry: { coordinates: number[][][] }; properties: { height: number } };
 
@@ -148,14 +149,4 @@ function occlusion(scene: Scene) {
 	tex.coordinatesIndex = 1;
 	tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE;
 	return tex;
-}
-
-/** Seeded PRNG (Tommy Ettinger's mulberry32, public domain): every pane builds the same city. */
-export function mulberry32(seed: number) {
-	return () => {
-		seed = (seed + 0x6d2b79f5) | 0;
-		let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
 }

@@ -32,9 +32,14 @@ One reason to change per file:
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, cirrus; per-tier wrap so wind never blows the deck off the place.
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
-- `src/sun.ts` — sun position and sidereal angle from UTC + longitude (no time zones). Tested.
+- `src/sun.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
+  (no time zones). Tested.
+- `src/math.ts` — `RAD`, `smoothstep`, and the two seeded noises (`hash`, `mulberry32`) every module shares.
 
 ## Traps (each cost a debugging pass)
+
+- **`clearCachedVertexData` leaves nothing to rebuild a lost GL context from**, so a context loss
+  reloads the page (main.ts), and so does a failed boot after 10 s: a kiosk has no one to press F5.
 
 - **Units are metres.** Babylon's atmosphere reads scene units as metres (`scaleToRef(0.001)` in
   `atmospherePerCameraVariables.js`). In km it put the horizon at eye level (a dark 2° band) and

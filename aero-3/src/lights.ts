@@ -137,7 +137,7 @@ export function streetlights(
 		count: positions.length / 3,
 		update(eye: Vector3, nowMs: number, gain: number) {
 			material.setVector3('eye', eye);
-			material.setFloat('time', (nowMs / 1000) % 3600); // stay well inside float precision
+			material.setFloat('time', (nowMs / 1000) % 86_400); // a day keeps float32 to ~8 ms; one wrap at UTC midnight
 			material.setFloat('gain', gain);
 			mesh.setEnabled(gain > 0.002);
 		}

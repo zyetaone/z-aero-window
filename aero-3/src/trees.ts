@@ -5,7 +5,7 @@
  * hashes the pixel, so every pane grows the same forest.
  */
 import { Color3, Matrix, MeshBuilder, PBRMaterial, Quaternion, Vector3, type Scene } from '@babylonjs/core';
-import { hash } from './world.ts';
+import { hash } from './math.ts';
 
 const RADIUS_M = 5_000; // trees beyond this are under a pixel from the window
 const STEP_M = 37; // one Sentinel-2 z12 pixel
@@ -22,23 +22,30 @@ export function trees(
 	const [s, q, at] = [new Vector3(), Quaternion.Identity(), new Vector3()];
 	const m = new Matrix();
 
-	for (let dz = -RADIUS_M; dz < RADIUS_M && matrices.length / 16 < MAX_TREES; dz += STEP_M) {
+	// Green pixels first, then a hashed keep-rate that fits the budget evenly: filling row by
+	// row until MAX_TREES would give the south of the circle every tree and the north none.
+	const green: [number, number][] = [];
+	for (let dz = -RADIUS_M; dz < RADIUS_M; dz += STEP_M) {
 		for (let dx = -RADIUS_M; dx < RADIUS_M; dx += STEP_M) {
 			if (dx * dx + dz * dz > RADIUS_M * RADIUS_M) continue;
 			const [x, z] = [center[0] + dx, center[1] + dz];
 			const rgb = imagery(x, z);
-			if (!rgb || !vegetation(...rgb)) continue;
-			const seed = Math.floor(x / STEP_M) * 73_856_093 ^ Math.floor(z / STEP_M) * 19_349_663;
-			const n = 1 + Math.floor(hash(seed) * 4); // a cluster of 1-4
-			for (let k = 0; k < n; k++) {
-				const [tx, tz] = [x + hash(seed + k * 3 + 1) * STEP_M, z + hash(seed + k * 3 + 2) * STEP_M];
-				const h = 8 + hash(seed + k * 3 + 3) * 10;
-				s.set(h * 0.45, h, h * 0.45);
-				Matrix.ComposeToRef(s, q, at.set(tx, groundAt(tx, tz) + h / 2, tz), m);
-				matrices.push(...m.asArray());
-				const shade = 0.75 + hash(seed + k) * 0.35;
-				colors.push(0.16 * shade, 0.27 * shade, 0.12 * shade, 1);
-			}
+			if (rgb && vegetation(...rgb)) green.push([x, z]);
+		}
+	}
+	const keep = Math.min(1, MAX_TREES / (green.length * 2.5)); // 2.5 trees per cluster on average
+	for (const [x, z] of green) {
+		const seed = Math.floor(x / STEP_M) * 73_856_093 ^ Math.floor(z / STEP_M) * 19_349_663;
+		if (hash(seed + 0x7ee) > keep) continue;
+		const n = 1 + Math.floor(hash(seed) * 4); // a cluster of 1-4
+		for (let k = 0; k < n; k++) {
+			const [tx, tz] = [x + hash(seed + k * 3 + 1) * STEP_M, z + hash(seed + k * 3 + 2) * STEP_M];
+			const h = 8 + hash(seed + k * 3 + 3) * 10;
+			s.set(h * 0.45, h, h * 0.45);
+			Matrix.ComposeToRef(s, q, at.set(tx, groundAt(tx, tz) + h / 2, tz), m);
+			matrices.push(...m.asArray());
+			const shade = 0.75 + hash(seed + k) * 0.35;
+			colors.push(0.16 * shade, 0.27 * shade, 0.12 * shade, 1);
 		}
 	}
 

@@ -21,7 +21,8 @@ const ROADS_DIR = Bun.env.ROADS_DIR ?? '../data/roads';
 
 const server = Bun.serve({
 	port: Number(Bun.env.PORT ?? 3300),
-	development: Bun.env.NODE_ENV !== 'production',
+	// A compiled binary runs from Bun's embedded filesystem: never dev mode on a Pi, NODE_ENV or not.
+	development: Bun.env.NODE_ENV !== 'production' && !import.meta.path.startsWith('/$bunfs'),
 	routes: {
 		'/': index,
 		'/tiles/imagery/*': { dir: IMAGERY_DIR },

@@ -19,7 +19,8 @@ import { streetlights } from './lights.ts';
 import { trees } from './trees.ts';
 import { stars } from './stars.ts';
 import { atSolarHour, solarHour, sunAt } from './sun.ts';
-import { createWorld, smoothstep } from './world.ts';
+import { createWorld } from './world.ts';
+import { RAD, smoothstep } from './math.ts';
 
 // id → [lat, lon, ground m]. Same coordinates as aero-2's catalog.
 const PLACES: Record<string, [number, number, number]> = {
@@ -34,7 +35,6 @@ const PLACES: Record<string, [number, number, number]> = {
 	himalayas: [27.9881, 86.925, 5000]
 };
 
-const RAD = Math.PI / 180;
 const CRUISE_M = 3500; // above ground
 const DECK_M = 1800; // cloud base above ground: the window looks down onto it
 const SPEED_M_S = 230; // ~450 kt
@@ -54,6 +54,10 @@ let pinnedHour = q.has('clock') ? Number(q.get('clock')) : null;
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const engine = await createEngine(canvas, q.get('gpu') === 'webgpu');
+// A kiosk has no one to press reload. A failed boot (tiles not served yet, a truncated pack)
+// retries, and a lost GL context reloads: clearCachedVertexData below leaves nothing to rebuild from.
+addEventListener('unhandledrejection', () => setTimeout(() => location.reload(), 10_000), { once: true });
+engine.onContextLostObservable.add(() => location.reload());
 engine.setHardwareScalingLevel(Number(q.get('scale') ?? 1));
 
 const scene = new Scene(engine);
@@ -113,7 +117,7 @@ engine.runRenderLoop(() => {
 	const exposure = 1 + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;
 	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (m !== city?.material ? carpet : 1)) / exposure;
-	// Faint per lamp: 120k additive points sum to a white sheet at anything brighter.
+	// Faint per lamp: ~200k additive points sum to a white sheet at anything brighter.
 	lamps?.update(camera.position, now, Math.min(0.999, LAMP_ALPHA * lampGain * dark));
 	if (glow) {
 		glow.isEnabled = dark > 0.02;
