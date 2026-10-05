@@ -106,6 +106,11 @@ export const MAPBOX_SATELLITE_URL =
  *
  * `fetch()` sends no User-Agent, and Overpass answers a bare request with 406,
  * which reads as throttling and is not. Send one.
+ *
+ * This list is mirrored (but not identical) in aero-2's
+ * tools/fetch-buildings.py ENDPOINTS; the divergence — which mirrors each side
+ * dropped, and how failure is classified — is documented at the `endpoints`
+ * list in tools/tile-packager/src/roads.ts. Read it before editing this one.
  */
 export const OVERPASS_MIRRORS = [
   "https://overpass-api.de/api/interpreter",

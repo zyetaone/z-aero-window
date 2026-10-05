@@ -104,6 +104,18 @@ export const ROADS_CONFIG = {
 		`[out:json][timeout:180];`
 		+ `(way["highway"~"^(${classes.join('|')})(_link)?$"](around:${radius},${lat},${lon}););`
 		+ `out geom tags;`,
+	/**
+	 * Mirrors, tried in order. This list is MIRRORED — but not identical — in
+	 * aero-2's tools/fetch-buildings.py (ENDPOINTS), and the two have
+	 * deliberately diverged. Read that list's comment before editing either:
+	 * fetch-buildings measured `overpass.private.coffee` at a 504 after 79 s
+	 * (flaky) and dropped it for maps.mail.ru, while this list still carries
+	 * it — not re-measured for the roads workload. The failure policy diverged
+	 * too: fetch-buildings raises on 400/413/422 (a malformed query no mirror
+	 * can fix), while fetchRoadGroupFeatures treats any `!res.ok` as "try the
+	 * next mirror", which turns a malformed query into a wasted 3 x N cycle
+	 * before the real message surfaces.
+	 */
 	endpoints: [
 		'https://overpass-api.de/api/interpreter',
 		'https://overpass.kumi.systems/api/interpreter',
