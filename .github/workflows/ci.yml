@@ -287,6 +287,44 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+  aero-3:
+    name: aero-3 — Type-check, Test & Serve
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: aero-3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bun run check
+
+      # Pure-maths tests only (sun, flight, rotation, wall schema): nothing here reads data/,
+      # which is gitignored and absent on the runner.
+      - name: Test
+        run: bun test
+
+      # The updater's path on a Pi: `bun run build` then `bun run serve`, probed at /api/status.
+      # No tile packs on the runner, so this proves the server starts without them.
+      - name: Build and serve
+        run: |
+          bun run build
+          PORT=3300 bun run serve &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3300/api/status && break; sleep 1; done
+          curl -sf http://127.0.0.1:3300/api/status | grep -q '"app":"aero-3"'
+          curl -sf -o /dev/null http://127.0.0.1:3300/
+          curl -sf -o /dev/null http://127.0.0.1:3300/admin
+
   # ── Release promotion ────────────────────────────────────────────────────
   # The Pi fleet's daily updater tracks the `release` branch, NOT main.
   # This job is the deploy gate: only a green main run moves `release`.
@@ -296,7 +334,8 @@ jobs:
   # is correct here: the fleet consumes it with `git reset --hard`, so
   # non-fast-forward moves (e.g. after a main history rewrite) are absorbed.
   #
-  # Gated on BOTH apps, not just v1.
+  # Gated on every app, not just v1 (aero-3 added 2026-10-05: a Pi with AERO_APP_SUBDIR=aero-3
+  # builds it from `release` just as aero-2 Pis do).
   #
   # This used to need only `build-and-check`, on the reasoning that aero-2 was
   # pre-ship and a red rewrite must not hold back a green v1 deploy. That was
@@ -308,7 +347,7 @@ jobs:
   # never reaches a Pi.
   promote:
     name: Promote to release
-    needs: [build-and-check, aero-2]
+    needs: [build-and-check, aero-2, aero-3]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # A release upload (~95 MB) plus one ref move. Anything slower is a

@@ -89,12 +89,20 @@ while [[ $# -gt 0 ]]; do
 		--branch) REPO_BRANCH="$2"; shift 2 ;;
 		--units-only) UNITS_ONLY=true; shift ;;
 		--app)    AERO_APP_SUBDIR="$2"; shift 2 ;;
+		--wall)   AERO_WALL_URL="$2"; shift 2 ;;
 		--help|-h)
-			echo "Usage: install.sh [--role left|center|right|solo] [--group <id>] [--branch <git-branch>] [--app aero-1|aero-2] [--units-only]"
+			echo "Usage: install.sh [--role left|center|right|solo] [--group <id>] [--branch <git-branch>] [--app aero-1|aero-2|aero-3] [--wall http://<centre-pi>:3000] [--units-only]"
 			exit 0 ;;
 		*)  echo "Unknown argument: $1" >&2; exit 1 ;;
 	esac
 done
+
+# aero-3's wall: every pane follows the operator pushes held by one Pi (the centre). It lands in the
+# kiosk's Chromium command line, so only a bare http(s)://host[:port] gets through.
+if [[ -n "${AERO_WALL_URL:-}" && ! "${AERO_WALL_URL}" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
+	echo "--wall must be http(s)://host[:port], got: ${AERO_WALL_URL}" >&2
+	exit 1
+fi
 
 if [[ $EUID -ne 0 ]]; then
 	echo "This script must be run as root (sudo)." >&2
@@ -108,7 +116,7 @@ fi
 # meant to run aero-2. Precedence: --app / AERO_APP_SUBDIR, then whatever this
 # Pi's config.env already says (so --units-only never flips a fielded Pi), then
 # aero-1 for a fresh install — the app the fielded wall runs, free and offline
-# since the open-data pack (2026-09-28). aero-2 stays the explicit cutover:
+# since the open-data pack (2026-09-28). aero-2 and aero-3 stay explicit cutovers:
 # `--app aero-2`, once its first Pi 5 frame has been measured. The value is written into config.env by step 5
 # and read by aero-updater.sh on every run; it is deliberately NOT in the
 # additive block below, so an OTA run cannot cut a fielded aero-1 Pi over.
@@ -284,12 +292,18 @@ EXISTING_ADMIN_TOKEN=""
 EXISTING_ION_TOKEN=""
 EXISTING_FLEET_TOKEN=""
 EXISTING_WIFI_RESET_TOKEN=""
+EXISTING_WALL_URL=""
 if [[ -r /etc/aero/config.env ]]; then
 	EXISTING_ADMIN_URL="$(command grep -oP '^AERO_ADMIN_URL=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 	EXISTING_ADMIN_TOKEN="$(command grep -oP '^AERO_ADMIN_TOKEN=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 	EXISTING_ION_TOKEN="$(command grep -oP '^CESIUM_ION_TOKEN=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 	EXISTING_FLEET_TOKEN="$(command grep -oP '^AERO_FLEET_TOKEN=\K.*' /etc/aero/config.env 2>/dev/null || true)"
 	EXISTING_WIFI_RESET_TOKEN="$(command grep -oP '^AERO_WIFI_RESET_TOKEN=\K.*' /etc/aero/config.env 2>/dev/null || true)"
+	EXISTING_WALL_URL="$(command grep -oP '^AERO_WALL_URL=\K.*' /etc/aero/config.env 2>/dev/null || true)"
+fi
+# An explicit --wall is a deliberate re-aim, so it beats the stored one (unlike the env-only keys above).
+if [[ -n "${AERO_WALL_URL:-}" ]]; then
+	EXISTING_WALL_URL="${AERO_WALL_URL}"
 fi
 
 # Central heartbeat collector, e.g.
@@ -408,6 +422,7 @@ AERO_WIFI_RESET_TOKEN=${EXISTING_WIFI_RESET_TOKEN}
 AERO_BUN_BIN=${BUN_BIN}
 AERO_BRANCH=release
 AERO_APP_SUBDIR=${AERO_APP_SUBDIR}
+AERO_WALL_URL=${EXISTING_WALL_URL}
 TILE_DIR=${TILE_DIR_VALUE}
 CESIUM_ION_TOKEN=${EXISTING_ION_TOKEN}
 # Client-side base for the packaged tile cache. Vite inlines VITE_* at BUILD
@@ -765,4 +780,4 @@ echo "Logs (app):  journalctl -u aero-app -f"
 echo "Logs (X):    journalctl -u aero-kiosk -f"
 echo ""
 echo "Role:        ${AERO_ROLE}   Group: ${AERO_GROUP}"
-echo "URL:         http://localhost:3000/?role=${AERO_ROLE}&group=${AERO_GROUP}"
+echo "URL:         http://localhost:3000/?role=${AERO_ROLE}&group=${AERO_GROUP}&wall=${EXISTING_WALL_URL}"

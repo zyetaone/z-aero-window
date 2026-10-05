@@ -38,6 +38,8 @@ ExecStartPre=/usr/bin/xset -display :0 s off -dpms s noblank
 #   --incognito                 no user profile bleed across updates
 #   --autoplay-policy=no-user-gesture-required  for future video/audio
 #   --noerrdialogs / --disable-infobars / --hide-scrollbars  hide all UI
+#   &wall=                      aero-3 only: whose operator pushes to follow (install.sh --wall);
+#                               empty, and ignored by aero-1/aero-2, everywhere else
 ExecStart=/usr/bin/chromium \
 	--kiosk \
 	--use-gl=angle \
@@ -57,7 +59,7 @@ ExecStart=/usr/bin/chromium \
 	--disable-session-crashed-bubble \
 	--disable-features=TranslateUI \
 	--check-for-update-interval=31536000 \
-	--app=http://localhost:3000/?role=${AERO_ROLE}&group=${AERO_GROUP}
+	--app=http://localhost:3000/?role=${AERO_ROLE}&group=${AERO_GROUP}&wall=${AERO_WALL_URL}
 
 Restart=always
 RestartSec=10
