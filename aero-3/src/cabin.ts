@@ -76,7 +76,7 @@ export function cabinDrone(volume = 0.6) {
 export function adminQr(wallOrigin: string) {
 	const HOLD_MS = 15_000;
 	const [hold, qr] = [document.querySelector<HTMLElement>('#hold')!, document.querySelector<HTMLElement>('#qr')!];
-	let [started, timer] = [0, 0];
+	let [started, timer, x0, y0] = [0, 0, 0, 0];
 	const stop = () => {
 		cancelAnimationFrame(timer);
 		hold.hidden = true;
@@ -95,13 +95,16 @@ export function adminQr(wallOrigin: string) {
 		qr.hidden = false;
 		setTimeout(() => (qr.hidden = true), 60_000);
 	}
-	addEventListener('pointerdown', (e) => {
+	addEventListener('pointerdown', (e: PointerEvent) => {
 		if (!qr.hidden) return void (qr.hidden = true);
 		if (e.target instanceof Element && e.target.closest('#hud')) return;
 		started = performance.now();
+		[x0, y0] = [e.clientX, e.clientY];
 		hold.hidden = false;
 		timer = requestAnimationFrame(ring);
 	});
+	// A drag is looking around, not a hold.
+	addEventListener('pointermove', (e: PointerEvent) => !hold.hidden && Math.hypot(e.clientX - x0, e.clientY - y0) > 12 && stop());
 	for (const end of ['pointerup', 'pointercancel', 'pointerleave'] as const) addEventListener(end, stop);
 }
 
