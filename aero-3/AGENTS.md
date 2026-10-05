@@ -39,10 +39,11 @@ One reason to change per file:
   the mountains). Ground textures are map data only; the haze dome below is the one place noise
   breaks a map up. Textures upload from JPEG blobs, so
   no CPU canvas outlives boot; `scene.clearCachedVertexData()` drops the mesh copies after build.
-- `src/buildings.ts` — OSM footprints extruded at boot into two meshes: painted plaster with a
-  procedural window facade (lit rooms at night), and towers 45 m and up in glass curtain wall
-  (blue, teal, silver, Gulf gold; office floors lit in runs at night). Roofs take the satellite
-  pixel under them. Both carry a baked ambient-occlusion
+- `src/buildings.ts` — OSM footprints extruded at boot into one white mesh (an architect's model:
+  painted facades, window grids and glass tints aliased into dark specks from cruise height),
+  a shade off white per building, roofs a touch darker; rooms lit in runs at night from one
+  emissive texture. Lit-window points on buildings 12 m and up, and one house light on 60% of the
+  rest (villa districts like the Palm's fronds were dark). It carries a baked ambient-occlusion
   lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
@@ -149,7 +150,7 @@ finds at startup are served, the rest 404, so a Pi without a pack still boots. M
 Each phase is small and lands with screenshots, `bun test`, and `bun run smoke`. Plain TS over
 Svelte; copy aero-2's pure modules where they exist, rewrite its components.
 
-1. **Window** — done: flight, day character, blind, rim, rain, glass towers, map roofs.
+1. **Window** — done: flight, day character, blind, rim, rain, white buildings, house lights.
 2. **Wall** — done: pane roles, the operator push, `/admin`, error-reload budget.
 3. **Cabin** — done: the wing, the cabin drone, the moon. Left: live weather (Open-Meteo through
    the server, applied per visit), only if the fleet has internet.

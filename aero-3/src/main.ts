@@ -259,7 +259,7 @@ async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean): Pro
 /** The place's OSM footprints, if it has a pack (see buildings.ts). */
 async function loadCity() {
 	const features = await fetchPack('buildings');
-	return features && buildings(features, world.project, world.groundAt, scene, world.imagery);
+	return features && buildings(features, world.project, world.groundAt, scene);
 }
 
 /** A place's GeoJSON pack's features, or null when the place has none. */
