@@ -14,6 +14,8 @@ import index from './index.html';
 const IMAGERY_DIR = Bun.env.IMAGERY_DIR ?? '../data/tiles/sentinel2';
 const TERRAIN_DIR = Bun.env.TERRAIN_DIR ?? '../aero-2/data/tiles/terrarium';
 const LIGHTS_DIR = Bun.env.LIGHTS_DIR ?? '../aero-2/data/tiles/viirs';
+// Written by `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
+const BUILDINGS_DIR = Bun.env.BUILDINGS_DIR ?? './data/buildings';
 
 const server = Bun.serve({
 	port: Number(Bun.env.PORT ?? 3300),
@@ -22,7 +24,8 @@ const server = Bun.serve({
 		'/': index,
 		'/tiles/imagery/*': { dir: IMAGERY_DIR },
 		'/tiles/terrain/*': { dir: TERRAIN_DIR },
-		'/tiles/lights/*': { dir: LIGHTS_DIR }
+		'/tiles/lights/*': { dir: LIGHTS_DIR },
+		'/buildings/*': { dir: BUILDINGS_DIR }
 	}
 });
 

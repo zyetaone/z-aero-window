@@ -27,6 +27,7 @@ import {
 	type AbstractEngine
 } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
+import { buildings } from './buildings.ts';
 import { sunAt } from './sun.ts';
 
 // id → [lat, lon, ground m]. Same coordinates as aero-2's catalog; only cities
@@ -51,7 +52,7 @@ const RADIUS = 2; // tiles each side of the centre tile: a 5×5 patch
 const SPAN = RADIUS * 2 + 1;
 const CRUISE_KM = 3.5; // above ground
 const SPEED_KM_S = 0.23; // ~450 kt
-const ORBIT_KM = 28;
+const ORBIT_KM = 9;
 
 const smoothstep = (a: number, b: number, x: number) => {
 	const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -59,7 +60,8 @@ const smoothstep = (a: number, b: number, x: number) => {
 };
 
 const q = new URLSearchParams(location.search);
-const [lat, lon, groundM] = PLACES[q.get('place') ?? ''] ?? PLACES.hyderabad!;
+const placeId = q.get('place') && q.get('place')! in PLACES ? q.get('place')! : 'hyderabad';
+const [lat, lon, groundM] = PLACES[placeId]!;
 const clock = q.has('clock') ? Number(q.get('clock')) : undefined;
 const paneYaw = Number(q.get('yaw') ?? 0) * RAD;
 const lampGain = Number(q.get('lamps') ?? 1);
@@ -94,8 +96,10 @@ const [heights, imagery, lights] = await Promise.all([
 	mosaic('lights', 'png', IMAGERY_Z, [8, IMAGERY_Z], '#000').then((c) => texture('lights', kneeLights(c)))
 ]);
 const groundMaterial = buildGround(heights, imagery, lights);
+const cityMaterial = await loadCity();
 
 const altitudeKm = groundM / 1000 + CRUISE_KM;
+const [pinX, pinZ] = project(lon, lat);
 const hud = q.get('hud') === '0' ? null : document.querySelector('output');
 let hudAt = 0;
 
@@ -106,13 +110,14 @@ engine.runRenderLoop(() => {
 	// Lamps come on through civil twilight, as aero-2's nightAmount does.
 	const dark = 1 - smoothstep(-8, 2, s.elevationDeg);
 	groundMaterial.emissiveIntensity = lampGain * dark;
+	if (cityMaterial) cityMaterial.emissiveIntensity = lampGain * dark;
 	// The eye adapts: lift the sky through twilight so the afterglow reads instead of going black.
 	if (atmosphere) atmosphere.exposure = 1 + twilightLift * dark;
 
 	// Position from the wall clock alone, so three panes agree without talking.
 	const theta = ((now / 1000) * SPEED_KM_S) / ORBIT_KM;
-	camera.position.set(ORBIT_KM * Math.cos(theta), altitudeKm, ORBIT_KM * Math.sin(theta));
-	// Counter-clockwise orbit: the left window faces the centre, the city.
+	camera.position.set(pinX + ORBIT_KM * Math.cos(theta), altitudeKm, pinZ + ORBIT_KM * Math.sin(theta));
+	// Counter-clockwise orbit around the place's pin: the left window faces the city.
 	camera.rotation.set(12 * RAD, Math.atan2(-Math.cos(theta), -Math.sin(theta)) + paneYaw, 0);
 
 	scene.render();
@@ -211,6 +216,32 @@ function texture(name: string, canvas: OffscreenCanvas) {
 	tex.getContext().drawImage(canvas, 0, 0);
 	tex.update();
 	return tex;
+}
+
+/** Lon/lat to scene km, on the same Mercator grid the ground patch is cut from. */
+function project(lonDeg: number, latDeg: number): [x: number, z: number] {
+	const tx = ((lonDeg + 180) / 360) * n - (cx - RADIUS);
+	const ty = ((1 - Math.asinh(Math.tan(latDeg * RAD)) / Math.PI) / 2) * n - (cy - RADIUS);
+	return [(tx / SPAN - 0.5) * patchKm, (0.5 - ty / SPAN) * patchKm];
+}
+
+/** The city's OSM footprints, if this place has a pack. Window glow comes up with the lamps. */
+async function loadCity() {
+	const res = await fetch(`/buildings/${placeId}.geojson`);
+	if (!res.ok) return null;
+	const { features } = await res.json();
+	const mesh = buildings(features, project, (x, z) => heights(x / patchKm + 0.5, 0.5 - z / patchKm), scene);
+	const material = new PBRMaterial('buildings', scene);
+	material.albedoColor = new Color3(0.62, 0.58, 0.52);
+	// Dark silhouettes with a faint window warmth; brighter reads as a flat tan blob over the lamps.
+	material.emissiveColor = new Color3(0.07, 0.045, 0.02);
+	material.metallic = 0;
+	material.roughness = 0.9;
+	// ponytail: earcut's roof winding isn't checked against Babylon's; both sides drawn. Cull once verified.
+	material.backFaceCulling = false;
+	mesh.material = material;
+	mesh.freezeWorldMatrix();
+	return material;
 }
 
 function buildGround(heightAt: (u: number, v: number) => number, imagery: DynamicTexture, lights: DynamicTexture) {

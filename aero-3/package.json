@@ -4,11 +4,13 @@
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^7"
+    "@types/earcut": "^3.0.0",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "@babylonjs/addons": "9.29.0",
-    "@babylonjs/core": "9.29.0"
+    "@babylonjs/core": "9.29.0",
+    "earcut": "^3.2.4"
   },
   "scripts": {
     "dev": "bun --hot server.ts",
