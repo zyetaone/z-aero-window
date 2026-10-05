@@ -346,6 +346,7 @@ describe('fetch-buildings.py', () => {
 		const liveUrl = `http://127.0.0.1:${(live.address() as { port: number }).port}/api/interpreter`;
 
 		try {
+			const started = Date.now();
 			const r = await execTool(
 				[
 					'testville',
@@ -363,6 +364,25 @@ describe('fetch-buildings.py', () => {
 				dir
 			);
 			expect(r.status, r.stderr).toBe(0);
+
+			/**
+			 * THE BACKOFF IS PAID PER ROUND, NOT PER ENDPOINT.
+			 *
+			 * The structure's whole claim — and the reason a dead primary
+			 * costs one request instead of one timeout — is that the sleep
+			 * happens only after every endpoint has declined. Nothing about
+			 * the successful path distinguishes the two implementations:
+			 * both end with a 200 from the live stub, the same stderr, and
+			 * the same manifest. Only wall-clock separates them.
+			 *
+			 * Measured: this path runs in ~900 ms with the round-ordered
+			 * sleep, and 5 s+ with a sleep inside the inner loop (one
+			 * 5-second delay before the live stub is ever reached). 4000 ms
+			 * sits between them with ~4x headroom on the healthy side and
+			 * ~20% below the mutant, so it fails for the reason it means to
+			 * rather than for CI jitter.
+			 */
+			expect(Date.now() - started).toBeLessThan(4000);
 
 			// The dead mirror was genuinely asked. Without this the test only
 			// proves the live stub works, which the tests above already do.
@@ -391,6 +411,84 @@ describe('fetch-buildings.py', () => {
 		// the defect. Measured by breaking failover on purpose and reading the
 		// report rather than trusting that "failed" meant the right thing.
 		// The still-passing path stays ~900 ms, so nothing is slowed down.
+	}, 30_000);
+
+	it('raises on 400/413/422 instead of cycling the mirrors', async () => {
+		/**
+		 * THE OTHER HALF OF THE FAILURE POLICY, and the half that had no
+		 * coverage whatsoever — deleting `if fatal: raise` from the tool
+		 * leaves this suite 9/9 green, which is exactly how a policy stated
+		 * in prose and in a commit message stops being the policy without
+		 * anything going red.
+		 *
+		 * 400 means the QUERY is wrong. No mirror can fix a request all of
+		 * them would reject, so the correct behaviour is to ask the first,
+		 * be told "your request is bad", and stop. Failing over would cost
+		 * two backoff sleeps and then report the same message 15 seconds
+		 * later, which is the defect the fail-fast was written to prevent.
+		 *
+		 * Stub A answers 400; stub B would cheerfully serve the fixture.
+		 * Asserting B was never reached IS the test — without that line a
+		 * tool that failed over would write a pack and exit 0, which from
+		 * the exit code alone is indistinguishable from the test above.
+		 */
+		const dir = mkdtempSync(join(tmpdir(), 'aero-buildings-'));
+		const { createServer } = await import('node:http');
+		const body = fixture(manySquares(320, 0, 0));
+		let badHits = 0;
+		let goodHits = 0;
+
+		const bad = createServer((_req, res) => {
+			badHits++;
+			res.writeHead(400, { 'Content-Type': 'text/plain' });
+			res.end('Error: line 1: static reference to unknown property');
+		});
+		const good = createServer((_req, res) => {
+			goodHits++;
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(body);
+		});
+
+		await new Promise<void>((d) => bad.listen(0, '127.0.0.1', d));
+		await new Promise<void>((d) => good.listen(0, '127.0.0.1', d));
+		const badUrl = `http://127.0.0.1:${(bad.address() as { port: number }).port}/api/interpreter`;
+		const goodUrl = `http://127.0.0.1:${(good.address() as { port: number }).port}/api/interpreter`;
+
+		try {
+			const r = await execTool(
+				[
+					'testville',
+					'--lat',
+					'0',
+					'--lon',
+					'0',
+					'--out',
+					dir,
+					'--endpoint',
+					badUrl,
+					'--endpoint',
+					goodUrl
+				],
+				dir
+			);
+			expect(r.status, `a 400 must not exit 0:\n${r.stderr}`).not.toBe(0);
+			expect(r.stderr).toContain('HTTP 400');
+
+			// The live mirror was never asked. Without this line the
+			// fail-fast could be deleted, the tool would cycle to B, get a
+			// 200, write the pack, and every assertion above would still
+			// hold — while the policy had been inverted.
+			expect(goodHits).toBe(0);
+			expect(badHits).toBeGreaterThan(0);
+		} finally {
+			bad.close();
+			good.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+		// 30 s for consistency with the failover case, but a correct run is
+		// one request and no sleep. The broken run — fail-fast deleted — is
+		// 3 rounds x 2 endpoints with two backoff sleeps, ~15 s, which still
+		// finishes inside this and fails on goodHits rather than the clock.
 	}, 30_000);
 
 	it('rejects an unknown place unless coordinates are given', () => {

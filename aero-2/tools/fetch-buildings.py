@@ -226,11 +226,19 @@ def fetch_overpass(query: str, endpoints: tuple[str, ...], attempts: int = 3) ->
     what makes failover cheap — a dead primary costs one request, not one
     timeout, because the sleep is not paid until every endpoint has declined.
 
-    Any error at all — 4xx, 5xx, TLS, timeout, malformed JSON — moves to the
-    next endpoint rather than raising. A 400 would not be fixed by a different
-    mirror, but burning two extra requests on it is cheaper than a second
-    code path deciding which failures are "our fault", and this runs at build
-    time where nobody is waiting.
+    FAILURE POLICY, deliberately not uniform — this is the second code path,
+    and it exists because not every failure deserves a retry:
+
+      400 / 413 / 422  raise immediately. The REQUEST is wrong — a malformed
+                       query or an oversized body — and every mirror would
+                       reject the same one, so cycling only buys two backoff
+                       sleeps before the author sees the real message.
+      everything else  (429 rate limit, any other 4xx, 5xx, TLS failure,
+                       timeout, malformed JSON) moves to the next endpoint,
+                       because a different mirror may well answer.
+
+    The distinction is between "nobody can answer this" and "this mirror
+    cannot answer this", and only the second is what failover is for.
     """
     delay = 5.0
     last: Exception | None = None
