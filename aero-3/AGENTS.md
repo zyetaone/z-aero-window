@@ -10,9 +10,10 @@ One reason to change per file:
 - `server.ts` — `Bun.serve` with HTML-import bundling and `{ dir }` tile routes. No Vite, no SvelteKit.
 - `src/main.ts` — scene, light, camera orbiting the place's pin at 9 km on the wall clock (panes
   agree without talking), the time-of-day slider, the render loop.
-- `src/world.ts` — the ground. A 5×5 z10 detail patch (terrarium + z11 Sentinel-2) inside a 5×5 z8
-  ring (~750 km, past the horizon), both bent by Earth's curvature. Night is aero-2's VIIRS tree as
-  the emissive texture (raw radiance + baked z11 lamp dots) through aero-2's luminance knee.
+- `src/world.ts` — the ground. A 3×3 z10 detail patch (terrarium + z12 Sentinel-2, 3072 px: the
+  Pi's 4096 px texture limit is the ceiling) inside a 5×5 z8
+  ring (~750 km, past the horizon), both bent by Earth's curvature. Night is raw VIIRS radiance as a
+  faint emissive glow through aero-2's luminance knee; the lamp points carry the detail.
 - `src/buildings.ts` — OSM footprints extruded at boot into one mesh with a procedural window
   facade: concrete and glass by day, lit rooms at night, plus a baked ambient-occlusion
   lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
@@ -42,6 +43,8 @@ One reason to change per file:
 - **GlowLayer re-renders whatever it includes**; including the atmosphere-plugin PBR ground blew
   the dusk sky white. It includes the lamp points only.
 - **120k additive points sum to a white sheet**: per-lamp alpha is ~0.2.
+- **The twilight exposure lift multiplies emissive too**, so emissive gains are divided by it:
+  `?carpet=0.12` means 0.12 at night, not 1.08.
 
 Units are metres, y up, x east, z north.
 

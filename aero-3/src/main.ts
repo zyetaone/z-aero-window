@@ -101,7 +101,10 @@ engine.runRenderLoop(() => {
 	// Lamps, window glow, stars and the eye's twilight adaptation all follow the sun, not the hour.
 	const dark = 1 - smoothstep(-8, 2, s.elevationDeg);
 	// The baked VIIRS carpet stays faint under the real lamp points; windows keep full gain.
-	for (const m of glowing) m.emissiveIntensity = lampGain * dark * (lamps && m !== city ? carpet : 1);
+	// The twilight lift multiplies emissive too, so divide it back out: 0.12 means 0.12 at night.
+	const exposure = 1 + twilightLift * dark;
+	if (atmosphere) atmosphere.exposure = exposure;
+	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (lamps && m !== city ? carpet : 1)) / exposure;
 	if (lamps) {
 		lamps.mesh.setEnabled(dark > 0.01);
 		// Faint per lamp: 120k additive points sum to a white sheet at anything brighter.
@@ -111,7 +114,6 @@ engine.runRenderLoop(() => {
 		glow.isEnabled = dark > 0.02;
 		glow.intensity = GLOW * dark;
 	}
-	if (atmosphere) atmosphere.exposure = 1 + twilightLift * dark;
 
 	// Counter-clockwise orbit around the pin: the left window faces the city.
 	const theta = ((now / 1000) * SPEED_M_S) / ORBIT_M;

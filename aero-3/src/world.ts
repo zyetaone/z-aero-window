@@ -27,13 +27,14 @@ export const smoothstep = (a: number, b: number, x: number) => {
 export async function createWorld(scene: Scene, lat: number, lon: number) {
 	const tile10 = (z: number, m: number) => Math.floor(m * 2 ** z);
 	const [cx, cy] = [tile10(10, mercX(lon)), tile10(10, mercY(lat))];
-	// ~37 km tiles: 5×5 is ~190 km of relief and imagery around the place.
-	const near: Grid = { z: 10, x0: cx - 2, y0: cy - 2, span: 5 };
+	// ~37 km tiles: 3×3 is ~110 km around the place, sized so its z12 imagery (3072 px,
+	// ~37 m/px) fits the Pi's 4096 px texture limit. z11 over 5×5 smeared like wet paint.
+	const near: Grid = { z: 10, x0: cx - 1, y0: cy - 1, span: 3 };
 	// ~150 km tiles: 5×5 is ~750 km, past the ~225 km horizon at cruise. Its z10
 	// footprint always contains the near patch (cx/4 rounds down by at most 3).
 	const far: Grid = { z: 8, x0: Math.floor(cx / 4) - 2, y0: Math.floor(cy / 4) - 2, span: 5 };
 
-	const [mx0, my0] = [(near.x0 + 2.5) / 2 ** 10, (near.y0 + 2.5) / 2 ** 10];
+	const [mx0, my0] = [(near.x0 + near.span / 2) / 2 ** 10, (near.y0 + near.span / 2) / 2 ** 10];
 	const mPerMerc = 40_075_017 * Math.cos(lat * RAD);
 
 	const project = (lonDeg: number, latDeg: number): [x: number, z: number] => [
@@ -124,10 +125,11 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 	const [nearHeights, farHeights, nearImagery, farImagery, nearLights, farLights] = await Promise.all([
 		heights(near),
 		heights(far),
-		mosaic('imagery', 'jpg', near, 11, [11], '#3a4048'),
+		mosaic('imagery', 'jpg', near, 12, [11, 12], '#3a4048'),
 		mosaic('imagery', 'jpg', far, 8, [7, 8], '#3a4048'),
-		// Raw VIIRS radiance under each patch, aero-2's baked lamp dots at z11 over the core.
-		mosaic('lights', 'png', near, 11, [8, 11], '#000'),
+		// Raw VIIRS radiance only: a smooth glow under the lamp points. aero-2's baked z11 lamp
+		// dots upscaled into amber and blue blobs, and the points (lights.ts) do that job now.
+		mosaic('lights', 'png', near, 10, [8], '#000'),
 		mosaic('lights', 'png', far, 8, [8], '#000')
 	]);
 
@@ -135,8 +137,8 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 	const nearEdge = (m: number, origin: number) => m * 2 ** 10 > origin + 1e-3 && m * 2 ** 10 < origin + near.span - 1e-3;
 	const materials = [
 		patch('near', near, nearHeights, nearImagery, nearLights, 256),
-		// 160 subdivisions over 20 z10 tiles puts a vertex line on every near-patch
-		// edge, so only vertices strictly inside it sink under the detail patch.
+		// 160 subdivisions over 20 z10 tiles puts a vertex line on every z10 tile
+		// edge, so only vertices strictly inside the near patch sink under it.
 		patch('far', far, farHeights, farImagery, farLights, 160, (mx, my) => nearEdge(mx, near.x0) && nearEdge(my, near.y0))
 	];
 
