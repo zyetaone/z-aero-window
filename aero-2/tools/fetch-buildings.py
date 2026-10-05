@@ -200,12 +200,13 @@ def parse_height(tags: dict) -> tuple[float | None, str]:
 
 
 def overpass_query(lat: float, lon: float, radius_m: int) -> str:
-    r = radius_m / 1000.0
+    # `around:` takes METRES. This once divided by 1000 first, so a 2,600 m
+    # request asked for a 2.6 m circle and every fetch came back empty.
     return f"""
 [out:json][timeout:{max(60, radius_m // 40)}];
 (
-  way["building"](around:{r:.3f},{lat:.6f},{lon:.6f});
-  relation["building"](around:{r:.3f},{lat:.6f},{lon:.6f});
+  way["building"](around:{radius_m},{lat:.6f},{lon:.6f});
+  relation["building"](around:{radius_m},{lat:.6f},{lon:.6f});
 );
 out geom tags qt;
 """.strip()
@@ -399,18 +400,16 @@ def write_pack(fc: dict, lat: float, lon: float, radius_m: int, out_dir: Path, p
     # Containment, not distance. A distance check fails all eight cities, because
     # the roads packs are metro-wide with centres up to 15.3 km from pins that
     # are inside. What the renderer needs is that the PIN is in the drawn box.
-    inside = any(
-        min(p[1] for p in f["geometry"]["coordinates"][0]) <= lat <= max(p[1] for p in f["geometry"]["coordinates"][0])
-        and min(p[0] for p in f["geometry"]["coordinates"][0]) <= lon <= max(p[0] for p in f["geometry"]["coordinates"][0])
-        for f in features
-    )
+    # The PACK's box, not any one footprint's: this once asked whether the pin
+    # sat inside a single building, which a pin on a road never does.
+    lats = [p[1] for f in features for p in f["geometry"]["coordinates"][0]]
+    lngs = [p[0] for f in features for p in f["geometry"]["coordinates"][0]]
+    inside = bool(features) and min(lats) <= lat <= max(lats) and min(lngs) <= lon <= max(lngs)
     problems: list[str] = []
     if not features:
         problems.append("no features at all")
     else:
         if not inside:
-            lats = [p[1] for f in features for p in f["geometry"]["coordinates"][0]]
-            lngs = [p[0] for f in features for p in f["geometry"]["coordinates"][0]]
             problems.append(
                 f"pack does not contain its own pin {lat:.4f},{lon:.4f} "
                 f"(box lat {min(lats):.4f}..{max(lats):.4f}, lon {min(lngs):.4f}..{max(lngs):.4f})"
