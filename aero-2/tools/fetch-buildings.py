@@ -83,6 +83,7 @@ import math
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -467,8 +468,11 @@ def main() -> None:
     ap.add_argument("--max-features", type=int, default=DEFAULT_MAX_FEATURES,
                     help=f"cap on footprints, tallest kept (default {DEFAULT_MAX_FEATURES})")
     # `action="append"` so a caller can pin the list — one --endpoint reproduces
-    # the old single-endpoint behaviour exactly, and two lets a test prove
-    # failover. Omitted entirely means ENDPOINTS, the measured list.
+    # the old single-endpoint RETRIES (same backoff budget), and two lets a test
+    # prove failover. Omitted entirely means ENDPOINTS, the measured list.
+    # "Reproduces" is the word, not "exactly": the retry classification also
+    # changed (allowlist -> the 400/413/422 denylist), so a lone --endpoint that
+    # answers 406 now retries-and-sleeps where the old tool raised immediately.
     ap.add_argument(
         "--endpoint",
         action="append",
@@ -479,6 +483,19 @@ def main() -> None:
     )
     ap.add_argument("--out", default=".", help="repo root holding data/buildings")
     args = ap.parse_args()
+
+    # --endpoint is a developer convenience, and right now only the tests use it
+    # — but "convenience" is the kind of thing that later gets wired into a CI
+    # script, and a flag that accepts `file:///etc/passwd` or `http://169.254.…`
+    # would quietly turn a build tool into a local-file reader the moment it
+    # does. The default list is hardcoded https; the override must stay within
+    # http(s) too, or the flag is an SSRF trap waiting for a caller.
+    if args.endpoint is not None:
+        for ep in args.endpoint:
+            scheme = urllib.parse.urlparse(ep).scheme
+            if scheme not in ("http", "https"):
+                ap.error(f"--endpoint {ep!r} is not http(s); refusing to fetch from "
+                         f"{scheme or 'an unparsable'} scheme")
 
     if args.lat is not None and args.lon is not None:
         lat, lon, label = args.lat, args.lon, args.place

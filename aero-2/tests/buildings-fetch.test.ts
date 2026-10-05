@@ -513,4 +513,32 @@ describe('fetch-buildings.py', () => {
 		expect(status).toBe(2);
 		expect(stderr).toContain('unknown place');
 	});
+
+	it('refuses a non-http(s) --endpoint instead of becoming a local-file reader', () => {
+		/**
+		 * `--endpoint` is a developer convenience, but a flag that accepts
+		 * `file://` or a bare path is an SSRF / local-file-read waiting for
+		 * the day it gets wired into a script. The default list is hardcoded
+		 * https; the override has to stay within http(s) too. The refusal is
+		 * asserted, not merely a non-zero exit: a tool that quietly ignored
+		 * the bad scheme and fell back to the default would also exit
+		 * non-zero whenever the network is down, which would make the test
+		 * pass for the wrong reason on an offline machine.
+		 */
+		let status = 0;
+		let stderr = '';
+		try {
+			execFileSync(
+				'python3',
+				[TOOL, 'testville', '--lat', '0', '--lon', '0', '--endpoint', 'file:///etc/hosts'],
+				{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+			);
+		} catch (e) {
+			const err = e as { status?: number; stderr?: string };
+			status = err.status ?? 1;
+			stderr = err.stderr ?? '';
+		}
+		expect(status, `a file:// endpoint must be refused:\n${stderr}`).toBe(2);
+		expect(stderr).toContain('file:///etc/hosts');
+	});
 });
