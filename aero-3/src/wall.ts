@@ -16,6 +16,15 @@ export type Wall = Push & { version: number; applyAt: number };
 
 export const NO_WALL: Wall = { version: 0, applyAt: 0, place: null, weather: null, clock: null };
 export const LEAD_SEC = 10;
+
+/** Named scenes for /admin, aero-2's presets as wall pushes: one tap fills the form. */
+export const PRESETS: Record<string, Push> = {
+	'Golden hour': { place: 'dubai', weather: 'fair', clock: 17.6 },
+	'Alpine dawn': { place: 'himalayas', weather: 'clear', clock: 6.5 },
+	'Gulf midnight': { place: 'dubai', weather: 'clear', clock: 23 },
+	'Storm transit': { place: 'mumbai', weather: 'towering', clock: 15 },
+	'City lights': { place: 'hyderabad', weather: 'scattered', clock: 21 }
+};
 export const MAX_PUSH_BYTES = 1024;
 
 /** An operator's push, checked field by field; null if any field is wrong. */

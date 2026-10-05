@@ -1,11 +1,12 @@
 /** The /admin page: one form that pushes a wall (src/wall.ts). The token stays in the form, never in storage. */
 import { PLACES } from './places.ts';
 import { REGIME_NAMES } from './day.ts';
-import { fetchWall, type Wall } from './wall.ts';
+import { fetchWall, PRESETS, type Wall } from './wall.ts';
 
 const form = document.querySelector('form')!;
 const status = document.querySelector('output')!;
-const [place, weather] = [form.elements.namedItem('place'), form.elements.namedItem('weather')] as HTMLSelectElement[];
+const [preset, place, weather] = ['preset', 'place', 'weather'].map((n) => form.elements.namedItem(n)) as HTMLSelectElement[];
+const clockInput = form.elements.namedItem('clock') as HTMLInputElement;
 place!.add(new Option('Rotation (a new city every 10 min)', ''));
 for (const id of Object.keys(PLACES)) place!.add(new Option(id.replace('_', ' '), id));
 weather!.add(new Option("Today's weather", ''));
@@ -18,7 +19,18 @@ const current = await fetchWall('');
 status.textContent = describe(current);
 place!.value = current.place ?? '';
 weather!.value = current.weather ?? '';
-(form.elements.namedItem('clock') as HTMLInputElement).value = current.clock === null ? '' : String(current.clock);
+clockInput.value = current.clock === null ? '' : String(current.clock);
+
+// A preset only fills the form: the operator still reviews it and presses Push.
+preset!.add(new Option('Choose a scene…', ''));
+for (const name of Object.keys(PRESETS)) preset!.add(new Option(name, name));
+preset!.addEventListener('change', () => {
+	const scene = PRESETS[preset!.value];
+	if (!scene) return;
+	place!.value = scene.place ?? '';
+	weather!.value = scene.weather ?? '';
+	clockInput.value = scene.clock === null ? '' : String(scene.clock);
+});
 
 form.addEventListener('submit', async (event) => {
 	event.preventDefault();

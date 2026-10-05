@@ -159,8 +159,9 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
 5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.
    Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
    lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.
-6. **Content** — more places (a pin, an orbit radius, a buildings pack); presets as named
-   wall pushes (golden hour, gulf midnight); the admin QR from aero-2 `qr.ts`.
+6. **Content** — presets done (`wall.ts` PRESETS: five named scenes that fill `/admin`'s form).
+   Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers; the admin
+   QR from aero-2 `qr.ts`.
 
 ## Not built yet
 
