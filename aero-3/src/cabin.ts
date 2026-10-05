@@ -6,12 +6,12 @@
  * its first seconds, and it comes down ahead of every slot boundary, where
  * main.ts reloads into the next visit. All of it from the wall clock.
  */
-import { qrSvg } from '../../aero-2/src/lib/qr.ts';
+import { qrSvg } from './vendor/qr.ts';
 import { mulberry32 } from './math.ts';
-import { DWELL_SEC } from './places.ts';
-import { solarHour } from './sun.ts';
+import { DWELL_SEC, placeName } from './places.ts';
+import { hhmm, solarHour } from './sun.ts';
 
-const LEAD_SEC = 6; // down this long before the boundary (aero-2's BLIND_LEAD_SEC)
+const BLIND_LEAD_SEC = 6; // down this long before the boundary
 const LAG_SEC = 12; // and up no sooner than this after it, so panes lift together
 const READY_FRAMES = 30; // and not before the scene has drawn this many frames
 
@@ -23,7 +23,7 @@ const READY_FRAMES = 30; // and not before the scene has drawn this many frames
 export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon: number, pane: number, openAfter = 0) {
 	const [blind, drops] = ['#blind', '#rain'].map((s) => document.querySelector<HTMLElement>(s)!) as [HTMLElement, HTMLElement];
 	blind.hidden = !blinds;
-	blind.querySelector('span')!.textContent = place.replace('_', ' ');
+	blind.querySelector('span')!.textContent = placeName(place);
 	if (rain) beads(drops, pane);
 
 	let [frames, last, held, night, clock] = [0, 0, false, '', ''];
@@ -42,9 +42,9 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 			if (n !== night) document.documentElement.style.setProperty('--night', (night = n));
 			const phase = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
 			const since = wallSec - Math.max(wallSec - phase, openAfter);
-			blind.classList.toggle('open', phase < DWELL_SEC - LEAD_SEC && since >= LAG_SEC);
+			blind.classList.toggle('open', phase < DWELL_SEC - BLIND_LEAD_SEC && since >= LAG_SEC);
 			const hour = solarHour(wallSec * 1000, lon);
-			const t = `${Math.floor(hour)}`.padStart(2, '0') + ':' + `${Math.floor((hour % 1) * 60)}`.padStart(2, '0');
+			const t = hhmm(hour);
 			if (t !== clock) blind.querySelector('time')!.textContent = clock = t;
 		}
 	};

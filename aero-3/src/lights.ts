@@ -10,9 +10,9 @@
  * (main.ts) then blooms them, and the ground's VIIRS emissive stays underneath
  * as the faint carpet of everything the road pack leaves out.
  *
- * Every OSM building adds one light of its own on the roof, and the towns past
- * the road pack come as clusters from NASA's VIIRS radiance (world.ts) — map
- * data only, no invented noise.
+ * Buildings add lit windows and (on about half of them) a roof light, and the
+ * towns past the road pack come as clusters from NASA's VIIRS radiance
+ * (ground-maps.ts). Lit roads break into stretches by their own seeded noise.
  *
  * One small shader does what an unlit material cannot: each light dims with
  * distance, fading out and reddening toward the horizon (no atmosphere touches unlit points,
@@ -22,7 +22,8 @@
 import { Constants, Effect, Mesh, ShaderMaterial, Vector3, VertexData, type Scene } from '@babylonjs/core';
 import { hash, noise1 } from './math.ts';
 
-type Road = { geometry: { coordinates: number[][] }; properties: { class: string } };
+/** One OSM road from a place's pack (aero-2/tools: roads extractor). Shared by world.ts (painted by day). */
+export type Road = { geometry: { coordinates: number[][] }; properties: { class: string } };
 
 /** Metres between lamps, how bright they read, and the share of roads lit, by road class. */
 const CLASS: Record<string, [spacing: number, gain: number, litShare: number]> = {
@@ -164,7 +165,6 @@ export function streetlights(
 
 	return {
 		mesh,
-		count: positions.length / 3,
 		/** Per-group gains from the Lights panel: streets, buildings, far towns. */
 		update(eye: Vector3, nowMs: number, gain: number, groups: { street: number; building: number; far: number }) {
 			material.setVector3('groups', groupGains.set(groups.street, groups.building, groups.far));

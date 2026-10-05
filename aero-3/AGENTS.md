@@ -36,9 +36,13 @@ One reason to change per file:
   bent by Earth's curvature. Night is NASA's VIIRS radiance (GIBS, capped at z8) through aero-2's
   luminance knee as a faint glow, and as a mask that shows the real imagery warm under lit
   districts. The far ring sinks 3 km under the detail patch (z8's coarse peaks overshoot z10's in
-  the mountains). Ground textures are map data only; the haze dome below is the one place noise
-  breaks a map up. Textures upload from JPEG blobs, so
-  no CPU canvas outlives boot; `scene.clearCachedVertexData()` drops the mesh copies after build.
+  the mountains). Textures upload from JPEG blobs, so no CPU canvas outlives boot;
+  `scene.clearCachedVertexData()` drops the mesh copies after build.
+- `src/ground-maps.ts` — the maps baked from those tiles, pure canvas in, canvas out: night ground
+  (VIIRS × imagery × road mask × noise), light dome (haze), water mask, far-ring town lights, the
+  imagery crop trees sample, roads painted into the imagery, the tiling detail map.
+  `src/mercator.ts` is the one home of the tile grid both read. `src/vendor/` holds aero-2's QR
+  encoder and star catalogue, copied so aero-3 builds alone.
 - `src/buildings.ts` — OSM footprints extruded at boot into one white mesh (an architect's model:
   painted facades, window grids and glass tints aliased into dark specks from cruise height),
   a shade off white per building, roofs a touch darker; rooms lit in runs at night from one
@@ -52,11 +56,11 @@ One reason to change per file:
   every 32–55 m along the road pack (`../data/roads`), with only a share of each class lit (back
   streets 50%), dark stretches where the road's own 1D noise dips, and per-lamp brightness jitter; building lights, one per ~3,000 m² on 45% of flat
   roofs and a few lit windows on walls of buildings 12 m and up (buildings.ts); and far-ring towns
-  from bright NASA VIIRS pixels past the roads (world.ts). One additive point cloud on a small
+  from bright NASA VIIRS pixels past the roads (ground-maps.ts). One additive point cloud on a small
   shader: each light fades and reddens toward the horizon and twinkles faintly. Mix: sodium 65%,
   warm white 15%, white 10%, red 5%, blue 5%. The HUD's Lights panel sets each group's gain and
   the bloom live. `GlowLayer` blooms the lamps and the buildings' lit windows, at night only.
-- `src/haze.ts` — the amber murk over a lit city: one additive sheet 450 m up carrying world.ts's
+- `src/haze.ts` — the amber murk over a lit city: one additive sheet 450 m up carrying ground-maps.ts's
   light dome (VIIRS downsampled into a blur, kneed so only the city domes, × fbm noise from math.ts).
   Gain = Haze slider × darkness ÷ exposure.
 - `src/trees.ts` — low-poly crowns, cones and bushes in clumps of 1-6 wherever the imagery within
@@ -70,7 +74,7 @@ One reason to change per file:
 - **Ground detail**: a tiling 256² PBR detail map (`material.detailMap`, raw bytes: R albedo,
   G/A normal, B roughness) repeats every 350 m on the near patch for grain the imagery can't hold.
 - **Water** comes from the imagery too: dark, green-or-teal pixels get a smooth roughness map
-  (world.ts `waterMask`), broken up by fractal noise into ruffled patches and calm slicks, so lakes
+  (ground-maps.ts `waterMask`), broken up by fractal noise into ruffled patches and calm slicks, so lakes
   and sea catch the sun as glitter rather than a mirror.
 - `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, flat banks on the horizon, cirrus; per-tier wrap so wind never blows the deck off the
@@ -118,9 +122,15 @@ One reason to change per file:
 - **Fragment output is clamped to 1 before blending**: an additive shader that puts its gain in
   alpha (`ALPHA_ADD`, src·α) can never exceed the gain. Fold the gain into the colour (`ALPHA_ONEONE`).
 - **GlowLayer re-renders whatever it includes**; including the atmosphere-plugin PBR ground blew
-  the dusk sky white. It includes the lamp points only.
+  the dusk sky white. It includes the lamp points, the buildings (lit-window halo) and the wing
+  (its unlit meshes occlude the bloom), never the ground.
 - **A StandardMaterial adds its emissive texture at `texture.level`**, not × `emissiveColor`: the
   haze sheet's gain is the level, or it washes the city flat orange.
+- **An `ALPHA_ONEONE` material at `alpha = 1` draws in the opaque pass**, where the blend mode never
+  applies: the haze sheet painted a black square over the near ground from dusk on. Additive
+  materials set `alpha = 0.999` (haze.ts, stars.ts).
+- **The ground's atmosphere-plugin PBR takes a light ~30× weaker than plain PBR.** The moon light is
+  scoped to the ground meshes (`includedOnlyMeshes`) so the wing does not blow out.
 - **120k additive points sum to a white sheet**: per-lamp alpha is ~0.2.
 - **The twilight exposure lift multiplies emissive too**, so emissive gains are divided by it:
   `?carpet=1` means 1 at night, not 9.
@@ -173,10 +183,9 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
    Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
    lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.
 6. **Content** — presets done (`wall.ts` PRESETS: five named scenes that fill `/admin`'s form).
-   Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers. Admin QR done: hold the glass 15 s for the wall Pi's `/admin` (aero-2's `qr.ts`).
+   Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers. Admin QR done: hold the glass 15 s for the wall Pi's `/admin` (`src/vendor/qr.ts`).
 
 ## Not built yet
 
-Phases 3-6 above. Pi measurement before more
-layers: Dubai is 1.1M building vertices and ~300k lights. Add them only
+The Phase 5 Pi measurement, before more layers: Dubai is 1.1M building vertices and ~300k lights. Add them only
 after the Pi numbers say this stack is worth growing.

@@ -12,6 +12,9 @@
 import { RAD } from './math.ts';
 const DAY_MS = 86_400_000;
 
+/** A clock hour (0-24, fractional) as HH:MM. */
+export const hhmm = (hour: number) => `${Math.floor(hour)}`.padStart(2, '0') + ':' + `${Math.floor((hour % 1) * 60)}`.padStart(2, '0');
+
 export type Sun = { x: number; y: number; z: number; elevationDeg: number };
 
 /** Unit vector to the sun in the scene frame (x east, y up, z north). */

@@ -23,20 +23,18 @@ import { dayFor } from './day.ts';
 import { flight, SEAT_PITCH } from './flight.ts';
 import { streetlights } from './lights.ts';
 import { trees } from './trees.ts';
-import { destinationAt, DWELL_SEC, PLACES, slotAt } from './places.ts';
+import { destinationAt, DWELL_SEC, PLACES, placeName, slotAt } from './places.ts';
 import { haze } from './haze.ts';
 import { adminQr, cabinDrone, cabinOverlay } from './cabin.ts';
 import { moon } from './moon.ts';
 import { wing } from './wing.ts';
 import { stars } from './stars.ts';
-import { atSolarHour, moonAt, solarHour, sunAt } from './sun.ts';
+import { atSolarHour, hhmm, moonAt, solarHour, sunAt } from './sun.ts';
 import { createWorld } from './world.ts';
 import { fetchWall, NO_WALL } from './wall.ts';
 import { hash, RAD, smoothstep } from './math.ts';
 
-// id → [lat, lon, ground m]. Same coordinates as aero-2's catalog.
-
-const CLEAR_M = 2_000; // over the highest terrain within 8 km of the orbit
+const CLEAR_M = 2_000; // over the highest terrain within 4 km of the track
 const ORBIT_M = 9000;
 const LAMP_ALPHA = 0.22;
 const GLOW = 0.35;
@@ -295,7 +293,7 @@ async function fetchPack(kind: 'buildings' | 'roads') {
 function placePicker() {
 	const select = document.querySelector<HTMLSelectElement>('#place')!;
 	select.add(new Option('Rotation', ''));
-	for (const id of Object.keys(PLACES)) select.add(new Option(id.replace('_', ' '), id));
+	for (const id of Object.keys(PLACES)) select.add(new Option(placeName(id), id));
 	select.value = pinnedPlace ?? '';
 	select.addEventListener('change', () => {
 		const url = new URL(location.href);
@@ -325,8 +323,7 @@ function clockControls() {
 	return (skyMs: number, elevationDeg: number) => {
 		const hour = solarHour(skyMs, lon);
 		slider.value = String(hour);
-		const hhmm = `${Math.floor(hour)}`.padStart(2, '0') + ':' + `${Math.floor((hour % 1) * 60)}`.padStart(2, '0');
-		readout.textContent = `${hhmm} solar · sun ${elevationDeg.toFixed(0)}° · ${Number.isFinite(engine.getFps()) ? engine.getFps().toFixed(0) : '–'} fps ${engine.isWebGPU ? 'WebGPU' : 'WebGL2'}`;
+		readout.textContent = `${hhmm(hour)} solar · sun ${elevationDeg.toFixed(0)}° · ${Number.isFinite(engine.getFps()) ? engine.getFps().toFixed(0) : '–'} fps ${engine.isWebGPU ? 'WebGPU' : 'WebGL2'}`;
 		live.disabled = pinnedHour === null;
 	};
 }

@@ -1,5 +1,6 @@
 /** The /admin page: one form that pushes a wall (src/wall.ts). The token stays in the form, never in storage. */
-import { PLACES } from './places.ts';
+import { PLACES, placeName } from './places.ts';
+import { hhmm } from './sun.ts';
 import { REGIME_NAMES } from './day.ts';
 import { fetchWall, PRESETS, type Wall } from './wall.ts';
 
@@ -8,12 +9,12 @@ const status = document.querySelector('output')!;
 const [preset, place, weather] = ['preset', 'place', 'weather'].map((n) => form.elements.namedItem(n)) as HTMLSelectElement[];
 const clockInput = form.elements.namedItem('clock') as HTMLInputElement;
 place!.add(new Option('Rotation (a new city every 10 min)', ''));
-for (const id of Object.keys(PLACES)) place!.add(new Option(id.replace('_', ' '), id));
+for (const id of Object.keys(PLACES)) place!.add(new Option(placeName(id), id));
 weather!.add(new Option("Today's weather", ''));
 for (const name of REGIME_NAMES) weather!.add(new Option(name, name));
 
 const describe = (w: Wall) =>
-	w.version ? `Wall v${w.version}: ${w.place ?? 'rotation'}, ${w.weather ?? "today's weather"}, ${w.clock === null ? 'real time' : `${Math.floor(w.clock)}:${String(Math.round((w.clock % 1) * 60)).padStart(2, '0')} local`}` : 'Nothing pushed yet: panes follow the rotation.';
+	w.version ? `Wall v${w.version}: ${w.place ?? 'rotation'}, ${w.weather ?? "today's weather"}, ${w.clock === null ? 'real time' : `${hhmm(w.clock)} local`}` : 'Nothing pushed yet: panes follow the rotation.';
 
 const current = await fetchWall('');
 status.textContent = describe(current);

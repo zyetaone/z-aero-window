@@ -22,6 +22,9 @@ export const PLACES: Record<string, [number, number, number, number?]> = {
 	himalayas: [27.9881, 86.925, 5000, 24_000] // a wide loop: ridges 8 km tall fill a tight one
 };
 
+/** A place id as people read it: 'chicago_midway' -> 'chicago midway'. */
+export const placeName = (id: string) => id.replaceAll('_', ' ');
+
 export const DWELL_SEC = 600;
 
 /** Which visit slot a wall-clock second is in: each one is a fresh flight, under the blind. */
