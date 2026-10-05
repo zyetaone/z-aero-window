@@ -9,10 +9,11 @@
  * dev remote fallback alike — one code path, one look).
  *
  * Per pixel, from input luminance L and alpha A:
- *   mask  — A==0 stays 0; else alpha = L^0.8, so satellite-black shows the
- *           ground beneath (the lower texture survives = the mask) and only
- *           real light glows;
- *   amber — deep (120,60,20) → mid (255,150,60) → top (255,205,140). The top
+ *   mask  — A==0 stays 0; else alpha = (A/255) × a luminance KNEE, not L^0.8:
+ *           a smoothstep over L∈[0.35, 0.75], so satellite-black and the
+ *           mid-bright haze stay transparent (the ground beneath survives)
+ *           and only real light glows;
+ *   amber — deep (120,60,20) → mid (255,150,60) → top (250,170,80). The top
  *           is warm amber, never white. Ported from aero-1's February
  *           emissive-lights shader (commit e4a95254): a per-pixel hash deals
  *           lit pixels into sodium/amber/warm-white/cool-white buckets so

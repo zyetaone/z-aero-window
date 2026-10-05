@@ -71,4 +71,20 @@ describe('tintViirs', () => {
 		expect(px.a).toBeGreaterThan(0);
 		expect(px.a).toBeLessThan(255);
 	});
+
+	it('knees the alpha at 0.35 luminance, not the old L^0.8', () => {
+		/**
+		 * The header used to claim `alpha = L^0.8`, which at L=0.35 is
+		 * 0.35^0.8 ≈ 0.43 — visibly lit. The knee (smoothstep over
+		 * L∈[0.35, 0.75]) gives exactly 0 there, which is the whole point:
+		 * z8 VIIRS over a conurbation is mid-bright almost everywhere, and a
+		 * low floor pasted a cream sheet over the city. These two pins make
+		 * the header rot back to L^0.8 impossible without a red: below the
+		 * knee start is fully transparent, at the knee end fully opaque.
+		 */
+		const below = read(tintViirs(solid(4, 4, 89, 89, 89, 255))); // L = 89/255 ≈ 0.349
+		expect(below.a).toBe(0);
+		const full = read(tintViirs(solid(4, 4, 191, 191, 191, 255))); // L = 191/255 ≈ 0.749
+		expect(full.a).toBe(255);
+	});
 });
