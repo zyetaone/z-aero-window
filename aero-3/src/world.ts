@@ -10,9 +10,9 @@
  * (night, water, roads, detail) live in ground-maps.ts.
  */
 import { Color3, MeshBuilder, PBRMaterial, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
-import { crop, groundDetail, lightDome, lightSites, nightGround, paintRoads, waterMask } from './ground-maps.ts';
+import { crop, groundDetail, lightDome, lightSites, nightGround, paintRoads, paintSea, seaColour, waterMask } from './ground-maps.ts';
 import { RAD } from './math.ts';
-import { mercX, mercY, TILE, type Grid } from './mercator.ts';
+import { gridsFor, mercX, mercY, TILE, type Grid } from './mercator.ts';
 import type { Road } from './lights.ts';
 
 const EARTH_M = 6_371_000;
@@ -20,14 +20,7 @@ const DETAIL_M = 350; // one repeat of the ground's detail map
 
 /** `roads` (the place's OSM pack, or null) are painted into the near imagery by day. */
 export async function createWorld(scene: Scene, lat: number, lon: number, roads: Road[] | null = null) {
-	const tile10 = (z: number, m: number) => Math.floor(m * 2 ** z);
-	const [cx, cy] = [tile10(10, mercX(lon)), tile10(10, mercY(lat))];
-	// ~37 km tiles: 3×3 is ~110 km around the place, sized so its z12 imagery (3072 px,
-	// ~37 m/px) fits the Pi's 4096 px texture limit. z11 over 5×5 smeared like wet paint.
-	const near: Grid = { z: 10, x0: cx - 1, y0: cy - 1, span: 3 };
-	// ~150 km tiles: 5×5 is ~750 km, past the ~225 km horizon at cruise. Its z10
-	// footprint always contains the near patch (cx/4 rounds down by at most 3).
-	const far: Grid = { z: 8, x0: Math.floor(cx / 4) - 2, y0: Math.floor(cy / 4) - 2, span: 5 };
+	const { near, far } = gridsFor(lat, lon);
 
 	const [mx0, my0] = [(near.x0 + near.span / 2) / 2 ** 10, (near.y0 + near.span / 2) / 2 ** 10];
 	const mPerMerc = 40_075_017 * Math.cos(lat * RAD);
@@ -59,24 +52,25 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 			);
 			for (const { x, y, bitmap } of tiles) {
 				if (!bitmap) continue;
-				ctx.drawImage(bitmap, (x / f - gx) * 2 ** outZ * TILE, (y / f - gy) * 2 ** outZ * TILE, size, size);
+				ctx.drawImage(layer === 'imagery' ? clearNoData(bitmap) : bitmap, (x / f - gx) * 2 ** outZ * TILE, (y / f - gy) * 2 ** outZ * TILE, size, size);
 				bitmap.close();
 			}
 		}
 		return canvas;
 	}
 
-	/** Terrain height in metres at a global Mercator point, from terrarium tiles. */
+	/** Terrain height in metres at a global Mercator point, from terrarium tiles; `.raw` keeps the sea floor. */
 	async function heights(grid: Grid) {
 		// #800000 is terrarium's 0 m, so a missing tile reads as sea level, not -32 km.
 		const canvas = await mosaic('terrain', 'png', grid, grid.z, [grid.z], '#800000');
 		const { data, width } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
-		return (mx: number, my: number) => {
+		const raw = (mx: number, my: number) => {
 			const px = Math.min(width - 1, Math.max(0, Math.round((mx * 2 ** grid.z - grid.x0) * TILE)));
 			const py = Math.min(width - 1, Math.max(0, Math.round((my * 2 ** grid.z - grid.y0) * TILE)));
 			const i = (py * width + px) * 4;
-			return Math.max(0, data[i]! * 256 + data[i + 1]! + data[i + 2]! / 256 - 32_768);
+			return data[i]! * 256 + data[i + 1]! + data[i + 2]! / 256 - 32_768;
 		};
+		return Object.assign((mx: number, my: number) => Math.max(0, raw(mx, my)), { raw });
 	}
 
 	/**
@@ -146,6 +140,13 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 		mosaic('lights', 'png', far, 8, [8], '#000')
 	]);
 
+	// One sea across both patches: the far ring's two imagery sources disagree on water (see paintSea).
+	const sea = seaColour(nearImagery, near, nearHeights.raw);
+	if (sea) {
+		paintSea(nearImagery, near, nearHeights.raw, sea, 0);
+		paintSea(farImagery, far, farHeights.raw, sea, 0.85);
+	}
+
 	// Roads twice: asphalt into the day imagery, and white into a mask the night ground composes
 	// with NASA's radiance (nightGround), so lit districts' streets glow sodium under the lamps.
 	let roadMask = roads ? new OffscreenCanvas(nearImagery.width, nearImagery.height) : null;
@@ -202,6 +203,22 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 
 const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
 
+
+/**
+ * Sentinel's no-data is pure black: a swath edge cuts 15-70% of a far z8 tile (Dubai, measured).
+ * Drawn over z7, it walled the Iranian coast off in straight black edges, a rectangle on the
+ * horizon. Transparent instead, so the coarser zoom under it shows through.
+ */
+function clearNoData(bitmap: ImageBitmap) {
+	const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+	const ctx = canvas.getContext('2d')!;
+	ctx.drawImage(bitmap, 0, 0);
+	const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+	const d = image.data;
+	for (let i = 0; i < d.length; i += 4) if (d[i]! + d[i + 1]! + d[i + 2]! < 20) d[i + 3] = 0; // deep sea is ~60, no-data 0 (JPEG: a few)
+	ctx.putImageData(image, 0, 0);
+	return canvas;
+}
 
 /** Missing tiles (unpacked ocean, edge of the pack) come back null and stay background. */
 async function fetchTile(url: string): Promise<ImageBitmap | null> {

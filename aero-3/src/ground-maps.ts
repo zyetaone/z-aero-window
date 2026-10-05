@@ -16,7 +16,7 @@ const ROAD_M: [cls: string, metres: number][] = [['residential', 8], ['tertiary'
 const GLOW = 0.12; // NASA's radiance as a faint carpet: the points carry the detail
 const REVEAL = 0.3; // how much of the real ground a lit district shows at night
 const ROAD_GLOW = 0.35; // sodium on the asphalt of a lit district's streets
-const CROP_M = 5_000; // imagery kept for sampling (trees.ts, which plant within 5 km), either side of the pin
+const CROP_M = 9_000; // imagery kept for sampling (trees.ts, which plant within 9 km), either side of the pin
 
 /**
  * The night ground, once at boot, from NASA's VIIRS radiance: aero-2's
@@ -206,4 +206,56 @@ export function groundDetail(scene: Scene) {
 	const tex = RawTexture.CreateRGBATexture(data, N, N, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE);
 	tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE;
 	return tex;
+}
+
+type Depth = (mx: number, my: number) => number;
+/** Global Mercator of pixel (px, py) on a canvas covering `grid`. */
+const pixelMerc = (canvas: OffscreenCanvas, grid: Grid, px: number, py: number): [number, number] => {
+	const step = grid.span / 2 ** grid.z / canvas.width;
+	return [grid.x0 / 2 ** grid.z + (px + 0.5) * step, grid.y0 / 2 ** grid.z + (py + 0.5) * step];
+};
+const SEA_FLOOR_M = -2; // under this the terrain is sea floor: bathymetry, not a coastal flat
+/**
+ * Not water's own colour: no-data black, or cloud grey (bright and unsaturated). Sand and reclaimed
+ * islands (the Palm, the World: sea floor to the old terrain data) run warm, red over blue; shallows
+ * run green and blue over red. Both stay.
+ */
+// Measured over the Gulf: cloud sums 183-537 with red 0-35 over blue; open sea ~110, blue over red.
+const notWater = (r: number, g: number, b: number) => r + g + b < 20 || (r + g + b > 175 && r - b > -6 && r - b < 40 && Math.max(r, g, b) - Math.min(r, g, b) < 45);
+
+/** The mean colour of real water in the imagery (sea floor below, not cloud), or null for an inland place. */
+export function seaColour(imagery: OffscreenCanvas, grid: Grid, depthAt: Depth): [number, number, number] | null {
+	const { data, width } = imagery.getContext('2d')!.getImageData(0, 0, imagery.width, imagery.height);
+	const sum = [0, 0, 0, 0];
+	for (let py = 0; py < width; py += 8) {
+		for (let px = 0; px < width; px += 8) {
+			const i = (py * width + px) * 4;
+			if (notWater(data[i]!, data[i + 1]!, data[i + 2]!) || depthAt(...pixelMerc(imagery, grid, px, py)) > SEA_FLOOR_M) continue;
+			sum[0]! += data[i]!, sum[1]! += data[i + 1]!, sum[2]! += data[i + 2]!, sum[3]!++;
+		}
+	}
+	return sum[3]! > 500 ? [sum[0]! / sum[3]!, sum[1]! / sum[3]!, sum[2]! / sum[3]!] : null;
+}
+
+/**
+ * One sea. Where the terrain says sea floor, cloud and no-data in the imagery become `sea` (a cloudy
+ * Sentinel scene over the Gulf read from the window as a snowy plateau with a straight swath edge),
+ * and real water moves `blend` of the way to it. The far ring takes 0.85: it stacks Sentinel's z8 over
+ * an older z7 that disagree on water, and showed the seam as a land-coloured slab on the horizon.
+ * The near patch takes 0, keeping its own water's texture. The coast fades over a few metres of depth.
+ */
+export function paintSea(imagery: OffscreenCanvas, grid: Grid, depthAt: Depth, sea: [number, number, number], blend: number) {
+	const ctx = imagery.getContext('2d')!;
+	const image = ctx.getImageData(0, 0, imagery.width, imagery.height);
+	const { data, width } = image;
+	for (let py = 0; py < width; py++) {
+		for (let px = 0; px < width; px++) {
+			const deep = smoothstep(SEA_FLOOR_M + 1, SEA_FLOOR_M - 8, depthAt(...pixelMerc(imagery, grid, px, py)));
+			if (deep === 0) continue;
+			const i = (py * width + px) * 4;
+			const k = deep * (notWater(data[i]!, data[i + 1]!, data[i + 2]!) ? 1 : blend);
+			for (let c = 0; c < 3; c++) data[i + c] = data[i + c]! + (sea[c]! - data[i + c]!) * k;
+		}
+	}
+	ctx.putImageData(image, 0, 0);
 }

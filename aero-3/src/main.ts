@@ -67,6 +67,9 @@ const ROLE_YAW: Record<string, number> = { left: -24, right: 24 };
 const paneYaw = num('yaw', ROLE_YAW[q.get('role') ?? ''] ?? 0) * RAD;
 const lampGain = num('lamps', 1);
 const twilightLift = num('lift', 8);
+// The atmosphere's own exposure by day (the sky and the air over the ground). 1 rendered a dark slate
+// sky in a clear afternoon; 1.7 is the bright blue of a window seat. The night lift adds on top.
+const SKY_EXPOSURE = num('sky', 1.7);
 const ALT_M = num('alt', NaN); // ?alt=8000 pins the cruise (m over the ground) for a shot or a bench
 const MOONLIGHT = num('moonlight', 0.4); // full, high moon; a moonless night gets a quarter
 // The baked VIIRS texture under the lamp points: a faint glow only, or it reads as blocky amber blobs.
@@ -115,7 +118,13 @@ const world = await createWorld(scene, lat, lon, await roadsLoad);
 // Today for this place, from the visit's slot start: the same on every pane, different tomorrow.
 const day = dayFor(placeId, bootSlot * DWELL_SEC * 1000, q.get('weather') ?? wall.weather);
 sunLight.intensity = day.sun;
-if (atmosphere) atmosphere.aerialPerspectiveIntensity *= day.haze;
+if (atmosphere) {
+	atmosphere.aerialPerspectiveIntensity *= day.haze;
+	// Today's air: few aerosols is a deep blue sky down to the horizon, many a milky one.
+	atmosphere.physicalProperties.mieScatteringScale *= day.mie;
+}
+// Today's punch: a clear day's shadows and colours snap, a hazy one's lie flat. ?contrast= pins it.
+scene.imageProcessingConfiguration.contrast = num('contrast', day.contrast);
 const [pinX, pinZ] = world.project(lon, lat);
 // Each visit's own cruise (flight.ts: a band and a climb), but never into the ground: the track clears
 // the highest terrain within 4 km of it (one circuit, sampled once) by CLEAR_M, a floor in the loop.
@@ -172,7 +181,7 @@ const hud = (q.get('hud') ?? (q.has('role') ? '0' : '1')) === '0' ? null : clock
 if (hud) lightsPanel(), placePicker();
 /** ?debug: set `aim.at` to a world point (or `aim.moon = true`) to hold the camera on it for a screenshot. */
 const aim: { at: Vector3 | null; moon: boolean } = { at: null, moon: false };
-if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount, day, aim, plane }); // for the console and frame-cost ablations
+if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount, day, aim, plane, atmosphere }); // for the console and frame-cost ablations
 let hudAt = 0;
 const toSun = new Vector3();
 const [aircraft, seat] = [new Quaternion(), new Quaternion()];
@@ -212,7 +221,7 @@ engine.runRenderLoop(() => {
 	}
 	// The VIIRS texture bakes its own balance (world.ts); ?carpet= scales it from there.
 	// The twilight lift multiplies emissive too, so divide it back out: 0.12 means 0.12 at night.
-	const exposure = 1 + twilightLift * dark;
+	const exposure = SKY_EXPOSURE + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;
 	for (const m of skyLit) m.ambientColor.setAll(1 - dark);
 	cityHaze(shedding ? 0 : (mix.haze * day.haze * dark) / exposure); // emissive, so it rides the exposure lift too

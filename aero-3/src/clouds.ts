@@ -15,7 +15,9 @@
  * hand-tuned golden-hour tables, and cards are squashed vertically so a puff
  * stays between the hills and the window. Seeded layout and wall-clock wind
  * keep three panes identical without talking, and the weather changes daily:
- * day.ts deals each place a regime per UTC day. Draws in rendering group 1,
+ * day.ts deals each place a regime per UTC day, and a layout for the near and
+ * mid tiers: scattered, in streets along the wind, massed in a front on one
+ * side, or in a few separate groups. Draws in rendering group 1,
  * after the atmosphere composites the sky, so the sky cannot paint over it.
  */
 import { Color3, Color4, Sprite, SpriteManager, Vector3, type Camera, type DirectionalLight, type Scene } from '@babylonjs/core';
@@ -65,11 +67,29 @@ export async function clouds(
 
 	const random = mulberry32(weather.seed);
 	const puffs: Puff[] = [];
+	const [wx, wz] = [Math.cos(weather.windDir), Math.sin(weather.windDir)];
+	const clumps = Array.from({ length: 3 + Math.floor(random() * 3) }, () => random() * Math.PI * 2);
+	/** A cluster's offset from the centre, by today's layout (only the near and mid tiers take it). */
+	const spot = (tier: number, r0: number, rs: number): [number, number] => {
+		const layout = tier < 2 ? weather.layout : 'scatter';
+		if (layout === 'streets') {
+			// Rows along the wind, ~4 km apart near (three times the deck), wider out.
+			const gap = tier === 0 ? 4_000 : 18_000;
+			const [along, across] = [(random() * 2 - 1) * (r0 + rs), (Math.round((random() - 0.5) * 2 * ((r0 + rs) / gap)) + (random() - 0.5) * 0.2) * gap];
+			return [along * wx - across * wz, along * wz + across * wx];
+		}
+		const a =
+			layout === 'front' ? weather.windDir + Math.PI / 2 + (random() - 0.5) * 1.4 // a wall of cloud across the wind, one side of the sky
+			: layout === 'clumps' ? clumps[Math.floor(random() * clumps.length)]! + (random() - 0.5) * 0.5
+			: random() * Math.PI * 2;
+		const d = r0 + Math.sqrt(random()) * rs;
+		return [Math.cos(a) * d, Math.sin(a) * d];
+	};
 	for (const [tier, t] of TIERS.entries()) {
 		const tierCover = weather.cover[COVER_OF[tier]!]!;
 		for (let c = 0; c < Math.round(t.count * cover * tierCover); c++) {
-			const [a, d] = [random() * Math.PI * 2, t.r0 + Math.sqrt(random()) * t.rs];
-			const [cx, cz, cy] = [center[0] + Math.cos(a) * d, center[1] + Math.sin(a) * d, deckM + t.lift + (random() - 0.5) * 400];
+			const [ox, oz] = spot(tier, t.r0, t.rs);
+			const [cx, cz, cy] = [center[0] + ox, center[1] + oz, deckM + t.lift + (random() - 0.5) * 400];
 			// Mostly modest, a few big: squaring the draw skews sizes the way a real deck does.
 			const base = (t.s0 + random() ** 2 * t.ss * 1.3) * (tier < TIERS.length - 1 ? weather.size : 1);
 			const n = random() < t.lonely ? 1 : t.n0 + Math.floor(random() * t.ns);
@@ -106,7 +126,7 @@ export async function clouds(
 	return {
 		/** `toSun` is the unit vector to the sun; `dark` 0 by day, 1 at night. */
 		update(nowMs: number, toSun: Vector3, dark: number) {
-			const shift = (nowMs / 1000) * weather.wind; // eastward, today's speed
+			const shift = (nowMs / 1000) * weather.wind; // today's speed, toward today's direction
 			sun.diffuse.scaleToRef(Math.min(1, sun.intensity), sunColor);
 			const ambient = scene.ambientColor;
 			const elevation = Math.asin(toSun.y) * (180 / Math.PI);
@@ -115,12 +135,12 @@ export async function clouds(
 			for (const p of puffs) {
 				// Each tier wraps on its own square (aero-2's wrapR), so wind never blows the
 				// near deck away from the place; puffs fade over the square's outer 12%.
-				const dx = wrap(p.x - center[0] + shift, p.wrap);
-				const x = center[0] + dx;
-				const edge = Math.min(1, (p.wrap - Math.max(Math.abs(dx), Math.abs(p.z - center[1]))) / (0.12 * p.wrap));
+				const [dx, dz] = [wrap(p.x - center[0] + shift * wx, p.wrap), wrap(p.z - center[1] + shift * wz, p.wrap)];
+				const [x, z] = [center[0] + dx, center[1] + dz];
+				const edge = Math.min(1, (p.wrap - Math.max(Math.abs(dx), Math.abs(dz))) / (0.12 * p.wrap));
 				const s = p.sprite;
-				s.position.set(x, p.y - drop(x, p.z), p.z);
-				const far = Math.hypot(x - camera.position.x, p.z - camera.position.z);
+				s.position.set(x, p.y - drop(x, z), z);
+				const far = Math.hypot(x - camera.position.x, z - camera.position.z);
 
 				// Forward scatter toward a low sun, and the sun side of each cluster brighter.
 				s.position.subtractToRef(camera.position, view).normalize();

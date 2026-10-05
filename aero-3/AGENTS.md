@@ -59,8 +59,18 @@ One reason to change per file:
   normal map that recesses every window on the lit-room grid (mipmaps flatten it with distance, so
   it reads as relief close in and never aliases). Moonlight reaches the buildings and the ground. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
-  `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
-  (Dubai: `--lat 25.15 --lon 55.19 --radius 12000 --max-features 40000`, Downtown to the Palm)
+  `python3 ../aero-2/tools/fetch-buildings.py <place> --lat <pin> --lon <pin> --radius 13000 --max-features 40000 --out .`
+  (the pin from places.ts; 13 km covers the orbit, and the cap keeps the biggest footprints).
+  Terrain: `bun tools/fetch-terrain.ts [place]` fills each place's near z10 and far z8 terrarium
+  tiles from AWS Open Data; without the far ones the far ring is flat and its sea goes unpainted.
+- One sea (ground-maps.ts `paintSea`): where the terrain says sea floor, cloud and no-data in the
+  imagery become the near patch's own water colour, and the far ring's two sources (Sentinel z8
+  over an older z7) are pulled toward it. A cloudy Sentinel scene over the Gulf read as a snowy
+  plateau with straight edges; z8 no-data drew black wedges (now transparent, `clearNoData`).
+- `src/day.ts` deals per place per day: regime, cloud layout (scatter, streets along the wind,
+  a front, clumps), wind direction, contrast (`scene.imageProcessingConfiguration`) and Mie scale
+  (deep blue to milky sky). The atmosphere's own exposure is 1.7 by day (`?sky=`): at 1 a clear
+  afternoon sky rendered dark slate. Image-processing exposure does not reach the sky.
 - `src/lights.ts` — every light is a single point from map data, in three groups: street lamps
   every 32–55 m along the road pack (`../data/roads`), with only a share of each class lit (back
   streets 50%), dark stretches where the road's own 1D noise dips, and per-lamp brightness jitter; building lights, one per ~3,000 m² on 45% of flat

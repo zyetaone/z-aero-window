@@ -7,9 +7,9 @@
 import { Color3, Matrix, MeshBuilder, PBRMaterial, Quaternion, Vector3, type Scene } from '@babylonjs/core';
 import { hash } from './math.ts';
 
-const RADIUS_M = 5_000; // trees beyond this are under a pixel from the window
+const RADIUS_M = 9_000; // the orbit's reach: from cruise a tree is a few pixels, a clump a speckle of green
 const STEP_M = 37; // one Sentinel-2 z12 pixel
-const MAX_TREES = 12_000;
+const MAX_TREES = 30_000; // thin instances of 20-60-triangle shapes: ~1M triangles at the cap
 
 export function trees(
 	scene: Scene,
