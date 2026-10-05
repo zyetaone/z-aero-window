@@ -7,25 +7,34 @@
  * a slightly elliptical orbit whose radius breathes three times a circuit, a
  * slow climb and descent with a little wander, heading and bank read off the
  * path itself, and the gaze panning ±18° over each visit. The seed (one per
- * visit, places.ts) picks the direction, the start angle and the ellipse.
+ * visit, places.ts) picks the direction, the start angle, the ellipse, and the
+ * altitude: a cruise band (low, mid or high over the ground) and a slow climb or
+ * descent across the visit, so no two visits sit at the same height.
  */
 import { hash, noise1, RAD } from './math.ts';
 import { DWELL_SEC } from './places.ts';
 
 const SPEED_M_S = 230; // ~450 kt
 const CLIMB_M = 350; // the slow altitude swing, either way
+/** Cruise over the ground, m, dealt per visit by weight: low enough to read streets, high enough to see the coast. */
+const BANDS: [weight: number, metres: number][] = [[0.25, 2_200], [0.45, 3_500], [0.3, 5_500]];
+const STEP_M = 1_200; // the most a visit climbs or descends over its 10 minutes (~400 ft/min)
 const CLIMB_PERIOD_SEC = 2 * DWELL_SEC;
 const BANK_GAIN = 0.25; // of the true bank: a 9 km orbit at 450 kt banks ~30°, too steep to watch
 const MAX_BANK = 10 * RAD;
 const SWEEP = 18 * RAD;
 export const SEAT_PITCH = 7 * RAD; // the window looks this far below the horizon; the bank into the turn adds ~8°
 
+/** `climbM` is metres off this visit's cruise (`cruiseM` on the flight), which main.ts floors over the terrain. */
 export type Pose = { x: number; z: number; climbM: number; heading: number; bank: number; look: number };
 
 export function flight(seed: number, orbitM: number) {
 	const dir = hash(seed) < 0.5 ? 1 : -1;
 	const [phase, aspect, tilt] = [hash(seed + 1) * 2 * Math.PI, 1 + 0.3 * hash(seed + 2), hash(seed + 3) * Math.PI];
 	const [cosT, sinT] = [Math.cos(tilt), Math.sin(tilt)];
+	let band = hash(seed + 4);
+	const cruiseM = BANDS.find(([w]) => (band -= w) < 0)![1] * (0.85 + 0.3 * hash(seed + 5));
+	const step = (2 * hash(seed + 6) - 1) * STEP_M;
 
 	/** Offset from the pin, m (x east, z north). */
 	function at(sec: number): [number, number] {
@@ -37,6 +46,8 @@ export function flight(seed: number, orbitM: number) {
 
 	return {
 		at,
+		/** This visit's cruise over the place's ground, m. */
+		cruiseM,
 		/** One full circuit, s: the clearance check walks it once. */
 		periodSec: (2 * Math.PI * orbitM) / SPEED_M_S,
 		pose(sec: number): Pose {
@@ -44,7 +55,9 @@ export function flight(seed: number, orbitM: number) {
 			const [h0, h1] = [Math.atan2(x - x0, z - z0), Math.atan2(x1 - x, z1 - z)];
 			const turn = Math.atan2(Math.sin(h1 - h0), Math.cos(h1 - h0)); // rad/s, + turning right
 			const bank = Math.max(-MAX_BANK, Math.min(MAX_BANK, Math.atan((SPEED_M_S * turn) / 9.81) * BANK_GAIN));
-			const climbM = CLIMB_M * Math.sin((2 * Math.PI * sec) / CLIMB_PERIOD_SEC + phase) + 150 * (2 * noise1(seed, sec / 240) - 1);
+			// A smooth climb or descent across the visit, then the slow swing and a little wander on top.
+			const t = (((sec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC) / DWELL_SEC;
+			const climbM = step * (t * t * (3 - 2 * t) - 0.5) + CLIMB_M * Math.sin((2 * Math.PI * sec) / CLIMB_PERIOD_SEC + phase) + 150 * (2 * noise1(seed, sec / 240) - 1);
 			// Sit on the inside of the turn, so the window faces the city; the gaze pans over each visit.
 			const sweep = SWEEP * Math.cos((2 * Math.PI * (sec % DWELL_SEC)) / DWELL_SEC);
 			return { x, z, climbM, heading: Math.atan2(x1 - x0, z1 - z0), bank, look: Math.sign(turn || dir) * 90 * RAD + sweep };

@@ -29,14 +29,13 @@ import { adminQr, cabinDrone, cabinOverlay } from './cabin.ts';
 import { moon } from './moon.ts';
 import { wing } from './wing.ts';
 import { stars } from './stars.ts';
-import { atSolarHour, solarHour, sunAt } from './sun.ts';
+import { atSolarHour, moonAt, solarHour, sunAt } from './sun.ts';
 import { createWorld } from './world.ts';
 import { fetchWall, NO_WALL } from './wall.ts';
 import { hash, RAD, smoothstep } from './math.ts';
 
 // id → [lat, lon, ground m]. Same coordinates as aero-2's catalog.
 
-const CRUISE_M = 3500; // above ground
 const CLEAR_M = 2_000; // over the highest terrain within 8 km of the orbit
 const ORBIT_M = 9000;
 const LAMP_ALPHA = 0.22;
@@ -98,6 +97,13 @@ scene.skipPointerMovePicking = true;
 
 const sunLight = new DirectionalLight('sun', new Vector3(0, -1, 0), scene);
 const atmosphere = Atmosphere.IsSupported(engine) ? new Atmosphere('atmosphere', scene, [sunLight]) : null;
+// Moonlight: its own light, because the atmosphere builds the sky from sunLight. Always on (0 by day),
+// so no shader recompiles at dusk; cool, and as bright as the phase and the moon's height allow.
+// The night map then reads faintly under it instead of black. ?moon=0 drops it (bench ablation).
+const moonLight = q.get('moon') === '0' ? null : new DirectionalLight('moon', new Vector3(0, -1, 0), scene);
+moonLight?.diffuse.set(0.62, 0.72, 1);
+moonLight?.specular.set(0.2, 0.24, 0.3);
+const MOONLIGHT = num('moonlight', 0.4); // full, high moon; a moonless night gets a quarter
 
 const camera = new FreeCamera('window', Vector3.Zero(), scene);
 camera.fov = 45 * RAD;
@@ -106,13 +112,16 @@ camera.maxZ = 1_000_000;
 
 const roadsLoad = fetchPack('roads'); // the ground paints them in by day, the lamps follow them by night
 const world = await createWorld(scene, lat, lon, await roadsLoad);
+// The ground only: its atmosphere-plugin materials take a light ~30x weaker than plain PBR (measured),
+// so a strength that shows the desert would blow out the wing, which has its own night fill (wing.ts).
+moonLight?.includedOnlyMeshes.push(...['near', 'far'].map((n) => scene.getMeshByName(n)!).filter(Boolean));
 // Today for this place, from the visit's slot start: the same on every pane, different tomorrow.
 const day = dayFor(placeId, bootSlot * DWELL_SEC * 1000, q.get('weather') ?? wall.weather);
 sunLight.intensity = day.sun;
 if (atmosphere) atmosphere.aerialPerspectiveIntensity *= day.haze;
 const [pinX, pinZ] = world.project(lon, lat);
-// Cruise over the place's ground, but never into it: in the mountains the track clears the highest
-// terrain within 4 km of it (one circuit, sampled once) by CLEAR_M. Flat cities keep plain CRUISE_M.
+// Each visit's own cruise (flight.ts: a band and a climb), but never into the ground: the track clears
+// the highest terrain within 4 km of it (one circuit, sampled once) by CLEAR_M, a floor in the loop.
 let peakM = -Infinity;
 for (let i = 0; i < 720; i++) {
 	const [tx, tz] = track.at((i / 720) * track.periodSec);
@@ -121,7 +130,7 @@ for (let i = 0; i < 720; i++) {
 		peakM = Math.max(peakM, world.groundAt(x, z) + world.drop(x, z));
 	}
 }
-const cruiseM = Math.max(groundM + CRUISE_M, peakM + CLEAR_M);
+const floorM = peakM + CLEAR_M;
 const [city, roads, deck, sky] = await Promise.all([
 	loadCity(),
 	roadsLoad,
@@ -192,6 +201,14 @@ engine.runRenderLoop(() => {
 
 	// Lamps, window glow, stars and the eye's twilight adaptation all follow the sun, not the hour.
 	const dark = 1 - smoothstep(-8, 2, s.elevationDeg);
+	if (moonLight && frames % 30 === 1) {
+		const m = moonAt(skyMs, lat, lon); // twice a second is plenty: the moon crawls
+		// A clear night's skyglow from overhead as the floor, so a new moon is dim, not black; a high,
+		// full moon swings the light round to itself and adds up to four times that.
+		const up = m.illumination * smoothstep(-1, 12, m.elevationDeg);
+		moonLight.direction.set(-m.x * up, -Math.max(m.y, 0) * up - (1 - up), -m.z * up).normalize();
+		moonLight.intensity = MOONLIGHT * dark * (0.25 + 0.75 * up);
+	}
 	// The VIIRS texture bakes its own balance (world.ts); ?carpet= scales it from there.
 	// The twilight lift multiplies emissive too, so divide it back out: 0.12 means 0.12 at night.
 	const exposure = 1 + twilightLift * dark;
@@ -209,7 +226,7 @@ engine.runRenderLoop(() => {
 	// The aircraft (heading, bank), then the seat in it: turned to the window, looking a little down.
 	const p = track.pose(now / 1000);
 	const [x, z] = [pinX + p.x, pinZ + p.z];
-	camera.position.set(x, cruiseM + p.climbM - world.drop(x, z), z);
+	camera.position.set(x, Math.max(groundM + track.cruiseM + p.climbM, floorM) - world.drop(x, z), z);
 	Quaternion.RotationYawPitchRollToRef(p.heading, 0, -p.bank, aircraft);
 	Quaternion.RotationYawPitchRollToRef(p.look + paneYaw, SEAT_PITCH, 0, seat);
 	aircraft.multiplyToRef(seat, camera.rotationQuaternion!);
@@ -248,13 +265,18 @@ function recover() {
 }
 recover.once = false;
 
-async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean): Promise<AbstractEngine> {
+/**
+ * MSAA on (?aa=0 off, for the bench): without it every building edge and lit-window texel is
+ * sampled once per pixel and flickers as the plane moves, which read as noise on the city. Mali
+ * is tile-based and resolves MSAA on chip, so it is the cheap kind of anti-aliasing there.
+ */
+async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean, antialias = q.get('aa') !== '0'): Promise<AbstractEngine> {
 	if (wantWebGPU && (await WebGPUEngine.IsSupportedAsync)) {
-		const gpu = new WebGPUEngine(target, { antialias: false });
+		const gpu = new WebGPUEngine(target, { antialias });
 		await gpu.initAsync();
 		return gpu;
 	}
-	return new Engine(target, false, { stencil: false, powerPreference: 'high-performance' });
+	return new Engine(target, antialias, { stencil: false, powerPreference: 'high-performance' });
 }
 
 /** The place's OSM footprints, if it has a pack (see buildings.ts). */

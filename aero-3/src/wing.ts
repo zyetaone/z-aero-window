@@ -71,7 +71,9 @@ export async function wing(scene: Scene) {
 			seat.position.copyFrom(eye);
 			Quaternion.RotationYawPitchRollToRef(side * (Math.PI / 2), 0, 0, seat.rotationQuaternion ??= new Quaternion());
 			aircraft.multiplyToRef(seat.rotationQuaternion, seat.rotationQuaternion);
-			seat.scaling.x = -side; // the model's nose (+z) to the left of a right-side window; mirrored for the left
+			// Mirror so the model's nose (+z) points the way the aircraft flies: measured on screen, travel
+			// and +z must share a sign (it was -side, and the wing flew backwards).
+			seat.scaling.x = side;
 			nav.material.emissiveColor.set(side > 0 ? 0.1 : 1, side > 0 ? 1 : 0.12, 0.1).scaleInPlace(0.3 + 0.7 * dark);
 			const cycle = (nowMs % 1800) / 1800; // aero-2's double pulse
 			strobe.ball.setEnabled((cycle > 0.9 && cycle < 0.93) || (cycle > 0.96 && cycle < 0.99));

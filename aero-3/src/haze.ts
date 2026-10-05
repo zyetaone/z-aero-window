@@ -26,6 +26,9 @@ export async function haze(scene: Scene, map: OffscreenCanvas, sizeM: number, gr
 	material.diffuseColor = Color3.Black();
 	material.emissiveColor = Color3.Black(); // the texture is the light; its level is the gain
 	material.alphaMode = Constants.ALPHA_ONEONE;
+	// Below 1, or Babylon draws it in the OPAQUE pass, where ONEONE never applies: it painted a black
+	// square over the whole near patch from dusk on (the 'terrain goes black at 17:24' bug).
+	material.alpha = 0.999;
 	material.disableDepthWrite = true;
 	material.backFaceCulling = false;
 	sheet.material = material;

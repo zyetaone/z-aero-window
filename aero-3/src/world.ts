@@ -186,7 +186,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 	// near patch only (the far ring is never close enough to show it).
 	const detail = groundDetail(scene);
 	detail.uScale = detail.vScale = (near.span / 2 ** near.z) * mPerMerc / DETAIL_M;
-	Object.assign(materials[0]!.detailMap, { texture: detail, isEnabled: true, diffuseBlendLevel: 0.3, normalBlendLevel: 0.2, roughnessBlendLevel: 0.25 });
+	Object.assign(materials[0]!.detailMap, { texture: detail, isEnabled: true, diffuseBlendLevel: 0.12, normalBlendLevel: 0.08, roughnessBlendLevel: 0.15 /* any stronger and the 350 m repeat shows as a grid */ });
 
 	/**
 	 * OSM roads as asphalt lines in the imagery canvas, before it becomes a texture: Sentinel's
