@@ -7,7 +7,7 @@
  * moves on the wall clock, so three panes agree without talking.
  *
  * Params (all optional, so `frame-cost.mjs` can pin a scene):
- *   ?place=hyderabad  ?clock=6 (local solar hour)  ?yaw=0 (pane offset, deg)
+ *   ?place=hyderabad (pin a city; omit it to follow the rotation)  ?clock=6 (local solar hour)  ?yaw=0 (pane offset, deg)
  *   ?scale=1 (hardware scaling)  ?gpu=webgpu  ?hud=0  ?clouds=1 (cover, 0 = clear)
  *   ?weather=clear|fair|scattered|towering|cirrus (pin today's regime)
  *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=1 (VIIRS texture)
@@ -18,25 +18,17 @@ import { buildings } from './buildings.ts';
 import { clouds, weatherFor } from './clouds.ts';
 import { streetlights } from './lights.ts';
 import { trees } from './trees.ts';
+import { destinationAt, PLACES } from './places.ts';
+import { haze } from './haze.ts';
 import { stars } from './stars.ts';
 import { atSolarHour, solarHour, sunAt } from './sun.ts';
 import { createWorld } from './world.ts';
 import { RAD, smoothstep } from './math.ts';
 
 // id → [lat, lon, ground m]. Same coordinates as aero-2's catalog.
-const PLACES: Record<string, [number, number, number]> = {
-	hyderabad: [17.4435, 78.3772, 500],
-	mumbai: [19.076, 72.8777, 10],
-	dubai: [25.2048, 55.2708, 5],
-	dallas: [32.7767, -96.797, 150],
-	phoenix: [33.4352, -112.0101, 340],
-	las_vegas: [36.1699, -115.1398, 620],
-	denver: [39.8561, -104.6737, 1600],
-	chicago_midway: [41.7868, -87.7522, 190],
-	himalayas: [27.9881, 86.925, 5000]
-};
 
 const CRUISE_M = 3500; // above ground
+const CLEAR_M = 1_200; // over the highest terrain near the orbit
 const DECK_M = 1800; // cloud base above ground: the window looks down onto it
 const SPEED_M_S = 230; // ~450 kt
 const ORBIT_M = 9000;
@@ -44,7 +36,11 @@ const LAMP_ALPHA = 0.22;
 const GLOW = 0.35;
 
 const q = new URLSearchParams(location.search);
-const placeId = q.get('place') && q.get('place')! in PLACES ? q.get('place')! : 'hyderabad';
+// ?place= pins a city; otherwise the wall-clock rotation picks it, the same on every pane.
+const pinnedPlace = q.get('place') && q.get('place')! in PLACES ? q.get('place')! : null;
+const placeId = pinnedPlace ?? destinationAt(Date.now() / 1000);
+// When the rotation moves on, start over in the next city: a reload frees every buffer of this one.
+if (!pinnedPlace) setInterval(() => destinationAt(Date.now() / 1000) !== placeId && location.reload(), 1000);
 const [lat, lon, groundM] = PLACES[placeId]!;
 const paneYaw = Number(q.get('yaw') ?? 0) * RAD;
 const lampGain = Number(q.get('lamps') ?? 1);
@@ -53,7 +49,7 @@ const twilightLift = Number(q.get('lift') ?? 8);
 const carpet = Number(q.get('carpet') ?? 1);
 let pinnedHour = q.has('clock') ? Number(q.get('clock')) : null;
 // The Lights panel's live gains (lightsPanel): street lamps, building lights, far towns, bloom.
-const mix = { street: 1, building: 1, far: 1, glow: GLOW };
+const mix = { street: 1, building: 1, far: 1, glow: GLOW, haze: 0.12 };
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const engine = await createEngine(canvas, q.get('gpu') === 'webgpu');
@@ -79,16 +75,25 @@ const world = await createWorld(scene, lat, lon);
 // Today's sky for this place: the same on every pane, different tomorrow. ?weather= pins a regime.
 const weather = weatherFor(placeId, Date.now(), q.get('weather'));
 const [pinX, pinZ] = world.project(lon, lat);
+// Cruise over the place's ground, but never into it: in the mountains the orbit clears the highest
+// terrain within 15 km of it (sampled once) by CLEAR_M. Flat cities keep plain CRUISE_M.
+const peakM = Array.from({ length: 360 }, (_, i) => {
+	const [a, r] = [(i / 360) * 2 * Math.PI * 7, ORBIT_M + ((i % 7) - 3) * 2_000];
+	const [x, z] = [pinX + r * Math.cos(a), pinZ + r * Math.sin(a)];
+	return world.groundAt(x, z) + world.drop(x, z);
+}).reduce((a, b) => Math.max(a, b));
+const cruiseM = Math.max(groundM + CRUISE_M, peakM + CLEAR_M);
 const [city, roads, deck, sky] = await Promise.all([
 	loadCity(),
 	fetchPack('roads'),
-	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + DECK_M, groundM, world.drop, weather, Number(q.get('clouds') ?? 1)),
+	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + DECK_M, world.groundAt, world.drop, weather, Number(q.get('clouds') ?? 1)),
 	stars(scene, camera, lat, lon)
 ]);
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
 // towns on the far ring past the roads (lights.ts).
 const lamps = streetlights(roads ?? [], world.project, world.groundAt, scene, city?.roofLights, world.sites, city?.windows);
 const treeCount = q.get('trees') === '0' ? 0 : trees(scene, [pinX, pinZ], world.imagery, world.groundAt);
+const cityHaze = await haze(scene, world.hazeMap, world.nearSizeM, groundM, world.drop);
 // Everything is built: drop the CPU copies of vertex data (the GPU has them; nothing here picks or edits).
 scene.clearCachedVertexData();
 const glowing = [...world.materials, ...(city ? [city.material] : [])];
@@ -109,7 +114,7 @@ if (glow && lamps) {
 if (city) glow?.addIncludedOnlyMesh(city.mesh);
 
 const hud = q.get('hud') === '0' ? null : clockControls();
-if (hud) lightsPanel();
+if (hud) lightsPanel(), placePicker();
 if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount, weather }); // for the console and frame-cost ablations
 let hudAt = 0;
 const toSun = new Vector3();
@@ -127,6 +132,7 @@ engine.runRenderLoop(() => {
 	const exposure = 1 + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;
 	for (const m of skyLit) m.ambientColor.setAll(1 - dark);
+	cityHaze((mix.haze * dark) / exposure); // emissive, so it rides the exposure lift too
 	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (m !== city?.material ? carpet : 1)) / exposure;
 	// Faint per lamp: ~200k additive points sum to a white sheet at anything brighter.
 	lamps?.update(camera.position, now, Math.min(0.999, LAMP_ALPHA * lampGain * dark), mix);
@@ -138,7 +144,7 @@ engine.runRenderLoop(() => {
 	// Counter-clockwise orbit around the pin: the left window faces the city.
 	const theta = ((now / 1000) * SPEED_M_S) / ORBIT_M;
 	const [x, z] = [pinX + ORBIT_M * Math.cos(theta), pinZ + ORBIT_M * Math.sin(theta)];
-	camera.position.set(x, groundM + CRUISE_M - world.drop(x, z), z);
+	camera.position.set(x, cruiseM - world.drop(x, z), z);
 	camera.rotation.set(12 * RAD, Math.atan2(pinX - x, pinZ - z) + paneYaw, 0);
 
 	deck.update(now, toSun.set(s.x, s.y, s.z), dark);
@@ -174,6 +180,20 @@ async function fetchPack(kind: 'buildings' | 'roads') {
 }
 
 /** The time-of-day slider: drag to pin the sky to an hour, "Now" to follow the real sun again. */
+/** The place picker: Rotation follows the wall clock; a city pins it (?place=). Both reload. */
+function placePicker() {
+	const select = document.querySelector<HTMLSelectElement>('#place')!;
+	select.add(new Option('Rotation', ''));
+	for (const id of Object.keys(PLACES)) select.add(new Option(id.replace('_', ' '), id));
+	select.value = pinnedPlace ?? '';
+	select.addEventListener('change', () => {
+		const url = new URL(location.href);
+		if (select.value) url.searchParams.set('place', select.value);
+		else url.searchParams.delete('place');
+		location.assign(url);
+	});
+}
+
 /** The Lights panel: each slider writes one gain in `mix`, read by the render loop. */
 function lightsPanel() {
 	for (const input of document.querySelectorAll<HTMLInputElement>('#lights input')) {

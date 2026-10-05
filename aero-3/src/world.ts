@@ -8,7 +8,7 @@
  * world), so the two patches, the buildings and the pin share one projection.
  */
 import { Color3, MeshBuilder, PBRMaterial, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
-import { hash, RAD, smoothstep } from './math.ts';
+import { fbm, hash, RAD, smoothstep } from './math.ts';
 
 const TILE = 256;
 const EARTH_M = 6_371_000;
@@ -105,7 +105,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 			const [mx, my] = [mx0 + x / mPerMerc, my0 - z / mPerMerc];
 			positions[i] = x;
 			positions[i + 2] = z;
-			positions[i + 1] = heightAt(mx, my) - drop(x, z) - (sink?.(mx, my) ? 500 : 0);
+			positions[i + 1] = heightAt(mx, my) - drop(x, z) - (sink?.(mx, my) ? SINK_M : 0);
 		}
 		const normals: number[] = [];
 		VertexData.ComputeNormals(positions, mesh.getIndices(), normals);
@@ -156,6 +156,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		return [x, heightAt(mx, my) - drop(x, z) + 10, z];
 	};
 	const sites = lightSites(farLights, far, 8, 1, inNear, at);
+	const hazeMap = lightDome(nearLights);
 	const imagery = crop(nearImagery, near, mercX(lon), mercY(lat), (mx, my) => [(mx - mx0) * mPerMerc, -(my - my0) * mPerMerc]);
 
 	// The 1e-3 tile slack keeps float32 border vertices on the border, not sunk.
@@ -175,7 +176,11 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		/** Far-ring towns from NASA's radiance: [x, y, z, radiance 0..1] per light (lights.ts). */
 		sites,
 		/** The imagery's RGB under (x, z) within CROP_M of the pin, else null (trees.ts). */
-		imagery
+		imagery,
+		/** The light dome over the near patch: VIIRS blurred, broken up by noise (haze.ts). */
+		hazeMap,
+		/** The near patch's side in metres, centred on the origin. */
+		nearSizeM: (near.span / 2 ** near.z) * mPerMerc
 	};
 }
 
@@ -189,6 +194,9 @@ async function fetchTile(url: string): Promise<ImageBitmap | null> {
 
 const GLOW = 0.12; // NASA's radiance as a faint carpet: the points carry the detail
 const REVEAL = 0.3; // how much of the real ground a lit district shows at night
+// How far the far ring drops under the detail patch. 500 m was plenty in a flat city; in the
+// Himalayas z8's coarse peaks overshoot z10's by more and poked through as grey flat sheets.
+const SINK_M = 3_000;
 const CROP_M = 6_000; // imagery kept for sampling (trees), either side of the pin
 
 /**
@@ -217,6 +225,35 @@ function nightGround(lights: OffscreenCanvas, imagery: OffscreenCanvas) {
 	}
 	ctx.putImageData(image, 0, 0);
 	return lights;
+}
+
+/**
+ * The light a city throws up into the haze above it, as a 256² map over the
+ * near patch: NASA's radiance blurred by downsampling (each step averages) into
+ * a soft dome, then multiplied by fractal noise so it reads as uneven haze and
+ * not a smooth disc. Composed from the map, textured by generated noise.
+ */
+function lightDome(lights: OffscreenCanvas) {
+	let src: OffscreenCanvas = lights;
+	for (const side of [768, 192, 64]) {
+		const step = new OffscreenCanvas(side, side);
+		step.getContext('2d')!.drawImage(src, 0, 0, side, side);
+		src = step;
+	}
+	const dome = new OffscreenCanvas(256, 256);
+	const ctx = dome.getContext('2d')!;
+	ctx.drawImage(src, 0, 0, 256, 256); // back up, bilinear: the blur
+	const image = ctx.getImageData(0, 0, 256, 256);
+	const d = image.data;
+	for (let i = 0; i < d.length; i += 4) {
+		const [x, y] = [(i / 4) % 256, Math.floor(i / 4 / 256)];
+		// The ground's knee: averaged VIIRS is mid-bright almost everywhere, so only the city domes.
+		const t = smoothstep(0.35, 0.75, Math.max(d[i]!, d[i + 1]!, d[i + 2]!) / 255);
+		const k = t * (0.45 + 0.9 * fbm(0x4a2e, x / 24, y / 24));
+		[d[i], d[i + 1], d[i + 2]] = [255 * k, 165 * k, 90 * k];
+	}
+	ctx.putImageData(image, 0, 0);
+	return dome;
 }
 
 /**

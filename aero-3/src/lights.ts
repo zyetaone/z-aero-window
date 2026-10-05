@@ -20,18 +20,20 @@
  * at its own slow rate, the scintillation a city shows through 3 km of warm air. All of it runs off wall-clock seconds: panes agree.
  */
 import { Constants, Effect, Mesh, ShaderMaterial, Vector3, VertexData, type Scene } from '@babylonjs/core';
+import { hash, noise1 } from './math.ts';
 
 type Road = { geometry: { coordinates: number[][] }; properties: { class: string } };
 
-/** Metres between lamps, and how bright they read, by road class. */
-const CLASS: Record<string, [spacing: number, gain: number]> = {
-	motorway: [32, 1],
-	trunk: [34, 1],
-	primary: [36, 0.9],
-	secondary: [40, 0.8],
-	tertiary: [45, 0.7],
-	residential: [55, 0.5]
+/** Metres between lamps, how bright they read, and the share of roads lit, by road class. */
+const CLASS: Record<string, [spacing: number, gain: number, litShare: number]> = {
+	motorway: [32, 1, 0.97],
+	trunk: [34, 1, 0.95],
+	primary: [36, 0.9, 0.9],
+	secondary: [40, 0.8, 0.85],
+	tertiary: [45, 0.7, 0.7],
+	residential: [55, 0.5, 0.5]
 };
+const GAP_M = 350; // the scale of the dark stretches along a lit road
 // Sodium-majority, the way Indian and older US streets still mostly are, with a few
 // signal reds and blue-white LEDs.
 const KINDS: [weight: number, colour: [number, number, number]][] = [
@@ -89,18 +91,28 @@ export function streetlights(
 	const colors: number[] = [];
 
 	for (const { geometry, properties } of roads) {
-		const [spacing, gain] = CLASS[properties.class] ?? CLASS.residential!;
+		const [spacing, gain, litShare] = CLASS[properties.class] ?? CLASS.residential!;
+		const [lon0, lat0] = geometry.coordinates[0]!;
+		const seed = (Math.floor(lon0! * 1e5) * 73_856_093) ^ (Math.floor(lat0! * 1e5) * 19_349_663);
+		if (hash(seed) > litShare) continue; // not every road is lit: the back streets go dark
 		const line = geometry.coordinates.map(([lon, lat]) => project(lon!, lat!));
 		const [r, g, b] = kindFor(geometry.coordinates[0]!);
 		let carry = 0; // distance into the current segment where the next lamp falls
+		let run = 0; // distance along the whole road, for the gap noise
 		for (let i = 1; i < line.length; i++) {
 			const [[x0, z0], [x1, z1]] = [line[i - 1]!, line[i]!];
 			const len = Math.hypot(x1 - x0, z1 - z0);
 			for (let d = carry; d < len; d += spacing) {
+				// Dark stretches where the road's own 1D noise dips: a broken string, not a solid line.
+				if (noise1(seed, (run + d) / GAP_M) < 0.28) continue;
+				const v = hash(seed + Math.floor(run + d));
+				if (v < 0.02) continue; // the odd lamp out
+				const k = gain * (0.55 + 0.6 * v); // and no two quite alike
 				const [x, z] = [x0 + ((x1 - x0) * d) / len, z0 + ((z1 - z0) * d) / len];
 				positions.push(x, groundAt(x, z) + LAMP_HEIGHT_M, z);
-				colors.push(r * gain, g * gain, b * gain, 1);
+				colors.push(r * k, g * k, b * k, 1);
 			}
+			run += len;
 			carry = (carry - len) % spacing;
 			if (carry < 0) carry += spacing;
 		}

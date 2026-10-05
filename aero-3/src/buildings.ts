@@ -40,7 +40,8 @@ const PAINTS: [weight: number, rgb: [number, number, number]][] = [
 ];
 const ROOF: [number, number, number] = [0.86, 0.84, 0.8]; // flat concrete, sun-bleached
 const WINDOW_M2 = 320; // one lit window point per this much wall, on buildings WINDOW_MIN_M up
-const ROOF_M2 = 1_200; // one roof light (stair heads, terrace bulbs, signs) per this much flat roof
+const ROOF_M2 = 3_000; // one roof light (stair heads, terrace bulbs, signs) per this much flat roof
+const ROOF_LIT = 0.45; // and only on this share of buildings: most roofs are dark
 const WINDOW_MIN_M = 12;
 
 export function buildings(
@@ -116,8 +117,8 @@ export function buildings(
 		for (const i of tris) indices.push(v + i);
 		// Roof lights scattered over the roof's triangles by area: at least one per building,
 		// more on the big flat ones. Barycentric draws stay inside the footprint.
-		let lit = 0;
-		for (let k = 0; k < tris.length; k += 3) {
+		let lit = random() < ROOF_LIT ? 0 : -1; // -1: this roof stays dark
+		for (let k = 0; k < tris.length && lit >= 0; k += 3) {
 			const [a, b, c] = [ring[tris[k]!]!, ring[tris[k + 1]!]!, ring[tris[k + 2]!]!];
 			const area = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
 			for (let n = Math.floor(area / ROOF_M2 + random()) || (k === 0 && !lit ? 1 : 0); n > 0; n--, lit++) {

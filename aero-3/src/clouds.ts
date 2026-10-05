@@ -78,8 +78,8 @@ export async function clouds(
 	sun: DirectionalLight,
 	center: [x: number, z: number],
 	deckM: number,
-	/** The ground under the deck: no card may reach below it, or the terrain clips it flat. */
-	groundM: number,
+	/** The ground under a puff: no card may reach below it, or the terrain clips it flat. */
+	groundAt: (x: number, z: number) => number,
 	drop: (x: number, z: number) => number,
 	weather: Weather,
 	cover = 1
@@ -105,8 +105,9 @@ export async function clouds(
 				const size = base * (i === 0 ? 1.25 : 0.85 + random() * 0.55);
 				// Keep the card's visible body above the ground: a big puff dipping into the terrain is cut
 				// off by its depth as a hard horizontal line (0.4 of the height: the PNGs fade at the rim).
-				const lowest = groundM + 300 + size * t.squash * 0.4;
-				const [x, z, y] = [cx + Math.cos(theta) * r, cz + Math.sin(theta) * r, Math.max(lowest, cy + (i === 0 ? 0 : (random() - 0.5) * base * 0.35 * t.squash))];
+				const [x, z] = [cx + Math.cos(theta) * r, cz + Math.sin(theta) * r];
+				const lowest = groundAt(x, z) + drop(x, z) + 300 + size * t.squash * 0.4;
+				const y = Math.max(lowest, cy + (i === 0 ? 0 : (random() - 0.5) * base * 0.35 * t.squash));
 				const sprite = new Sprite('puff', manager);
 				sprite.cellIndex = t.cells[Math.floor(random() * t.cells.length)]!;
 				// Near-upright with a mirror for variety: a squashed card at a random angle reads as a flame.

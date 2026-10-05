@@ -9,12 +9,18 @@ One reason to change per file:
 
 - `server.ts` — `Bun.serve` with HTML-import bundling and `{ dir }` tile routes. No Vite, no SvelteKit.
 - `src/main.ts` — scene, light, camera orbiting the place's pin at 9 km on the wall clock (panes
-  agree without talking), the time-of-day slider, the render loop.
+  agree without talking), the time-of-day slider, the place picker, the render loop. Cruise
+  altitude clears the highest terrain near the orbit by 1.2 km (the Himalayas), else 3.5 km AGL.
+- `src/places.ts` — the place table and aero-2's rotation, ported as is: 600 s per city, the day's
+  order a Fisher-Yates shuffle seeded by the day number. With no `?place=`, the page follows it
+  and reloads into the next city (a reload frees every buffer). The Himalayas are `?place=` only.
 - `src/world.ts` — the ground. A 3×3 z10 detail patch (terrarium + z12 Sentinel-2, 3072 px: the
   Pi's 4096 px texture limit is the ceiling) inside a 5×5 z8 ring (~750 km, past the horizon), both
   bent by Earth's curvature. Night is NASA's VIIRS radiance (GIBS, capped at z8) through aero-2's
   luminance knee as a faint glow, and as a mask that shows the real imagery warm under lit
-  districts. Map data only: no procedural noise in any texture. Textures upload from JPEG blobs, so
+  districts. The far ring sinks 3 km under the detail patch (z8's coarse peaks overshoot z10's in
+  the mountains). Ground textures are map data only; the haze dome below is the one place noise
+  breaks a map up. Textures upload from JPEG blobs, so
   no CPU canvas outlives boot; `scene.clearCachedVertexData()` drops the mesh copies after build.
 - `src/buildings.ts` — OSM footprints extruded at boot into one mesh with a procedural window
   facade: concrete and glass by day, lit rooms at night, plus a baked ambient-occlusion
@@ -22,12 +28,16 @@ One reason to change per file:
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
 - `src/lights.ts` — every light is a single point from map data, in three groups: street lamps
-  every 32–55 m along the road pack (`../data/roads`); building lights, one per ~1,200 m² of flat
-  roof and a few lit windows on walls of buildings 12 m and up (buildings.ts); and far-ring towns
+  every 32–55 m along the road pack (`../data/roads`), with only a share of each class lit (back
+  streets 50%), dark stretches where the road's own 1D noise dips, and per-lamp brightness jitter; building lights, one per ~3,000 m² on 45% of flat
+  roofs and a few lit windows on walls of buildings 12 m and up (buildings.ts); and far-ring towns
   from bright NASA VIIRS pixels past the roads (world.ts). One additive point cloud on a small
   shader: each light fades and reddens toward the horizon and twinkles faintly. Mix: sodium 65%,
   warm white 15%, white 10%, red 5%, blue 5%. The HUD's Lights panel sets each group's gain and
   the bloom live. `GlowLayer` blooms the lamps and the buildings' lit windows, at night only.
+- `src/haze.ts` — the amber murk over a lit city: one additive sheet 450 m up carrying world.ts's
+  light dome (VIIRS downsampled into a blur, kneed so only the city domes, × fbm noise from math.ts).
+  Gain = Haze slider × darkness ÷ exposure.
 - `src/trees.ts` — low-poly cones in clusters wherever the imagery within 5 km of the pin reads
   green: thin instances, one draw call (`?trees=0` to skip).
 - **Water** comes from the imagery too: dark, green-or-teal pixels get a smooth roughness map
@@ -40,7 +50,7 @@ One reason to change per file:
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
 - `src/sun.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
   (no time zones). Tested.
-- `src/math.ts` — `RAD`, `smoothstep`, and the two seeded noises (`hash`, `mulberry32`) every module shares.
+- `src/math.ts` — `RAD`, `smoothstep`, and the seeded noises (`hash`, `mulberry32`, `noise1`, `noise2`, `fbm`) every module shares.
 
 ## Traps (each cost a debugging pass)
 
@@ -64,6 +74,8 @@ One reason to change per file:
   alpha (`ALPHA_ADD`, src·α) can never exceed the gain. Fold the gain into the colour (`ALPHA_ONEONE`).
 - **GlowLayer re-renders whatever it includes**; including the atmosphere-plugin PBR ground blew
   the dusk sky white. It includes the lamp points only.
+- **A StandardMaterial adds its emissive texture at `texture.level`**, not × `emissiveColor`: the
+  haze sheet's gain is the level, or it washes the city flat orange.
 - **120k additive points sum to a white sheet**: per-lamp alpha is ~0.2.
 - **The twilight exposure lift multiplies emissive too**, so emissive gains are divided by it:
   `?carpet=1` means 1 at night, not 9.
@@ -94,5 +106,5 @@ On a Pi, run the binary from a directory where `../data/tiles/sentinel2`,
 
 ## Not built yet
 
-Wing, fleet sync, admin, weather. Add them only
+Wing, fleet sync (beyond the wall-clock rotation), admin, live weather. Add them only
 after the Pi numbers say this stack is worth growing.
