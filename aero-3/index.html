@@ -71,6 +71,15 @@
 			}
 			#blind time { font-size: 0.8em; letter-spacing: 0.1em; font-variant-numeric: tabular-nums; }
 			#blind.open { transform: translateY(-101%); }
+			/* The admin QR: hold the glass 15 s (cabin.ts). The ring says "keep going". */
+			#hold { z-index: 5; display: grid; place-items: center; }
+			#hold::after {
+				content: ''; width: 72px; height: 72px; border-radius: 50%;
+				background: conic-gradient(#fffc calc(var(--p, 0) * 1turn), #fff3 0);
+				mask: radial-gradient(circle, transparent 28px, #000 29px);
+			}
+			#qr { z-index: 5; display: grid; place-content: center; justify-items: center; gap: 12px; background: #000c; color: #fffd; font: 16px/1.4 ui-sans-serif, system-ui, sans-serif; pointer-events: auto; }
+			#qr svg { width: min(60vh, 320px); height: auto; background: #fff; border-radius: 8px; }
 			@media (prefers-reduced-motion: reduce) { #blind { transition-duration: 0.3s; } #rain span { animation: none; opacity: var(--o); } }
 		</style>
 	</head>
@@ -79,6 +88,8 @@
 		<div id="rain" class="cabin" hidden aria-hidden="true"></div>
 		<div id="frame" class="cabin" aria-hidden="true"></div>
 		<div id="blind" class="cabin" aria-hidden="true"><span></span><time></time></div>
+		<div id="hold" class="cabin" hidden aria-hidden="true"></div>
+		<div id="qr" class="cabin" hidden role="dialog" aria-label="Open the wall controls on a phone"><div></div><p></p></div>
 		<div id="hud" hidden>
 			<input type="range" min="0" max="24" step="0.05" aria-label="Time of day (local solar hour)" />
 			<button type="button">Now</button>

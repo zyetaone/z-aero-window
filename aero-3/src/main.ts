@@ -25,7 +25,7 @@ import { streetlights } from './lights.ts';
 import { trees } from './trees.ts';
 import { destinationAt, DWELL_SEC, PLACES, slotAt } from './places.ts';
 import { haze } from './haze.ts';
-import { cabinDrone, cabinOverlay } from './cabin.ts';
+import { adminQr, cabinDrone, cabinOverlay } from './cabin.ts';
 import { moon } from './moon.ts';
 import { wing } from './wing.ts';
 import { stars } from './stars.ts';
@@ -164,6 +164,7 @@ const [aircraft, seat] = [new Quaternion(), new Quaternion()];
 camera.rotationQuaternion = new Quaternion();
 const cabin = cabinOverlay(blinds, day.rain, placeId, lon);
 document.querySelector<HTMLElement>('#frame')!.hidden = q.get('frame') === '0';
+adminQr(wallOrigin);
 // A new push: every pane lowers the blind and reloads into it on the wall's applyAt second.
 let changeover = false;
 setInterval(async () => {

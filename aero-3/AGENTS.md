@@ -160,8 +160,7 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
    Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
    lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.
 6. **Content** — presets done (`wall.ts` PRESETS: five named scenes that fill `/admin`'s form).
-   Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers; the admin
-   QR from aero-2 `qr.ts`.
+   Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers. Admin QR done: hold the glass 15 s for the wall Pi's `/admin` (aero-2's `qr.ts`).
 
 ## Not built yet
 

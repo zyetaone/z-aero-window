@@ -6,6 +6,7 @@
  * its first seconds, and it comes down ahead of every slot boundary, where
  * main.ts reloads into the next visit. All of it from the wall clock.
  */
+import { qrSvg } from '../../aero-2/src/lib/qr.ts';
 import { mulberry32 } from './math.ts';
 import { DWELL_SEC } from './places.ts';
 import { solarHour } from './sun.ts';
@@ -64,6 +65,44 @@ export function cabinDrone(volume = 0.6) {
 			filter.frequency.setTargetAtTime(220 - Math.min(1, Math.max(0, altitudeM / 12_000)) * 110, ctx.currentTime, 0.5);
 		}
 	};
+}
+
+/**
+ * aero-2's admin QR: hold the glass for 15 s and the wall Pi's /admin appears as a
+ * QR code for a phone. A long press because the wall is public (nobody does it
+ * by accident); a LAN address, not a secret, because /admin's pushes still need
+ * the token. Tap to dismiss; it also leaves on its own after a minute.
+ */
+export function adminQr(wallOrigin: string) {
+	const HOLD_MS = 15_000;
+	const [hold, qr] = [document.querySelector<HTMLElement>('#hold')!, document.querySelector<HTMLElement>('#qr')!];
+	let [started, timer] = [0, 0];
+	const stop = () => {
+		cancelAnimationFrame(timer);
+		hold.hidden = true;
+	};
+	const ring = () => {
+		const p = (performance.now() - started) / HOLD_MS;
+		hold.style.setProperty('--p', Math.min(1, p).toFixed(3));
+		if (p < 1) timer = requestAnimationFrame(ring);
+		else (stop(), show());
+	};
+	async function show() {
+		const status = await fetch(`${wallOrigin}/api/status`).then((r) => r.json()).catch(() => null);
+		const url = status?.lan ? `http://${status.lan}:${status.port}/admin` : null;
+		qr.querySelector('div')!.innerHTML = url ? qrSvg(url) : ''; // qrSvg builds the SVG from our own URL: no outside markup
+		qr.querySelector('p')!.textContent = url ?? 'This wall has no LAN address to show.';
+		qr.hidden = false;
+		setTimeout(() => (qr.hidden = true), 60_000);
+	}
+	addEventListener('pointerdown', (e) => {
+		if (!qr.hidden) return void (qr.hidden = true);
+		if (e.target instanceof Element && e.target.closest('#hud')) return;
+		started = performance.now();
+		hold.hidden = false;
+		timer = requestAnimationFrame(ring);
+	});
+	for (const end of ['pointerup', 'pointercancel', 'pointerleave'] as const) addEventListener(end, stop);
 }
 
 /** aero-2's RainGlass beads (flat variant, no backdrop blur): a fixed seed, so every pane rains alike. */

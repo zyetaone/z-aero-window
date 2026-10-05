@@ -13,6 +13,7 @@
 import { existsSync } from 'node:fs';
 import { rename } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
+import { networkInterfaces } from 'node:os';
 import index from './index.html';
 import admin from './admin.html';
 import { LEAD_SEC, MAX_PUSH_BYTES, NO_WALL, parsePush, type Wall } from './src/wall.ts';
@@ -34,6 +35,8 @@ let wall: Wall = await Bun.file(WALL_FILE).json().catch(() => NO_WALL);
 // deploy/pi/health-check.sh writes the Pi's temperature and shed state here every few minutes.
 const THERMAL_FILE = Bun.env.AERO_THERMAL_STATE_PATH ?? '/run/aero/thermal.json';
 const startedAt = Date.now();
+// This device's LAN address, for the kiosk's admin QR (a phone cannot reach "localhost").
+const lan = Object.values(networkInterfaces()).flat().find((a) => a?.family === 'IPv4' && !a.internal)?.address ?? null;
 // Only the data that is here: a { dir } route throws at startup on a missing folder, and a Pi
 // without a pack (or CI, where data/ is gitignored) must still answer /api/status.
 const DATA = { '/tiles/imagery/*': IMAGERY_DIR, '/tiles/terrain/*': TERRAIN_DIR, '/tiles/lights/*': LIGHTS_DIR, '/buildings/*': BUILDINGS_DIR, '/roads/*': ROADS_DIR, '/models/*': MODELS_DIR };
@@ -45,15 +48,16 @@ function authorised(req: Request) {
 	return got.length === want.length && timingSafeEqual(got, want);
 }
 
+const PORT = Number(Bun.env.PORT ?? 3300);
 const server = Bun.serve({
-	port: Number(Bun.env.PORT ?? 3300),
+	port: PORT,
 	// A compiled binary runs from Bun's embedded filesystem: never dev mode on a Pi, NODE_ENV or not.
 	development: Bun.env.NODE_ENV !== 'production' && !import.meta.path.startsWith('/$bunfs'),
 	routes: {
 		'/': index,
 		'/admin': admin,
 		// The updater's health probe (deploy/aero-updater.sh) and health-check.sh read this.
-		'/api/status': () => Response.json({ ok: true, app: 'aero-3', uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version, data: mounted.map(([route]) => route.slice(1, -2)) }),
+		'/api/status': () => Response.json({ ok: true, app: 'aero-3', uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version, lan, port: PORT, data: mounted.map(([route]) => route.slice(1, -2)) }),
 		// { action: 'ok' | 'shed', tempC, ... } from health-check.sh; 'ok' when there is no file (a Mac, a fresh boot).
 		'/api/thermal': async () => Response.json(await Bun.file(THERMAL_FILE).json().catch(() => ({ action: 'ok' })), { headers: { 'Cache-Control': 'no-store' } }),
 		'/api/wall': {
