@@ -63,6 +63,12 @@ One reason to change per file:
   place. day.ts sets the cover, deck height, wind, how far cumulus heap up and how grey each
   cluster runs. No card reaches below the ground, or the terrain
   clips it flat.
+- `src/wall.ts` + `/api/wall` + `/admin` — what an operator pushes to every pane: place, weather,
+  clock (null = default). The server keeps it in `WALL_FILE` (`./data/wall.json`, written via a
+  rename); `POST` needs `Authorization: Bearer $AERO_ADMIN_TOKEN` and is off (503) without one.
+  Panes read it at boot (2 s timeout, then none) from `?wall=<origin>` or their own server, poll
+  every 5 s, and on a new version lower the blind and reload on its `applyAt` second (10 s ahead).
+  URL params beat the wall. Panes take `?role=left|center|right` (±24°).
 - `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
 - `src/sun.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
   (no time zones). Tested.
@@ -120,8 +126,29 @@ On a Pi, run the binary from a directory where `../data/tiles/sentinel2`,
 `?yaw=<deg>` (pane offset), `?lamps=1` (lamp gain), `?lift=8` (twilight exposure), `?clouds=0..1`
 (cover), `?glow=0` (no bloom), `?debug` (exposes `scene`, `camera`, `world` for ablations). Compare against aero-2 on the same Pi.
 
+## Roadmap
+
+Each phase is small and lands with screenshots, `bun test`, and `bun run smoke`. Plain TS over
+Svelte; copy aero-2's pure modules where they exist, rewrite its components.
+
+1. **Window** — done: flight, day character, blind, rim, rain, glass towers, map roofs.
+2. **Wall** — done: pane roles, the operator push, `/admin`, error-reload budget.
+3. **Cabin** — the wing (aero-2 `static/models/wing.glb` through `@babylonjs/loaders`, banking
+   with `flight.ts`, nav light and strobe on the wall clock); the cabin drone (aero-2
+   `media/ambient-audio.ts`, cutoff from altitude); the moon (aero-2 `world/sun.ts` moonPosition).
+   Live weather (Open-Meteo through the server, applied per visit) only if the fleet has internet.
+4. **Ship** — `bun run compile` into `dist/aero-3`, a systemd unit and kiosk URL carrying
+   `?role=` and `?wall=`, `install.sh --app aero-3` and the updater's `AERO_APP_SUBDIR`, a data
+   pack per place (tiles, buildings, roads), thermal shedding from `/run/aero/thermal.json`
+   (raise `?scale`, drop the glow and haze), the existing reboot and dimming crons.
+5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.
+   Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
+   lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.
+6. **Content** — more places (a pin, an orbit radius, a buildings pack); presets as named
+   wall pushes (golden hour, gulf midnight); the admin QR from aero-2 `qr.ts`.
+
 ## Not built yet
 
-Wing, pane roles and the operator wall push, admin, live weather. Pi measurement before more
+Phases 3-6 above. Pi measurement before more
 layers: Dubai is 1.1M building vertices and ~300k lights. Add them only
 after the Pi numbers say this stack is worth growing.

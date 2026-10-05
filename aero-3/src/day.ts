@@ -24,6 +24,8 @@ const REGIMES: Record<string, [number, number, number, number, number, number, n
 	overcast: [0.07, 1.5, 1.5, 0.3, 1.2, 0.6, 1.4, 1]
 };
 
+export const REGIME_NAMES = Object.keys(REGIMES);
+
 export type Day = {
 	name: string;
 	seed: number;

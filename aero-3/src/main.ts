@@ -10,6 +10,7 @@
  *   ?place=hyderabad (pin a city; omit it to follow the rotation)  ?clock=6 (local solar hour)  ?yaw=0 (pane offset, deg)
  *   ?scale=1 (hardware scaling)  ?gpu=webgpu  ?hud=0  ?clouds=1 (cover, 0 = clear)
  *   ?weather=clear|fair|scattered|towering|cirrus (pin today's regime)
+ *   ?role=left|center|right (pane in the wall)  ?wall=http://<center>:3300 (whose wall to follow)
  *   ?blind=0 (no blind, no reload: hold one visit)  ?frame=0 (no window rim)
  *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=1 (VIIRS texture)
  */
@@ -27,6 +28,7 @@ import { cabinOverlay } from './cabin.ts';
 import { stars } from './stars.ts';
 import { atSolarHour, solarHour, sunAt } from './sun.ts';
 import { createWorld } from './world.ts';
+import { fetchWall, NO_WALL } from './wall.ts';
 import { hash, RAD, smoothstep } from './math.ts';
 
 // id → [lat, lon, ground m]. Same coordinates as aero-2's catalog.
@@ -38,8 +40,15 @@ const LAMP_ALPHA = 0.22;
 const GLOW = 0.35;
 
 const q = new URLSearchParams(location.search);
-// ?place= pins a city; otherwise the wall-clock rotation picks it, the same on every pane.
-const pinnedPlace = q.get('place') && Object.hasOwn(PLACES, q.get('place')!) ? q.get('place')! : null;
+/** A numeric param, or its default when absent or not a finite number (?scale=abc must not NaN the engine). */
+const num = (name: string, fallback: number) => (q.has(name) && Number.isFinite(Number(q.get(name))) ? Number(q.get(name)) : fallback);
+// The operator's wall (wall.ts), from ?wall=<center Pi's origin> or this pane's own server. Read
+// before anything is chosen; unreachable within 2 s means no wall. URL params still win.
+const wallOrigin = q.get('wall') ?? '';
+const wall = await fetchWall(wallOrigin);
+// ?place= (or the wall) pins a city; otherwise the wall-clock rotation picks it, the same on every pane.
+const asked = q.get('place') ?? wall.place;
+const pinnedPlace = asked && Object.hasOwn(PLACES, asked) ? asked : null;
 // Every visit slot (10 min) is a fresh flight: a new city when following the rotation, a new
 // direction and today's weather either way. The blind closes over the boundary and the page reloads
 // behind it, which also frees every buffer of the last visit. ?blind=0 holds one visit (screenshots).
@@ -49,12 +58,15 @@ const blinds = q.get('blind') !== '0';
 if (blinds) setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && location.reload(), 1000);
 const [lat, lon, groundM, orbitM = ORBIT_M] = PLACES[placeId]!;
 const track = flight(Math.floor(hash(bootSlot * 0x2545f491 + groundM) * 2 ** 31), orbitM);
-const paneYaw = Number(q.get('yaw') ?? 0) * RAD;
-const lampGain = Number(q.get('lamps') ?? 1);
-const twilightLift = Number(q.get('lift') ?? 8);
+// The pane's place in the wall: the outer two look 24° off the centre (aero-2's parallax), ?yaw= exact.
+const ROLE_YAW: Record<string, number> = { left: -24, right: 24 };
+const paneYaw = num('yaw', ROLE_YAW[q.get('role') ?? ''] ?? 0) * RAD;
+const lampGain = num('lamps', 1);
+const twilightLift = num('lift', 8);
 // The baked VIIRS texture under the lamp points: a faint glow only, or it reads as blocky amber blobs.
-const carpet = Number(q.get('carpet') ?? 1);
-let pinnedHour = q.has('clock') ? Number(q.get('clock')) : null;
+const carpet = num('carpet', 1);
+let pinnedHour: number | null = num('clock', NaN);
+if (Number.isNaN(pinnedHour)) pinnedHour = wall.clock;
 // The Lights panel's live gains (lightsPanel): street lamps, building lights, far towns, bloom.
 const mix = { street: 1, building: 1, far: 1, glow: GLOW, haze: 0.12 };
 
@@ -62,9 +74,9 @@ const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const engine = await createEngine(canvas, q.get('gpu') === 'webgpu');
 // A kiosk has no one to press reload. A failed boot (tiles not served yet, a truncated pack)
 // retries, and a lost GL context reloads: clearCachedVertexData below leaves nothing to rebuild from.
-addEventListener('unhandledrejection', () => setTimeout(() => location.reload(), 10_000), { once: true });
-engine.onContextLostObservable.add(() => location.reload());
-engine.setHardwareScalingLevel(Number(q.get('scale') ?? 1));
+addEventListener('unhandledrejection', recover, { once: true });
+engine.onContextLostObservable.add(recover);
+engine.setHardwareScalingLevel(Math.max(0.25, num('scale', 1)));
 
 const scene = new Scene(engine);
 scene.clearColor = new Color4(0, 0, 0, 1);
@@ -80,7 +92,7 @@ camera.maxZ = 1_000_000;
 
 const world = await createWorld(scene, lat, lon);
 // Today for this place, from the visit's slot start: the same on every pane, different tomorrow.
-const day = dayFor(placeId, bootSlot * DWELL_SEC * 1000, q.get('weather'));
+const day = dayFor(placeId, bootSlot * DWELL_SEC * 1000, q.get('weather') ?? wall.weather);
 sunLight.intensity = day.sun;
 if (atmosphere) atmosphere.aerialPerspectiveIntensity *= day.haze;
 const [pinX, pinZ] = world.project(lon, lat);
@@ -98,7 +110,7 @@ const cruiseM = Math.max(groundM + CRUISE_M, peakM + CLEAR_M);
 const [city, roads, deck, sky] = await Promise.all([
 	loadCity(),
 	fetchPack('roads'),
-	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + day.deckM, world.groundAt, world.drop, day, Number(q.get('clouds') ?? 1)),
+	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + day.deckM, world.groundAt, world.drop, day, num('clouds', 1)),
 	stars(scene, camera, lat, lon)
 ]);
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
@@ -134,6 +146,16 @@ const [aircraft, seat] = [new Quaternion(), new Quaternion()];
 camera.rotationQuaternion = new Quaternion();
 const cabin = cabinOverlay(blinds, day.rain, placeId, lon);
 document.querySelector<HTMLElement>('#frame')!.hidden = q.get('frame') === '0';
+// A new push: every pane lowers the blind and reloads into it on the wall's applyAt second.
+let changeover = false;
+setInterval(async () => {
+	const next = await fetchWall(wallOrigin);
+	if (changeover || next.version === wall.version || next === NO_WALL) return;
+	changeover = true;
+	const wait = next.applyAt * 1000 - Date.now();
+	setTimeout(() => cabin.hold(), Math.max(0, wait - 3_000)); // the blind takes 2.4 s to come down
+	setTimeout(() => location.reload(), Math.max(0, wait));
+}, 5_000);
 
 engine.runRenderLoop(() => {
 	const now = Date.now();
@@ -176,6 +198,23 @@ engine.runRenderLoop(() => {
 	}
 });
 addEventListener('resize', () => engine.resize());
+
+/**
+ * Reload after a failure, but not in a loop: at most three error reloads an hour, then one every
+ * five minutes. The count lives in sessionStorage, which survives a reload of the same tab.
+ */
+function recover() {
+	if (recover.once) return;
+	recover.once = true;
+	const now = Date.now();
+	let recent: number[] = [];
+	try {
+		recent = (JSON.parse(sessionStorage.getItem('aero-recoveries') ?? '[]') as number[]).filter((t) => now - t < 3_600_000);
+		sessionStorage.setItem('aero-recoveries', JSON.stringify([...recent, now]));
+	} catch {}
+	setTimeout(() => location.reload(), recent.length >= 3 ? 300_000 : 10_000);
+}
+recover.once = false;
 
 async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean): Promise<AbstractEngine> {
 	if (wantWebGPU && (await WebGPUEngine.IsSupportedAsync)) {

@@ -20,11 +20,16 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 	blind.querySelector('span')!.textContent = place.replace('_', ' ');
 	if (rain) beads(drops);
 
-	let [frames, last] = [0, 0];
+	let [frames, last, held] = [0, 0, false];
 	return {
+		/** Down now and stay down: a wall push is about to reload the page. */
+		hold() {
+			held = true;
+			blind.classList.remove('open');
+		},
 		/** Once per frame; touches the DOM four times a second at most. */
 		update(wallSec: number, dark: number) {
-			if (++frames < READY_FRAMES || wallSec - last < 0.25) return;
+			if (++frames < READY_FRAMES || wallSec - last < 0.25 || held) return;
 			last = wallSec;
 			frame.style.setProperty('--night', dark.toFixed(2));
 			const phase = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
