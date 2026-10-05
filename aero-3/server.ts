@@ -31,6 +31,8 @@ const MODELS_DIR = Bun.env.MODELS_DIR ?? '../aero-2/static/models';
 const WALL_FILE = Bun.env.WALL_FILE ?? './data/wall.json';
 // Fails closed: with no token set, nothing can push.
 const ADMIN_TOKEN = Bun.env.AERO_ADMIN_TOKEN ?? '';
+// A compiled binary runs from Bun's embedded filesystem: never dev mode on a Pi, NODE_ENV or not.
+const DEV = Bun.env.NODE_ENV !== 'production' && !import.meta.path.startsWith('/$bunfs');
 let wall: Wall = await Bun.file(WALL_FILE).json().catch(() => NO_WALL);
 // deploy/pi/health-check.sh writes the Pi's temperature and shed state here every few minutes.
 const THERMAL_FILE = Bun.env.AERO_THERMAL_STATE_PATH ?? '/run/aero/thermal.json';
@@ -51,8 +53,7 @@ function authorised(req: Request) {
 const PORT = Number(Bun.env.PORT ?? 3300);
 const server = Bun.serve({
 	port: PORT,
-	// A compiled binary runs from Bun's embedded filesystem: never dev mode on a Pi, NODE_ENV or not.
-	development: Bun.env.NODE_ENV !== 'production' && !import.meta.path.startsWith('/$bunfs'),
+	development: DEV,
 	routes: {
 		'/': index,
 		'/admin': admin,
@@ -63,9 +64,11 @@ const server = Bun.serve({
 		'/api/wall': {
 			// The other panes poll this from their own origin.
 			GET: () => Response.json(wall, { headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' } }),
-			async POST(req) {
-				if (!ADMIN_TOKEN) return new Response('wall push is off: set AERO_ADMIN_TOKEN', { status: 503 });
-				if (!authorised(req)) return new Response('wrong token', { status: 401 });
+			async POST(req, srv) {
+				// Dev with no token: this machine only. Production (the Pi service) stays fail-closed.
+				const devOpen = !ADMIN_TOKEN && DEV && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(srv.requestIP(req)?.address ?? '');
+				if (!ADMIN_TOKEN && !devOpen) return new Response('wall push is off: set AERO_ADMIN_TOKEN', { status: 503 });
+				if (!devOpen && !authorised(req)) return new Response('wrong token', { status: 401 });
 				const text = await req.text();
 				if (text.length > MAX_PUSH_BYTES) return new Response('too large', { status: 413 });
 				let push;
