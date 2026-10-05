@@ -1,0 +1,20 @@
+{
+  "name": "aero-3",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@babylonjs/addons": "9.29.0",
+    "@babylonjs/core": "9.29.0"
+  },
+  "scripts": {
+    "dev": "bun --hot server.ts",
+    "start": "NODE_ENV=production bun server.ts",
+    "test": "bun test",
+    "check": "bunx tsc --noEmit",
+    "compile": "bun build --compile --minify --target=bun-linux-arm64 server.ts --outfile dist/aero-3"
+  }
+}
