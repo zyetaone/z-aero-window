@@ -59,7 +59,7 @@ varying vec3 vColor;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
 	gl_Position = worldViewProjection * vec4(position, 1.0);
-	gl_PointSize = 2.0;
+	gl_PointSize = 3.0; // a soft disc (fragment shader), not a hard square: it slides between pixels instead of snapping
 	float h = hash(floor(position.xz));
 	float far = 1.0 / (1.0 + pow(distance(position, eye) / fade, 2.0));
 	float twinkle = 0.92 + 0.08 * sin(time * (0.4 + 1.2 * h) + h * 6.2832);
@@ -73,7 +73,10 @@ Effect.ShadersStore.lampsFragmentShader = `
 precision highp float;
 uniform float gain;
 varying vec3 vColor;
-void main() { gl_FragColor = vec4(vColor * gain, 1.0); }`;
+void main() {
+	float r = length(gl_PointCoord - 0.5) * 2.0;
+	gl_FragColor = vec4(vColor * gain * 1.7 * (1.0 - smoothstep(0.2, 1.0, r)), 1.0); // 1.7: the disc's light matches the old 2x2 square
+}`;
 
 export function streetlights(
 	roads: Road[],

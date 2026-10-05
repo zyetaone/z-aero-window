@@ -64,7 +64,9 @@ One reason to change per file:
   (`?trees=0` to skip).
 - **Roads by day**: the place's OSM road pack is stroked into the near imagery canvas before it
   becomes a texture (asphalt, 8-32 m by class, sub-pixel roads at partial alpha), so Sentinel's
-  smeared streets read crisp. The same pack lights the lamps at night.
+  smeared streets read crisp. The same pack lights the lamps at night, and a white mask of it
+  composes into the night ground: road × VIIRS radiance × ~430 m breakup noise = sodium on the
+  asphalt of lit districts only. Lamps are soft 3 px discs, so they slide between pixels, not snap.
 - **Ground detail**: a tiling 256² PBR detail map (`material.detailMap`, raw bytes: R albedo,
   G/A normal, B roughness) repeats every 350 m on the near patch for grain the imagery can't hold.
 - **Water** comes from the imagery too: dark, green-or-teal pixels get a smooth roughness map

@@ -8,7 +8,7 @@
  * world), so the two patches, the buildings and the pin share one projection.
  */
 import { Color3, MeshBuilder, PBRMaterial, RawTexture, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
-import { fbm, hash, mulberry32, RAD, smoothstep } from './math.ts';
+import { fbm, hash, mulberry32, noise2, RAD, smoothstep } from './math.ts';
 
 const TILE = 256;
 const EARTH_M = 6_371_000;
@@ -122,7 +122,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 		const material = new PBRMaterial(name, scene);
 		[material.albedoTexture, material.emissiveTexture] = await Promise.all([
 			texture(`${name}-imagery`, imagery),
-			texture(`${name}-lights`, nightGround(lights, imagery))
+			texture(`${name}-lights`, nightGround(lights, imagery, name === 'near' ? roadMask : null))
 		]);
 		// Water from the imagery itself: smooth where it reads as water, so lakes, rivers and
 		// the sea catch the sun as a glint, and stay matt land everywhere else.
@@ -153,7 +153,13 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 		mosaic('lights', 'png', far, 8, [8], '#000')
 	]);
 
-	if (roads) paintRoads(nearImagery, near, roads);
+	// Roads twice: asphalt into the day imagery, and white into a mask the night ground composes
+	// with NASA's radiance (nightGround), so lit districts' streets glow sodium under the lamps.
+	const roadMask = roads ? new OffscreenCanvas(nearImagery.width, nearImagery.height) : null;
+	if (roads) {
+		paintRoads(nearImagery, near, roads, (a) => `rgba(60,56,52,${a})`);
+		paintRoads(roadMask!, near, roads, (a) => `rgba(255,255,255,${a})`);
+	}
 	const inNear = (mx: number, my: number) => nearEdge(mx, near.x0) && nearEdge(my, near.y0);
 	// Inclusive of the border, so far-ring vertices on the near patch's edge take the near
 	// heights and the two meshes meet instead of stepping z10 against z8.
@@ -188,7 +194,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 	 * roads draw one pixel wide at partial alpha. A touch warm (red over green) so waterMask
 	 * never reads a road as water.
 	 */
-	function paintRoads(canvas: OffscreenCanvas, grid: Grid, roads: Road[]) {
+	function paintRoads(canvas: OffscreenCanvas, grid: Grid, roads: Road[], ink: (alpha: string) => string) {
 		const ctx = canvas.getContext('2d')!;
 		const pxPerMerc = canvas.width / (grid.span / 2 ** grid.z);
 		const [gx, gy] = [grid.x0 / 2 ** grid.z, grid.y0 / 2 ** grid.z];
@@ -197,7 +203,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 		for (const [cls, metres] of ROAD_M) {
 			const w = metres / mPerPx;
 			ctx.lineWidth = Math.max(1, w);
-			ctx.strokeStyle = `rgba(60,56,52,${(0.22 + 0.6 * Math.min(1, w)).toFixed(2)})`;
+			ctx.strokeStyle = ink((0.22 + 0.6 * Math.min(1, w)).toFixed(2));
 			ctx.beginPath();
 			for (const { geometry, properties } of roads) {
 				if (properties.class !== cls) continue;
@@ -277,6 +283,7 @@ async function fetchTile(url: string): Promise<ImageBitmap | null> {
 
 const GLOW = 0.12; // NASA's radiance as a faint carpet: the points carry the detail
 const REVEAL = 0.3; // how much of the real ground a lit district shows at night
+const ROAD_GLOW = 0.35; // sodium on the asphalt of a lit district's streets
 // How far the far ring drops under the detail patch. 500 m was plenty in a flat city; in the
 // Himalayas z8's coarse peaks overshoot z10's by more and poked through as grey flat sheets.
 const SINK_M = 3_000;
@@ -290,10 +297,12 @@ const CROP_M = 13_000; // roof colours (buildings.ts) out to Dubai's 12 km pack;
  * warm where a district is lit — streets, roofs and parks read under the lamps
  * instead of a flat orange. `lights` is rewritten in place and returned.
  */
-function nightGround(lights: OffscreenCanvas, imagery: OffscreenCanvas) {
+function nightGround(lights: OffscreenCanvas, imagery: OffscreenCanvas, roads: OffscreenCanvas | null) {
 	const ctx = lights.getContext('2d')!;
 	const image = ctx.getImageData(0, 0, lights.width, lights.height);
 	const [d, ground] = [image.data, imagery.getContext('2d')!.getImageData(0, 0, imagery.width, imagery.height).data];
+	const road = roads?.getContext('2d')!.getImageData(0, 0, roads.width, roads.height).data;
+	const width = lights.width;
 	for (let i = 0; i < d.length; i += 4) {
 		const t = Math.max(d[i]!, d[i + 1]!, d[i + 2]!) / 255;
 		if (t < 0.3) {
@@ -302,9 +311,13 @@ function nightGround(lights: OffscreenCanvas, imagery: OffscreenCanvas) {
 		}
 		const k = smoothstep(0.35, 0.75, t) * (0.25 + 0.6 * t * t) * GLOW;
 		const lit = smoothstep(0.3, 0.8, t) * REVEAL;
-		d[i] = 255 * k + ground[i]! * lit;
-		d[i + 1] = 150 * k + ground[i + 1]! * lit * 0.8;
-		d[i + 2] = 60 * k + ground[i + 2]! * lit * 0.6;
+		// Lit streets: the road mask, where NASA saw light, broken by ~430 m noise so a district's
+		// streets glow in patches the way sodium pools do, not as an even orange web.
+		const px = i / 4;
+		const r = road && road[i + 3]! > 0 ? (road[i + 3]! / 255) * smoothstep(0.3, 0.6, t) * smoothstep(0.3, 0.65, noise2(0x5d, (px % width) / 12, Math.floor(px / width) / 12)) * ROAD_GLOW : 0;
+		d[i] = 255 * (k + r) + ground[i]! * lit;
+		d[i + 1] = 150 * k + 165 * r + ground[i + 1]! * lit * 0.8;
+		d[i + 2] = 60 * k + 70 * r + ground[i + 2]! * lit * 0.6;
 	}
 	ctx.putImageData(image, 0, 0);
 	return lights;
