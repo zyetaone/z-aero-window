@@ -75,7 +75,7 @@ const [city, roads, deck, sky] = await Promise.all([
 	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + DECK_M, world.drop, Number(q.get('clouds') ?? 1)),
 	stars(scene, camera, lat, lon)
 ]);
-// Street lamps along the road pack, one light per building, beacons on the towers (lights.ts).
+// Street lamps along the road pack, and one light per building (lights.ts).
 const lamps = roads && streetlights(roads, world.project, world.groundAt, scene, city?.tops);
 const glowing = [...world.materials, ...(city ? [city.material] : [])];
 
