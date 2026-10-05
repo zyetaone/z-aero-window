@@ -7,8 +7,8 @@
  * east, y up, z north, origin at sea level over the centre of the detail patch. Positions come from global Mercator (0..1 across the
  * world), so the two patches, the buildings and the pin share one projection.
  */
-import { Color3, MeshBuilder, PBRMaterial, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
-import { fbm, hash, RAD, smoothstep } from './math.ts';
+import { Color3, MeshBuilder, PBRMaterial, RawTexture, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
+import { fbm, hash, mulberry32, RAD, smoothstep } from './math.ts';
 
 const TILE = 256;
 const EARTH_M = 6_371_000;
@@ -20,7 +20,13 @@ const mercX = (lon: number) => (lon + 180) / 360;
 const mercY = (lat: number) => (1 - Math.asinh(Math.tan(lat * RAD)) / Math.PI) / 2;
 
 
-export async function createWorld(scene: Scene, lat: number, lon: number) {
+type Road = { geometry: { coordinates: number[][] }; properties: { class: string } };
+/** Carriageway widths in metres, drawn narrow to wide so motorways land on top. */
+const ROAD_M: [cls: string, metres: number][] = [['residential', 8], ['tertiary', 11], ['secondary', 15], ['primary', 20], ['trunk', 26], ['motorway', 32]];
+const DETAIL_M = 350; // one repeat of the ground's detail map
+
+/** `roads` (the place's OSM pack, or null) are painted into the near imagery by day. */
+export async function createWorld(scene: Scene, lat: number, lon: number, roads: Road[] | null = null) {
 	const tile10 = (z: number, m: number) => Math.floor(m * 2 ** z);
 	const [cx, cy] = [tile10(10, mercX(lon)), tile10(10, mercY(lat))];
 	// ~37 km tiles: 3×3 is ~110 km around the place, sized so its z12 imagery (3072 px,
@@ -147,6 +153,7 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		mosaic('lights', 'png', far, 8, [8], '#000')
 	]);
 
+	if (roads) paintRoads(nearImagery, near, roads);
 	const inNear = (mx: number, my: number) => nearEdge(mx, near.x0) && nearEdge(my, near.y0);
 	// Inclusive of the border, so far-ring vertices on the near patch's edge take the near
 	// heights and the two meshes meet instead of stepping z10 against z8.
@@ -169,6 +176,41 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 		patch('far', far, heightAt, farImagery, farLights, 160, inNear)
 	]);
 
+	// Grain at the 1-100 m scale the 36 m/px imagery cannot hold: Babylon's PBR detail map,
+	// near patch only (the far ring is never close enough to show it).
+	const detail = groundDetail(scene);
+	detail.uScale = detail.vScale = (near.span / 2 ** near.z) * mPerMerc / DETAIL_M;
+	Object.assign(materials[0]!.detailMap, { texture: detail, isEnabled: true, diffuseBlendLevel: 0.3, normalBlendLevel: 0.2, roughnessBlendLevel: 0.25 });
+
+	/**
+	 * OSM roads as asphalt lines in the imagery canvas, before it becomes a texture: Sentinel's
+	 * 10 m pixels, resampled to ~36 m, smear roads into the ground; these stay crisp. Sub-pixel
+	 * roads draw one pixel wide at partial alpha. A touch warm (red over green) so waterMask
+	 * never reads a road as water.
+	 */
+	function paintRoads(canvas: OffscreenCanvas, grid: Grid, roads: Road[]) {
+		const ctx = canvas.getContext('2d')!;
+		const pxPerMerc = canvas.width / (grid.span / 2 ** grid.z);
+		const [gx, gy] = [grid.x0 / 2 ** grid.z, grid.y0 / 2 ** grid.z];
+		const mPerPx = mPerMerc / pxPerMerc;
+		ctx.lineCap = ctx.lineJoin = 'round';
+		for (const [cls, metres] of ROAD_M) {
+			const w = metres / mPerPx;
+			ctx.lineWidth = Math.max(1, w);
+			ctx.strokeStyle = `rgba(60,56,52,${(0.22 + 0.6 * Math.min(1, w)).toFixed(2)})`;
+			ctx.beginPath();
+			for (const { geometry, properties } of roads) {
+				if (properties.class !== cls) continue;
+				geometry.coordinates.forEach(([lon, lat], i) => {
+					const [x, y] = [(mercX(lon!) - gx) * pxPerMerc, (mercY(lat!) - gy) * pxPerMerc];
+					if (i) ctx.lineTo(x, y);
+					else ctx.moveTo(x, y);
+				});
+			}
+			ctx.stroke();
+		}
+	}
+
 	return {
 		project,
 		drop,
@@ -187,6 +229,45 @@ export async function createWorld(scene: Scene, lat: number, lon: number) {
 }
 
 const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
+
+/**
+ * A tiling 256² detail map in Babylon's layout: R albedo, G/A the normal's y/x, B roughness,
+ * 0.5 neutral in each. Wrapping value noise (lattices of 8..64 cells), so repeats don't seam.
+ * Raw bytes, not a canvas: a canvas premultiplies RGB by the alpha that carries normal x.
+ */
+function groundDetail(scene: Scene) {
+	const N = 256;
+	const random = mulberry32(0xd37a11);
+	const octaves = [8, 16, 32, 64].map((cells) => ({ cells, lattice: Float32Array.from({ length: cells * cells }, random) }));
+	const sample = (x: number, y: number) => {
+		let [sum, weight] = [0, 0.5];
+		for (const { cells, lattice } of octaves) {
+			const [fx, fy] = [(x / N) * cells, (y / N) * cells];
+			const [i, j] = [Math.floor(fx), Math.floor(fy)];
+			const [u, v] = [fx - i, fy - j].map((t) => t * t * (3 - 2 * t)) as [number, number];
+			const at = (a: number, b: number) => lattice[(((b % cells) + cells) % cells) * cells + (((a % cells) + cells) % cells)]!;
+			const top = at(i, j) + (at(i + 1, j) - at(i, j)) * u;
+			sum += (top + (at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * u - top) * v) * weight;
+			weight /= 2;
+		}
+		return sum / 0.9375; // 0..1
+	};
+	const data = new Uint8Array(N * N * 4);
+	for (let y = 0; y < N; y++) {
+		for (let x = 0; x < N; x++) {
+			const h = sample(x, y);
+			const [dx, dy] = [sample(x + 1, y) - sample(x - 1, y), sample(x, y + 1) - sample(x, y - 1)].map((d) => Math.max(-1, Math.min(1, d * 6)));
+			const i = (y * N + x) * 4;
+			data[i] = 128 + (h - 0.5) * 140; // albedo mottling
+			data[i + 1] = 128 + dy! * 127; // normal y
+			data[i + 2] = 128 + (h - 0.5) * 80; // roughness
+			data[i + 3] = 128 + dx! * 127; // normal x
+		}
+	}
+	const tex = RawTexture.CreateRGBATexture(data, N, N, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE);
+	tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE;
+	return tex;
+}
 
 /** Missing tiles (unpacked ocean, edge of the pack) come back null and stay background. */
 async function fetchTile(url: string): Promise<ImageBitmap | null> {

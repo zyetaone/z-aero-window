@@ -104,7 +104,8 @@ camera.fov = 45 * RAD;
 camera.minZ = 10;
 camera.maxZ = 1_000_000;
 
-const world = await createWorld(scene, lat, lon);
+const roadsLoad = fetchPack('roads'); // the ground paints them in by day, the lamps follow them by night
+const world = await createWorld(scene, lat, lon, await roadsLoad);
 // Today for this place, from the visit's slot start: the same on every pane, different tomorrow.
 const day = dayFor(placeId, bootSlot * DWELL_SEC * 1000, q.get('weather') ?? wall.weather);
 sunLight.intensity = day.sun;
@@ -123,7 +124,7 @@ for (let i = 0; i < 720; i++) {
 const cruiseM = Math.max(groundM + CRUISE_M, peakM + CLEAR_M);
 const [city, roads, deck, sky] = await Promise.all([
 	loadCity(),
-	fetchPack('roads'),
+	roadsLoad,
 	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + day.deckM, world.groundAt, world.drop, day, num('clouds', 1)),
 	stars(scene, camera, lat, lon)
 ]);

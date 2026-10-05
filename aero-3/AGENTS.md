@@ -62,6 +62,11 @@ One reason to change per file:
 - `src/trees.ts` — low-poly crowns, cones and bushes in clumps of 1-6 wherever the imagery within
   5 km of the pin reads green, tinted by that pixel: thin instances, a draw call per shape
   (`?trees=0` to skip).
+- **Roads by day**: the place's OSM road pack is stroked into the near imagery canvas before it
+  becomes a texture (asphalt, 8-32 m by class, sub-pixel roads at partial alpha), so Sentinel's
+  smeared streets read crisp. The same pack lights the lamps at night.
+- **Ground detail**: a tiling 256² PBR detail map (`material.detailMap`, raw bytes: R albedo,
+  G/A normal, B roughness) repeats every 350 m on the near patch for grain the imagery can't hold.
 - **Water** comes from the imagery too: dark, green-or-teal pixels get a smooth roughness map
   (world.ts `waterMask`), broken up by fractal noise into ruffled patches and calm slicks, so lakes
   and sea catch the sun as glitter rather than a mirror.
