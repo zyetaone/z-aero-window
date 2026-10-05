@@ -25,10 +25,60 @@
 				align-items: center; padding: 10px 12px; border-radius: 8px; background: #000c;
 			}
 			#lights[open] input { width: 160px; }
+			/* The cabin: rain on the glass, the window's rim, the blind. No backdrop-filter anywhere:
+			   on the Pi it is a full-screen blur pass over WebGL. aero-2's Frame/RainGlass/Blind CSS. */
+			.cabin { position: fixed; inset: 0; pointer-events: none; }
+			.cabin[hidden] { display: none; }
+			#hud { z-index: 4; }
+			#hud[hidden] { display: none; }
+			#frame { --night: 0; z-index: 2; box-shadow: inset 0 0 60px 18px #0009, inset 0 0 12px 2px #ffffff0d; }
+			#frame::before {
+				content: ''; position: absolute; inset: 0;
+				background: radial-gradient(ellipse at 50% 50%, transparent 55%,
+					rgb(10 16 26 / calc(0.25 * (0.55 + 0.45 * var(--night)))) 80%,
+					rgb(5 8 14 / calc(0.65 * (0.55 + 0.45 * var(--night)))) 100%);
+			}
+			#frame::after {
+				content: ''; position: absolute; inset: 0; /* a soft glint across the top right of the glass */
+				background: linear-gradient(225deg, #ffffff0c 0%, #ffffff05 22%, transparent 42%);
+			}
+			#rain { z-index: 1; opacity: 0.75; }
+			#rain span {
+				position: absolute; border-radius: 50%; width: var(--s); height: var(--s);
+				background: linear-gradient(135deg, #dcebff38, #b4c8e614 55%, #ffffff0a);
+				box-shadow: inset 1.5px 2px 3px #fff6, inset -2px -3px 5px #0000004d, 0 2px 4px #00000026;
+				animation: bead var(--dur) ease-in-out var(--delay) infinite;
+			}
+			#rain span::before {
+				content: ''; position: absolute; top: 16%; left: 20%; width: 30%; height: 30%; border-radius: 50%;
+				background: radial-gradient(circle, #ffffffeb, transparent 70%);
+			}
+			@keyframes bead {
+				0% { opacity: 0; transform: translateY(-2px) scale(0.6); }
+				12% { opacity: var(--o); transform: none; }
+				68% { opacity: var(--o); transform: translateY(calc(var(--slide) * 0.12)); }
+				100% { opacity: 0; transform: translateY(var(--slide)) scale(0.96); }
+			}
+			/* Closed in the markup, so a fresh load paints the blind before anything else. */
+			#blind {
+				z-index: 3; display: grid; place-content: center; gap: 10px; text-align: center;
+				background:
+					repeating-linear-gradient(180deg, #0000 0 5px, #00000006 5px 6px),
+					linear-gradient(180deg, #d9d6cf, #ecebe6 40%, #e3e1db 85%, #b9b6ae 97%, #8f8c85);
+				color: #0000004d; font: 300 clamp(14px, 1.6vw, 22px)/1.2 ui-sans-serif, system-ui, sans-serif;
+				letter-spacing: 0.18em; text-transform: uppercase;
+				transition: transform 2.4s cubic-bezier(0.6, 0, 0.3, 1);
+			}
+			#blind time { font-size: 0.8em; letter-spacing: 0.1em; font-variant-numeric: tabular-nums; }
+			#blind.open { transform: translateY(-101%); }
+			@media (prefers-reduced-motion: reduce) { #blind { transition-duration: 0.3s; } #rain span { animation: none; opacity: var(--o); } }
 		</style>
 	</head>
 	<body>
 		<canvas id="world"></canvas>
+		<div id="rain" class="cabin" hidden aria-hidden="true"></div>
+		<div id="frame" class="cabin" aria-hidden="true"></div>
+		<div id="blind" class="cabin" aria-hidden="true"><span></span><time></time></div>
 		<div id="hud" hidden>
 			<input type="range" min="0" max="24" step="0.05" aria-label="Time of day (local solar hour)" />
 			<button type="button">Now</button>

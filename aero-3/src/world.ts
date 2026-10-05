@@ -197,7 +197,7 @@ const REVEAL = 0.3; // how much of the real ground a lit district shows at night
 // How far the far ring drops under the detail patch. 500 m was plenty in a flat city; in the
 // Himalayas z8's coarse peaks overshoot z10's by more and poked through as grey flat sheets.
 const SINK_M = 3_000;
-const CROP_M = 6_000; // imagery kept for sampling (trees), either side of the pin
+const CROP_M = 13_000; // roof colours (buildings.ts) out to Dubai's 12 km pack; trees stay within 5 km // imagery kept for sampling (trees), either side of the pin
 
 /**
  * The night ground, once at boot, from NASA's VIIRS radiance alone: aero-2's

@@ -15,48 +15,21 @@
  * hand-tuned golden-hour tables, and cards are squashed vertically so a puff
  * stays between the hills and the window. Seeded layout and wall-clock wind
  * keep three panes identical without talking, and the weather changes daily:
- * `weatherFor` deals each place a regime per UTC day. Draws in rendering group 1,
+ * day.ts deals each place a regime per UTC day. Draws in rendering group 1,
  * after the atmosphere composites the sky, so the sky cannot paint over it.
  */
 import { Color3, Color4, Sprite, SpriteManager, Vector3, type Camera, type DirectionalLight, type Scene } from '@babylonjs/core';
-import { hash, mulberry32, smoothstep } from './math.ts';
+import { mulberry32, smoothstep } from './math.ts';
+import type { Day } from './day.ts';
 import cloud from './assets/cloud.webp';
 import cloudDark from './assets/cloud-dark.webp';
 import cloudSmoke from './assets/cloud-smoke.webp';
 
 const CELL = 256;
-const WIND_M_S = 9; // ~17 kt, eastward
 const UNDERGLOW = new Color3(0.07, 0.05, 0.035);
 const NIGHT_FLOOR = new Color3(0.03, 0.035, 0.05);
 
 type Puff = { sprite: Sprite; x: number; z: number; y: number; alpha: number; shade: number; normal: Vector3; wrap: number };
-
-/** aero-2's three tiers, resized for a window 1.7 km above the deck. */
-/**
- * A day's weather: [weight, near cumulus, horizon systems, cirrus, puff size].
- * The cover numbers scale each tier's cluster count.
- */
-const REGIMES: Record<string, [number, number, number, number, number]> = {
-	clear: [0.15, 0.1, 0.3, 0.3, 1],
-	fair: [0.35, 0.6, 0.8, 0.6, 0.9],
-	scattered: [0.3, 1, 1, 1, 1],
-	towering: [0.12, 1.3, 1.3, 0.5, 1.35],
-	cirrus: [0.08, 0.3, 0.6, 2.5, 1]
-};
-export type Weather = { name: string; seed: number; cover: [number, number, number]; size: number };
-
-/** The place's weather for the UTC day holding `ms`, or a named regime (`?weather=`). */
-export function weatherFor(place: string, ms: number, named?: string | null): Weather {
-	const day = Math.floor(ms / 86_400_000);
-	const seed = Math.floor(hash(day * 0x9e3779b1 + [...place].reduce((h, c) => h * 31 + c.charCodeAt(0), 7)) * 2 ** 31);
-	let name = named && named in REGIMES ? named : '';
-	if (!name) {
-		let [u, acc] = [hash(seed), 0];
-		name = Object.keys(REGIMES).find((k) => u < (acc += REGIMES[k]![0])) ?? 'fair';
-	}
-	const [, near, far, cirrus, size] = REGIMES[name]!;
-	return { name, seed, cover: [near, far, cirrus], size };
-}
 
 // Which of a regime's three covers (near, horizon, cirrus) drives each tier: banks follow the horizon.
 const COVER_OF = [0, 1, 1, 2];
@@ -81,7 +54,7 @@ export async function clouds(
 	/** The ground under a puff: no card may reach below it, or the terrain clips it flat. */
 	groundAt: (x: number, z: number) => number,
 	drop: (x: number, z: number) => number,
-	weather: Weather,
+	weather: Day,
 	cover = 1
 ) {
 	const manager = new SpriteManager('clouds', await spriteSheet(), 2500, CELL, scene);
@@ -129,7 +102,7 @@ export async function clouds(
 	return {
 		/** `toSun` is the unit vector to the sun; `dark` 0 by day, 1 at night. */
 		update(nowMs: number, toSun: Vector3, dark: number) {
-			const shift = (nowMs / 1000) * WIND_M_S;
+			const shift = (nowMs / 1000) * weather.wind; // eastward, today's speed
 			sun.diffuse.scaleToRef(Math.min(1, sun.intensity), sunColor);
 			const ambient = scene.ambientColor;
 			const elevation = Math.asin(toSun.y) * (180 / Math.PI);

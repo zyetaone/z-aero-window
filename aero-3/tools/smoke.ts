@@ -1,7 +1,8 @@
 /**
- * Smoke test: does the window actually build, by day and by night?
+ * Smoke test: does the window actually build, by day and by night, in every place?
  *
- *   bun run smoke            # screenshots land in dist/smoke/
+ *   bun run smoke                 # every place; screenshots land in dist/smoke/
+ *   bun run smoke dubai mumbai    # just these
  *
  * Starts the real server on a spare port, opens the page in Bun's native
  * WebView at a pinned noon and a pinned night, waits for the render loop, and
@@ -22,10 +23,17 @@ type Check = [name: string, ok: boolean, detail: string];
 const results: Check[] = [];
 const scene = (expr: string) => `(() => { try { return JSON.stringify(${expr}) } catch (e) { return JSON.stringify({ error: String(e) }) } })()`;
 
+const { PLACES } = await import('../src/places.ts');
+const places = Bun.argv.slice(2).length ? Bun.argv.slice(2) : Object.keys(PLACES);
+
 try {
-	for (const [label, clock, night] of [['day', 12, false], ['night', 22, true]] as const) {
+	for (const place of places)
+	for (const [when, clock, night] of [['day', 12, false], ['night', 22, true]] as const) {
+		const label = `${place} ${when}`;
+		// A place with no OSM pack (the Himalayas) has no buildings and no street lamps to check.
+		const city = (await fetch(`http://localhost:${port}/buildings/${place}.geojson`, { method: 'HEAD' })).ok;
 		await using view = new Bun.WebView({ width: 1280, height: 540 });
-		await view.navigate(`http://localhost:${port}/?place=hyderabad&clock=${clock}&debug`);
+		await view.navigate(`http://localhost:${port}/?place=${place}&clock=${clock}&blind=0&weather=scattered&debug`);
 
 		// The HUD readout only fills once the render loop is running.
 		const started = Date.now();
@@ -54,21 +62,21 @@ try {
 		results.push(
 			[`${label}: near ground`, has('near', 60_000), `${s.meshes?.near?.v} vertices`],
 			[`${label}: far ring to the horizon`, has('far', 20_000), `${s.meshes?.far?.v} vertices`],
-			[`${label}: buildings`, has('buildings', 100_000), `${s.meshes?.buildings?.v} vertices`],
-			[`${label}: streetlights`, has('streetlights', 50_000), `${s.meshes?.streetlights?.v} lamps`],
+			[`${label}: buildings`, !city || has('buildings', 10_000), city ? `${s.meshes?.buildings?.v} vertices` : 'no pack'],
+			[`${label}: streetlights`, !city || has('streetlights', 10_000), city ? `${s.meshes?.streetlights?.v} lamps` : 'no pack'],
 			[`${label}: clouds`, s.sprites > 300, `${s.sprites} puffs`],
 			[`${label}: stars`, has('stars', 8000), `${s.meshes?.stars?.v} stars`],
-			[`${label}: lamps ${night ? 'on' : 'off'}`, s.meshes?.streetlights?.on === night, `enabled ${s.meshes?.streetlights?.on}`],
+			[`${label}: lamps ${night ? 'on' : 'off'}`, !city || s.meshes?.streetlights?.on === night, `enabled ${s.meshes?.streetlights?.on}`],
 			[`${label}: bloom ${night ? 'on' : 'off'}`, s.glow === night, `enabled ${s.glow}`],
 			[`${label}: frames drawing`, s.fps > 1, `${Math.round(s.fps)} fps (headless, not a perf number)`]
 		);
-		await Bun.write(`${root}/dist/smoke/${label}.png`, await view.screenshot());
+		await Bun.write(`${root}/dist/smoke/${place}-${when}.png`, await view.screenshot());
 	}
 } finally {
 	server.kill();
 }
 
-for (const [name, ok, detail] of results) console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(36)} ${detail}`);
+for (const [name, ok, detail] of results) console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(44)} ${detail}`);
 const failed = results.filter(([, ok]) => !ok).length;
 console.log(failed ? `\n${failed} failed` : `\nall ${results.length} passed — screenshots in dist/smoke/`);
 process.exit(failed ? 1 : 0);

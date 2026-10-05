@@ -13,7 +13,7 @@ import { mulberry32 } from './math.ts';
 export const PLACES: Record<string, [number, number, number, number?]> = {
 	hyderabad: [17.4435, 78.3772, 500],
 	mumbai: [19.076, 72.8777, 10],
-	dubai: [25.2048, 55.2708, 5],
+	dubai: [25.15, 55.19, 5, 13_000], // between Downtown, the Marina and Palm Jumeirah: one loop takes in all three
 	dallas: [32.7767, -96.797, 150],
 	phoenix: [33.4352, -112.0101, 340],
 	las_vegas: [36.1699, -115.1398, 620],
@@ -23,6 +23,9 @@ export const PLACES: Record<string, [number, number, number, number?]> = {
 };
 
 export const DWELL_SEC = 600;
+
+/** Which visit slot a wall-clock second is in: each one is a fresh flight, under the blind. */
+export const slotAt = (wallSec: number) => Math.floor(Math.max(0, wallSec) / DWELL_SEC);
 const ROTATION = ['hyderabad', 'mumbai', 'dubai', 'dallas', 'phoenix', 'denver', 'las_vegas', 'chicago_midway'];
 
 /** The day's order of the rotation: the same shuffle on every pane, a different one tomorrow. */

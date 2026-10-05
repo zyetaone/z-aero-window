@@ -65,4 +65,5 @@ export function trees(
 }
 
 /** Green dominant and not bright: canopy and lawns, not fields of dry grass or roofs. */
-const vegetation = (r: number, g: number, b: number) => g > r * 1.04 && g > b * 1.08 && r + g + b < 330;
+// Greener than blue by a margin: shallow teal sea (Dubai's coast) passes a looser test and grew a forest.
+const vegetation = (r: number, g: number, b: number) => g > r * 1.04 && g > b * 1.2 && r + g + b < 330;
