@@ -2,41 +2,41 @@
 	<!-- ═══════════════════════════════════════════════════════════════ NIGHT -->
 	<section>
 		<h2>Pillar 7 — The Night Pipeline</h2>
-		<p class="hidden-blurb">Simplified Phase 15.5 (2026-05-21). The CartoDB Dark imagery overlay was dropped — the post-process shader's <code>mix()</code> to navy now carries the atmospheric darkening that layer used to provide. Three imagery layers → two; five shader ops → three. Same blue-hour beat, same VIIRS terminator-awareness, fewer moving parts. See <code>docs/ADR-003-night-pipeline-simplification.md</code>.</p>
+		<p class="hidden-blurb">Simplified in Phase 15.5 (2026-05-21); the numbers below are the current tuning, de-soaked 2026-08 (the 50% VIIRS cap read as a cream sheet, so it fell to 15% and the road lamps took the structure). The CartoDB Dark imagery overlay is gone — the grade stage's base crush now carries the atmospheric darkening that layer used to provide. Two imagery layers, one grade stage. See <code>docs/ADR-003-night-pipeline-simplification.md</code>.</p>
 		<div class="night-stages">
 			<div class="night-stage">
 				<span class="stage-num">1</span>
 				<div>
 					<h4>Base Saturation Lerp</h4>
-					<p>EOX satellite imagery saturation lerped 1.4 → 0.05 at night. Brightness lerp dropped — the shader's mix() does the darkening now. Near-greyscale prevents green hue cast at deep night.</p>
+					<p>EOX satellite imagery saturation lerped 1.3 → 0.50 at night (night gamma 1.25 → 1.1). No brightness lerp — the grade stage's base crush does the darkening. The mid-floor (not near-greyscale) keeps the dusk cast while the shader desat handles deep night.</p>
 				</div>
 			</div>
 			<div class="night-stage">
 				<span class="stage-num">2</span>
 				<div>
 					<h4>VIIRS Night Lights</h4>
-					<p>NASA city lights smoothstep in at 0.55–0.9, capped at 50% alpha. Terminator-aware (<code>dayAlpha=0</code> / <code>nightAlpha=1</code>) so lit cities stay lit. City-by-city reveal as night deepens.</p>
+					<p>NASA city lights smoothstep in at 0.55–0.9, capped at 15% alpha (the 2026-08 de-soak: the old 50% cap pasted a cream sheet over conurbations — roads carry the structure, VIIRS carries the pooled halo). Terminator-aware (<code>dayAlpha=0</code> / <code>nightAlpha=1</code>) so lit cities stay lit. City-by-city reveal as night deepens.</p>
 				</div>
 			</div>
 			<div class="night-stage">
 				<span class="stage-num">3</span>
 				<div>
 					<h4>Cesium HDR + Bloom</h4>
-					<p>Built-in tonemap (contrast 128, brightness −0.3, sigma 2.2). Handles the shadow crush + contrast that the shader used to do redundantly.</p>
+					<p>Built-in tonemap + bloom (contrast 128, brightness −0.22, sigma 2.8 — tightened so city cores keep road strokes and window points distinct instead of pooling into one amber blur). Handles the shadow crush + contrast the shader used to do redundantly.</p>
 				</div>
 			</div>
 			<div class="night-stage">
 				<span class="stage-num">4</span>
 				<div>
-					<h4>Post-Process Shader (3 ops)</h4>
-					<p><strong>brightGuard</strong> protects VIIRS amber + sun disc. <strong>Base mix to navy</strong> via smoothstep(0.45, 0.9) — replaces the dropped CartoDB layer's atmospheric ramp. <strong>Pollution corona</strong> on bright pixels for the warm city halo. That's it.</p>
+					<h4>Post-Process Grade (hash palette)</h4>
+					<p>The shipped stage (<code>useHashPalette</code>, default on). <strong>brightGuard</strong> protects the sun disc and bright cores. <strong>VIIRS as a glow mask</strong> — <code>lightMask</code> raised to gamma 2.4, textured by district noise and a wall-clock glimmer — deals an additive sodium/amber/warm-white UV-hash palette (3% traffic-red sparks) over the lit ground. <strong>Base crush</strong> pulls the dark ground toward near-black on the same 0.45–0.9 gate, plus a pollution corona on bright pixels and a warm ambient floor. Day half: non-clipping S-curve contrast (0.35) + headroom-aware vibrance (0.20). The older 3-op <code>aero-color-grade</code> still exists but is disabled while the hash palette is active.</p>
 				</div>
 			</div>
 			<div class="night-stage">
 				<span class="stage-num">5</span>
 				<div>
 					<h4>Per-Effect Visibility</h4>
-					<p>Car lights appear at nightFactor > 0.2. Haze switches color palette by sky state. Each effect independently gates on night progression.</p>
+					<p>Road lamp bins appear at nightFactor &gt; 0.45 (<code>cityLightAmount</code>); the city glow follows at 0.58 — atmospheric darkening precedes visible lights by 30+ min. Building-window density is gated live from VIIRS sampled around the camera. Haze switches color palette by sky state.</p>
 				</div>
 			</div>
 		</div>
@@ -51,11 +51,11 @@
 				</ul>
 			</div>
 			<div class="detail-box good">
-				<h4>↗ Queued for post-hardware-validation</h4>
+				<h4>✓ Shipped since this snapshot</h4>
 				<ul>
-					<li><strong>Phase 3</strong> — altitude-aware buildings emissive (Cesium3DTileColorBlendMode.HIGHLIGHT)</li>
-					<li><strong>Phase 4–5</strong> — vector OSM roads as night light source (`/api/roads/:city` + pre-bake + GeoJsonDataSource + PolylineGlow)</li>
-					<li><strong>Phase 6</strong> — altitude-gate VIIRS to fade below 5km so vector roads own the city-light load at low altitude</li>
+					<li><strong>Building windows</strong> — per-building procedural window grid in the building shader, lit-DENSITY gated live from VIIRS sampled around the camera, Reinhard tone-mapped so gains never clip to white</li>
+					<li><strong>Vector OSM road lamps</strong> — <code>/api/roads/:city</code>, one deterministic sodium/amber/cool colour per road, brightness sampled from the local VIIRS tile at each road's midpoint, wall-clock flicker per material bin</li>
+					<li><strong>Altitude split</strong> — the VIIRS raster detail fades as the camera descends so the vector lamps own the city at low altitude</li>
 					<li>Reference: "the passenger window, not the satellite" — buildings + roads as light SOURCES, not light-on-ground</li>
 				</ul>
 			</div>
@@ -71,7 +71,7 @@
 				<span>Decision</span><span>Chosen</span><span>Rejected</span><span>Why</span>
 			</div>
 			<div class="tradeoff-row"><span>Timestep</span><span>Variable dt (RAF)</span><span>Fixed accumulator</span><span>Pi kiosk runs locked refresh; simplicity wins</span></div>
-			<div class="tradeoff-row"><span>CRDT clock</span><span>Wall-clock Date.now()</span><span>Vector clocks / HLC</span><span>6 Pis on same LAN with NTP; drift risk accepted</span></div>
+			<div class="tradeoff-row"><span>CRDT clock</span><span>Wall-clock Date.now()</span><span>Vector clocks / HLC</span><span>3 Pis on same LAN with NTP; drift risk accepted</span></div>
 			<div class="tradeoff-row"><span>Transport</span><span>SSE + REST</span><span>WebSocket <span class="tr-note">(removed post-WS)</span></span><span>SSE is standard, debuggable, no custom framing</span></div>
 			<div class="tradeoff-row"><span>State</span><span>Flat $state tree</span><span>Redux / stores</span><span>Svelte 5 runes are the reactivity primitive</span></div>
 			<div class="tradeoff-row"><span>Rendering</span><span>CSS effects over WebGL</span><span>All-WebGL</span><span>CSS is lighter on Pi GPU; compositor thread is free</span></div>
@@ -92,7 +92,7 @@
 			</div>
 			<div class="constraint-card">
 				<h4>Network</h4>
-				<p>LAN-only fleet — 6 Pis on a private VLAN. No internet dependency except Cesium terrain tiles. mDNS for discovery. REST for admin. Offline-capable with pre-cached tiles.</p>
+				<p>LAN-only fleet — 3 Pis on a private VLAN forming one panoramic window. No internet dependency except Cesium tile fallback. mDNS for discovery. REST for admin. Offline-capable with pre-cached tiles.</p>
 			</div>
 			<div class="constraint-card">
 				<h4>Deployment</h4>
@@ -108,7 +108,7 @@
 			</div>
 			<div class="constraint-card">
 				<h4>Reliability</h4>
-				<p>Runs 24/7 on a corridor wall. Must survive power cycles, NTP desync, LAN partitions, browser crashes. Emergency reload after 10 consecutive RAF errors.</p>
+				<p>Runs 24/7 on a corridor wall. Must survive power cycles, NTP desync, LAN partitions, browser crashes. Liveness watchdog: 30 s context-lost / fps-stall check with a bounded self-heal — 3 reloads per hour, budget shared by every healing path.</p>
 			</div>
 		</div>
 	</section>
@@ -140,7 +140,7 @@
 			</div>
 			<div class="omission-item">
 				<h4>No service worker</h4>
-				<p>Single-bundle output makes SW caching unnecessary — there's one JS file to load. Offline tile caching is filesystem-based (PMTiles), not SW-based. Kiosk never navigates away from /.</p>
+				<p>Route-split client output — the kiosk route loads only its own chunks, so a service worker caching a single bundle is a non-question. Offline tile caching is filesystem-based, not SW-based. Kiosk never navigates away from /.</p>
 			</div>
 		</div>
 	</section>
