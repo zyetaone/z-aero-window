@@ -16,9 +16,13 @@ import { DWELL_SEC } from './places.ts';
 
 const SPEED_M_S = 230; // ~450 kt
 const CLIMB_M = 350; // the slow altitude swing, either way
-/** Cruise over the ground, m, dealt per visit by weight: low enough to read streets, high enough to see the coast. */
-const BANDS: [weight: number, metres: number][] = [[0.25, 2_200], [0.45, 3_500], [0.3, 5_500]];
-const STEP_M = 1_200; // the most a visit climbs or descends over its 10 minutes (~400 ft/min)
+/**
+ * Cruise over the ground, m, dealt per visit by weight: low (~10,000 ft, streets and the cloud tops
+ * close), mid (~18,000 ft), high (~28,000 ft, the city as a map and the coast past it). All three sit
+ * over day.ts's cloud deck (1.3-2.5 km), so the window looks down onto weather, as it does in cruise.
+ */
+const BANDS: [weight: number, metres: number][] = [[0.25, 3_000], [0.45, 5_500], [0.3, 8_500]];
+const STEP_M = 2_000; // the most a visit climbs or descends over its 10 minutes (~650 ft/min)
 const CLIMB_PERIOD_SEC = 2 * DWELL_SEC;
 const BANK_GAIN = 0.25; // of the true bank: a 9 km orbit at 450 kt banks ~30°, too steep to watch
 const MAX_BANK = 10 * RAD;

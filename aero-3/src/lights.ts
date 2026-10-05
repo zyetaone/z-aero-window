@@ -177,8 +177,9 @@ export function streetlights(
 }
 
 /** One lamp kind per road, from a hash of its first vertex: every pane deals the same. */
-function kindFor([lon, lat]: number[]): [number, number, number] {
-	const h = Math.abs(Math.sin(lon! * 12.9898 + lat! * 78.233) * 43_758.5453) % 1;
+/** A lamp colour by weight, picked by where it stands (any two coordinates, rounded to a metre's worth). */
+function kindFor([a, b]: number[]): [number, number, number] {
+	const h = hash(Math.imul(Math.round(a! * 1e5), 0x27d4eb2d) ^ Math.round(b! * 1e5));
 	let acc = 0;
 	for (const [weight, colour] of KINDS) if (h < (acc += weight)) return colour;
 	return KINDS[0]![1];

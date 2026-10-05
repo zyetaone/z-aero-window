@@ -15,9 +15,9 @@ test('a flight is pure in (seed, second), closes its loop, and sits on the insid
 
 test('altitude varies by visit and climbs or descends smoothly within one', () => {
 	const cruises = Array.from({ length: 40 }, (_, i) => flight(i * 7919, 9_000).cruiseM);
-	expect(Math.min(...cruises)).toBeGreaterThan(1_800);
-	expect(Math.max(...cruises)).toBeLessThan(6_500);
-	expect(Math.max(...cruises) - Math.min(...cruises)).toBeGreaterThan(2_000); // the bands really differ
+	expect(Math.min(...cruises)).toBeGreaterThan(2_500); // over the cloud deck
+	expect(Math.max(...cruises)).toBeLessThan(10_000);
+	expect(Math.max(...cruises) - Math.min(...cruises)).toBeGreaterThan(4_000); // the bands really differ
 	const f = flight(42, 9_000);
 	for (let s = 1; s < 600; s += 7) expect(Math.abs(f.pose(s).climbM - f.pose(s - 1).climbM)).toBeLessThan(15); // no jumps: < 15 m/s
 });

@@ -9,7 +9,9 @@ One reason to change per file:
 
 - `server.ts` — `Bun.serve` with HTML-import bundling and `{ dir }` tile routes. No Vite, no SvelteKit.
 - `src/main.ts` — scene, light, the wiring, the time-of-day slider, the place picker, the render
-  loop. Cruise is 3.5 km AGL, or 2 km over the highest ground within 4 km of the track.
+  loop. Each visit deals a cruise band (~3, 5.5 or 8.5 km AGL, jittered,
+  all over the cloud deck) and a climb or descent of up to 2 km; never under 2 km over the highest
+  ground within 4 km of the track. `?alt=` pins it.
 - `src/flight.ts` — the aircraft at a wall-clock second, pure in (seed, second): an elliptical
   orbit (radius per place, default 9 km; Dubai 13, Himalayas 24) whose direction, start and tilt
   are seeded per visit, a slow climb, bank into the turn, the seat on the inside, the gaze panning
@@ -53,7 +55,9 @@ One reason to change per file:
   a shade off white per building, roofs a touch darker; rooms lit in runs at night from one
   emissive texture. Lit-window points on buildings 12 m and up, and one house light on 60% of the
   rest (villa districts like the Palm's fronds were dark). It carries a baked ambient-occlusion
-  lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street. Not 3D Tiles on purpose — that format
+  lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street, and a generated
+  normal map that recesses every window on the lit-room grid (mipmaps flatten it with distance, so
+  it reads as relief close in and never aliases). Moonlight reaches the buildings and the ground. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --radius 3500 --max-features 20000 --out .`
   (Dubai: `--lat 25.15 --lon 55.19 --radius 12000 --max-features 40000`, Downtown to the Palm)

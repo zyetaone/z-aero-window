@@ -6,7 +6,7 @@
  * map. No mesh, no scene state: each takes canvases and returns one.
  */
 import { RawTexture, Texture, type Scene } from '@babylonjs/core';
-import { fbm, hash, mulberry32, noise2, smoothstep } from './math.ts';
+import { fbm, hash, noise2, smoothstep } from './math.ts';
 import { mercX, mercY, TILE, type Grid } from './mercator.ts';
 import type { Road } from './lights.ts';
 
@@ -189,21 +189,8 @@ export function paintRoads(canvas: OffscreenCanvas, grid: Grid, roads: Road[], m
  */
 export function groundDetail(scene: Scene) {
 	const N = 256;
-	const random = mulberry32(0xd37a11);
-	const octaves = [8, 16, 32, 64].map((cells) => ({ cells, lattice: Float32Array.from({ length: cells * cells }, random) }));
-	const sample = (x: number, y: number) => {
-		let [sum, weight] = [0, 0.5];
-		for (const { cells, lattice } of octaves) {
-			const [fx, fy] = [(x / N) * cells, (y / N) * cells];
-			const [i, j] = [Math.floor(fx), Math.floor(fy)];
-			const [u, v] = [fx - i, fy - j].map((t) => t * t * (3 - 2 * t)) as [number, number];
-			const at = (a: number, b: number) => lattice[(((b % cells) + cells) % cells) * cells + (((a % cells) + cells) % cells)]!;
-			const top = at(i, j) + (at(i + 1, j) - at(i, j)) * u;
-			sum += (top + (at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * u - top) * v) * weight;
-			weight /= 2;
-		}
-		return sum / 0.9375; // 0..1
-	};
+	const CELLS = 8; // the coarsest octave's lattice across the tile; fbm doubles it per octave
+	const sample = (x: number, y: number) => fbm(0xd37a11, (x / N) * CELLS, (y / N) * CELLS, 4, CELLS);
 	const data = new Uint8Array(N * N * 4);
 	for (let y = 0; y < N; y++) {
 		for (let x = 0; x < N; x++) {

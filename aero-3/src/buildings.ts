@@ -12,11 +12,13 @@
  * still reads as separate houses; roofs a touch darker than the walls. A baked
  * lightmap (second UV set) darkens each wall toward the street as ambient
  * occlusion, so blocks sit on the ground. At night one emissive texture lights
- * rooms in short runs along each floor. Each building stands on the terrain
- * under its first corner.
+ * rooms in short runs along each floor, and a generated normal map recesses
+ * every window on the same grid, so a facade catches the sun and the moon as
+ * relief, not a flat white (or, at night, flat black) slab. Each building stands
+ * on the terrain under its first corner.
  */
 import earcut from 'earcut';
-import { Color3, DynamicTexture, Mesh, PBRMaterial, Texture, VertexData, type Scene } from '@babylonjs/core';
+import { Color3, DynamicTexture, Mesh, PBRMaterial, RawTexture, Texture, VertexData, type Scene } from '@babylonjs/core';
 import { mulberry32 } from './math.ts';
 
 type Footprint = { geometry: { coordinates: number[][][] }; properties: { height: number } };
@@ -32,6 +34,7 @@ const ROOF_M2 = 3_000; // one roof light (stair heads, terrace bulbs, signs) per
 const ROOF_LIT = 0.45; // and only on this share of buildings: most roofs are dark
 const WINDOW_MIN_M = 12;
 const HOUSE_LIT = 0.6; // share of buildings under WINDOW_MIN_M with a light on
+const RELIEF = 0.8; // normal-map strength: mipmaps average it flat with distance, so it never aliases
 
 export function buildings(features: Footprint[], project: (lon: number, lat: number) => [x: number, z: number], groundAt: (x: number, z: number) => number, scene: Scene) {
 	// uvs2 is the lightmap: v is height up the wall, 0 at the street.
@@ -118,6 +121,8 @@ export function buildings(features: Footprint[], project: (lon: number, lat: num
 	material.albedoColor = new Color3(WHITE, WHITE, WHITE);
 	material.emissiveTexture = litRooms(scene);
 	material.emissiveColor = Color3.White();
+	material.bumpTexture = facadeRelief(scene);
+	material.bumpTexture.level = RELIEF;
 	material.lightmapTexture = occlusion(scene);
 	material.useLightmapAsShadowmap = true; // multiplies the lighting rather than adding to it
 	// Shaded walls take the sky's light: the atmosphere writes it to scene.ambientColor, and a
@@ -154,6 +159,32 @@ function litRooms(scene: Scene) {
 		}
 	}
 	tex.update();
+	return tex;
+}
+
+/**
+ * The facade's relief as a tangent-space normal map: every cell's window (the
+ * rectangle litRooms lights) sunk into the wall with a one-texel bevel. The grid
+ * is symmetric top to bottom, so it lines up whichever way a texture flips. The
+ * roof texel (a cell corner) is flat wall.
+ */
+function facadeRelief(scene: Scene) {
+	const N = CELLS * CELL_PX;
+	const inWindow = (x: number, y: number) => {
+		const [cx, cy] = [((x % CELL_PX) + CELL_PX) % CELL_PX, ((y % CELL_PX) + CELL_PX) % CELL_PX];
+		return cx >= 2 && cx < CELL_PX - 2 && cy >= 4 && cy < CELL_PX - 4;
+	};
+	const height = (x: number, y: number) => (inWindow(x, y) ? 0 : 1);
+	const data = new Uint8Array(N * N * 4);
+	for (let y = 0; y < N; y++) {
+		for (let x = 0; x < N; x++) {
+			const [dx, dy] = [height(x + 1, y) - height(x - 1, y), height(x, y + 1) - height(x, y - 1)];
+			const len = Math.hypot(dx, dy, 1);
+			data.set([128 - (127 * dx) / len, 128 - (127 * dy) / len, 128 + 127 / len, 255], (y * N + x) * 4);
+		}
+	}
+	const tex = RawTexture.CreateRGBATexture(data, N, N, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE);
+	tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE;
 	return tex;
 }
 

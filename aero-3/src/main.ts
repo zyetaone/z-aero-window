@@ -14,6 +14,7 @@
  *   ?audio=0 (no cabin drone; only centre/solo panes play it)
  *   ?blind=0 (no blind, no reload: hold one visit)  ?frame=0 (no window rim)
  *   ?lamps=1 (lamp gain)  ?lift=8 (twilight exposure)  ?glow=0 (no bloom)  ?carpet=1 (VIIRS texture)
+ *   ?alt=8000 (pin the cruise, m over the ground)  ?moonlight=0.4  ?moon=0  ?aa=0 (no MSAA)
  */
 import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, PBRMaterial, Quaternion, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
@@ -66,6 +67,8 @@ const ROLE_YAW: Record<string, number> = { left: -24, right: 24 };
 const paneYaw = num('yaw', ROLE_YAW[q.get('role') ?? ''] ?? 0) * RAD;
 const lampGain = num('lamps', 1);
 const twilightLift = num('lift', 8);
+const ALT_M = num('alt', NaN); // ?alt=8000 pins the cruise (m over the ground) for a shot or a bench
+const MOONLIGHT = num('moonlight', 0.4); // full, high moon; a moonless night gets a quarter
 // The baked VIIRS texture under the lamp points: a faint glow only, or it reads as blocky amber blobs.
 const carpet = num('carpet', 1);
 let pinnedHour: number | null = num('clock', NaN);
@@ -101,7 +104,6 @@ const atmosphere = Atmosphere.IsSupported(engine) ? new Atmosphere('atmosphere',
 const moonLight = q.get('moon') === '0' ? null : new DirectionalLight('moon', new Vector3(0, -1, 0), scene);
 moonLight?.diffuse.set(0.62, 0.72, 1);
 moonLight?.specular.set(0.2, 0.24, 0.3);
-const MOONLIGHT = num('moonlight', 0.4); // full, high moon; a moonless night gets a quarter
 
 const camera = new FreeCamera('window', Vector3.Zero(), scene);
 camera.fov = 45 * RAD;
@@ -110,9 +112,6 @@ camera.maxZ = 1_000_000;
 
 const roadsLoad = fetchPack('roads'); // the ground paints them in by day, the lamps follow them by night
 const world = await createWorld(scene, lat, lon, await roadsLoad);
-// The ground only: its atmosphere-plugin materials take a light ~30x weaker than plain PBR (measured),
-// so a strength that shows the desert would blow out the wing, which has its own night fill (wing.ts).
-moonLight?.includedOnlyMeshes.push(...['near', 'far'].map((n) => scene.getMeshByName(n)!).filter(Boolean));
 // Today for this place, from the visit's slot start: the same on every pane, different tomorrow.
 const day = dayFor(placeId, bootSlot * DWELL_SEC * 1000, q.get('weather') ?? wall.weather);
 sunLight.intensity = day.sun;
@@ -135,6 +134,10 @@ const [city, roads, deck, sky] = await Promise.all([
 	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + day.deckM, world.groundAt, world.drop, day, num('clouds', 1)),
 	stars(scene, camera, lat, lon)
 ]);
+// The ground and the city, not the wing: the ground's atmosphere-plugin materials take a light ~30x
+// weaker than plain PBR (measured), so a strength that shows the desert would blow the wing out (it
+// has its own night fill, wing.ts). The white buildings take it at full strength: moonlit concrete.
+moonLight?.includedOnlyMeshes.push(...[scene.getMeshByName('near'), scene.getMeshByName('far'), ...(city?.meshes ?? [])].filter((m) => m !== null));
 const luna = moon(scene, camera, lat, lon);
 const plane = q.get('wing') === '0' ? null : await wing(scene);
 // One pane makes the sound: the centre (or a lone pane). ?audio=0 for silence.
@@ -224,7 +227,7 @@ engine.runRenderLoop(() => {
 	// The aircraft (heading, bank), then the seat in it: turned to the window, looking a little down.
 	const p = track.pose(now / 1000);
 	const [x, z] = [pinX + p.x, pinZ + p.z];
-	camera.position.set(x, Math.max(groundM + track.cruiseM + p.climbM, floorM) - world.drop(x, z), z);
+	camera.position.set(x, Math.max(groundM + (Number.isNaN(ALT_M) ? track.cruiseM + p.climbM : ALT_M), floorM) - world.drop(x, z), z);
 	Quaternion.RotationYawPitchRollToRef(p.heading, 0, -p.bank, aircraft);
 	Quaternion.RotationYawPitchRollToRef(p.look + paneYaw, SEAT_PITCH, 0, seat);
 	aircraft.multiplyToRef(seat, camera.rotationQuaternion!);
