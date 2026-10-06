@@ -9,6 +9,9 @@ One reason to change per file:
 
 **`src/` root** — the composition root and what every folder reads:
 
+- `src/params.ts` — every URL knob, read once and typed: the one list of them (tested).
+- `src/lighting.ts` — one frame's light from the sun's and moon's height: darkness, exposure, every
+  emissive gain divided back out of the night lift, lamp alpha held under 1 (tested; main.ts applies it).
 - `src/main.ts` — scene, light, the wiring, the time-of-day slider, the place picker, the render
   loop. Each visit deals a cruise band (~3, 5.5 or 8.5 km AGL, jittered,
   all over the cloud deck) and a climb or descent of up to 2 km; never under 2 km over the highest
