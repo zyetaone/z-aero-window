@@ -20,7 +20,13 @@
  * side, or in a few separate groups. Draws in rendering group 1,
  * after the atmosphere composites the sky, so the sky cannot paint over it.
  */
-import { Color3, Color4, Sprite, SpriteManager, Vector3, type Camera, type DirectionalLight, type Scene } from '@babylonjs/core';
+import type { Camera } from '@babylonjs/core/Cameras/camera';
+import type { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Sprite } from '@babylonjs/core/Sprites/sprite';
+import { SpriteManager } from '@babylonjs/core/Sprites/spriteManager';
+import type { Scene } from '@babylonjs/core/scene';
 import { mulberry32, smoothstep } from '../math.ts';
 import type { Day } from '../day.ts';
 import cloud from '../assets/cloud.webp';

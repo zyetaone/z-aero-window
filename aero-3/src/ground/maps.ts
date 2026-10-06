@@ -5,7 +5,9 @@
  * imagery crop trees sample, roads painted into the imagery, and the tiling detail
  * map. No mesh, no scene state: each takes canvases and returns one.
  */
-import { RawTexture, Texture, type Scene } from '@babylonjs/core';
+import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import type { Scene } from '@babylonjs/core/scene';
 import { fbm, hash, noise2, smoothstep } from '../math.ts';
 import { mercX, mercY, TILE, type Grid } from './mercator.ts';
 

@@ -5,7 +5,13 @@
  * eye, bright where it faces the sun, with faint earthshine on the rest. Drawn
  * 3.5× its true size, so a 0.5° moon still reads on a wall across a room.
  */
-import { Constants, Effect, MeshBuilder, ShaderMaterial, Vector3, type Camera, type Scene } from '@babylonjs/core';
+import type { Camera } from '@babylonjs/core/Cameras/camera';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { Effect } from '@babylonjs/core/Materials/effect';
+import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder';
+import type { Scene } from '@babylonjs/core/scene';
 import { RAD, smoothstep } from '../math.ts';
 import { moonAt } from './ephemeris.ts';
 
@@ -47,7 +53,7 @@ void main() {
 }`;
 
 export function createMoon(scene: Scene, camera: Camera, latDeg: number, lonDeg: number) {
-	const disc = MeshBuilder.CreatePlane('moon', { size: SIZE_M, sideOrientation: 2 }, scene);
+	const disc = CreatePlane('moon', { size: SIZE_M, sideOrientation: 2 }, scene);
 	const material = new ShaderMaterial('moon', scene, 'moon', {
 		attributes: ['position', 'uv'],
 		uniforms: ['world', 'viewProjection', 'eye', 'sun', 'gain'],

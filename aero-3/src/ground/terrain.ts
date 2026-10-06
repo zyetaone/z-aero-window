@@ -9,7 +9,13 @@
  * buildings and the pin share one projection. The maps baked from the tiles
  * (night, water, roads, detail) live in ground/maps.ts.
  */
-import { Color3, MeshBuilder, PBRMaterial, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder';
+import type { Scene } from '@babylonjs/core/scene';
 import { crop, groundDetail, lightDome, lightSites, nightGround, paintRoads, paintSea, seaColour, waterMask } from './maps.ts';
 import { RAD } from '../math.ts';
 import { gridsFor, mercX, mercY, TILE, type Grid } from './mercator.ts';
@@ -91,7 +97,7 @@ export async function createTerrain(scene: Scene, lat: number, lon: number, road
 		const sizeMerc = grid.span / 2 ** grid.z;
 		const size = sizeMerc * mPerMerc;
 		const [ox, oz] = [(grid.x0 / 2 ** grid.z + sizeMerc / 2 - mx0) * mPerMerc, -(grid.y0 / 2 ** grid.z + sizeMerc / 2 - my0) * mPerMerc];
-		const mesh = MeshBuilder.CreateGround(name, { width: size, height: size, subdivisions, updatable: true }, scene);
+		const mesh = CreateGround(name, { width: size, height: size, subdivisions, updatable: true }, scene);
 		const positions = mesh.getVerticesData(VertexBuffer.PositionKind)!;
 		for (let i = 0; i < positions.length; i += 3) {
 			const [x, z] = [positions[i]! + ox, positions[i + 2]! + oz];

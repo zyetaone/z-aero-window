@@ -4,7 +4,12 @@
  * vegetation, tinted by that pixel. Thin instances, one draw call per shape. Placement
  * hashes the pixel, so every pane grows the same forest.
  */
-import { Color3, Matrix, MeshBuilder, PBRMaterial, Quaternion, Vector3, type Scene } from '@babylonjs/core';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder';
+import { CreateIcoSphere } from '@babylonjs/core/Meshes/Builders/icoSphereBuilder';
+import type { Scene } from '@babylonjs/core/scene';
 import { hash } from '../math.ts';
 
 const RADIUS_M = 9_000; // the orbit's reach: from cruise a tree is a few pixels, a clump a speckle of green
@@ -20,9 +25,9 @@ export function createTrees(
 	// Three low-poly shapes, a few pixels tall from the window: a round crown, a cone, a low bush.
 	// One draw call each (thin instances); a hash of the spot picks the shape, so panes agree.
 	const shapes = [
-		{ mesh: MeshBuilder.CreateIcoSphere('tree-crown', { radius: 0.5, subdivisions: 1, flat: true }, scene), share: 0.5, lift: 0.75, w: 0.8 },
-		{ mesh: MeshBuilder.CreateCylinder('tree-cone', { height: 1, diameterTop: 0, diameterBottom: 1, tessellation: 5 }, scene), share: 0.3, lift: 0.5, w: 0.45 },
-		{ mesh: MeshBuilder.CreateCylinder('tree-bush', { height: 1, diameterTop: 0.55, diameterBottom: 1, tessellation: 6 }, scene), share: 0.2, lift: 0.5, w: 1.3 }
+		{ mesh: CreateIcoSphere('tree-crown', { radius: 0.5, subdivisions: 1, flat: true }, scene), share: 0.5, lift: 0.75, w: 0.8 },
+		{ mesh: CreateCylinder('tree-cone', { height: 1, diameterTop: 0, diameterBottom: 1, tessellation: 5 }, scene), share: 0.3, lift: 0.5, w: 0.45 },
+		{ mesh: CreateCylinder('tree-bush', { height: 1, diameterTop: 0.55, diameterBottom: 1, tessellation: 6 }, scene), share: 0.2, lift: 0.5, w: 1.3 }
 	].map((shape) => ({ ...shape, matrices: [] as number[], colors: [] as number[] }));
 	const [s, q, at] = [new Vector3(), Quaternion.Identity(), new Vector3()];
 	const m = new Matrix();

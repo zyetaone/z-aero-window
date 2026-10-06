@@ -8,7 +8,17 @@
  *
  * URL knobs: params.ts, the one list. The light of each frame: lighting.ts.
  */
-import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, PBRMaterial, Quaternion, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
+// Side-effect only: module-path imports skip the barrel, and scene picking needs Ray registered.
+import '@babylonjs/core/Culling/ray';
+import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
+import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine';
+import { Engine } from '@babylonjs/core/Engines/engine';
+import { GlowLayer } from '@babylonjs/core/Layers/glowLayer';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color4 } from '@babylonjs/core/Maths/math.color';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Scene } from '@babylonjs/core/scene';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { createBuildings } from './city/buildings.ts';
 import { createClouds } from './sky/clouds.ts';
@@ -266,7 +276,9 @@ recover.once = false;
  * is tile-based and resolves MSAA on chip, so it is the cheap kind of anti-aliasing there.
  */
 async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean, antialias: boolean): Promise<AbstractEngine> {
-	if (wantWebGPU && (await WebGPUEngine.IsSupportedAsync)) {
+	// Loaded only when asked for (?gpu=webgpu): the Pi runs WebGL2, and this engine is a large chunk.
+	const { WebGPUEngine } = wantWebGPU ? await import('@babylonjs/core/Engines/webgpuEngine') : { WebGPUEngine: null };
+	if (WebGPUEngine && (await WebGPUEngine.IsSupportedAsync)) {
 		const gpu = new WebGPUEngine(target, { antialias });
 		await gpu.initAsync();
 		return gpu;

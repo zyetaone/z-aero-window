@@ -19,7 +19,13 @@
  * so far motorways otherwise blaze as bright as the core), and twinkles faintly
  * at its own slow rate, the scintillation a city shows through 3 km of warm air. All of it runs off wall-clock seconds: panes agree.
  */
-import { Constants, Effect, Mesh, ShaderMaterial, Vector3, VertexData, type Scene } from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { Effect } from '@babylonjs/core/Materials/effect';
+import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import type { Scene } from '@babylonjs/core/scene';
 import { hash, noise1 } from '../math.ts';
 import type { Road } from '../ground/maps.ts';
 

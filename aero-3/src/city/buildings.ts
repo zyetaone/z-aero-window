@@ -19,7 +19,14 @@
  * on the terrain under its first corner.
  */
 import earcut from 'earcut';
-import { Color3, DynamicTexture, Mesh, PBRMaterial, RawTexture, Texture, VertexData, type Scene } from '@babylonjs/core';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import type { Scene } from '@babylonjs/core/scene';
 import { mulberry32 } from '../math.ts';
 
 type Footprint = { geometry: { coordinates: number[][][] }; properties: { height: number } };

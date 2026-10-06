@@ -5,12 +5,18 @@
  * the lamps under it and glowing where the city is densest. Bent by the same
  * curvature as the ground, so it hugs the horizon instead of flying off it.
  */
-import { Color3, Constants, MeshBuilder, StandardMaterial, Texture, VertexBuffer, type Scene } from '@babylonjs/core';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder';
+import type { Scene } from '@babylonjs/core/scene';
 
 const ABOVE_M = 450; // the haze layer's height over the ground at the centre
 
 export async function createHaze(scene: Scene, map: OffscreenCanvas, sizeM: number, groundM: number, drop: (x: number, z: number) => number) {
-	const sheet = MeshBuilder.CreateGround('haze', { width: sizeM, height: sizeM, subdivisions: 48, updatable: true }, scene);
+	const sheet = CreateGround('haze', { width: sizeM, height: sizeM, subdivisions: 48, updatable: true }, scene);
 	const positions = sheet.getVerticesData(VertexBuffer.PositionKind)!;
 	for (let i = 0; i < positions.length; i += 3) positions[i + 1] = groundM + ABOVE_M - drop(positions[i]!, positions[i + 2]!);
 	sheet.updateVerticesData(VertexBuffer.PositionKind, positions);

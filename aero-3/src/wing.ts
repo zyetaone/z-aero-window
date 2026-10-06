@@ -12,8 +12,15 @@
  *
  * Model: CC-BY-4.0, by "A Random Modeler" on Sketchfab (danielskom111), via aero-2.
  */
-import '@babylonjs/loaders/glTF';
-import { ImportMeshAsync, Mesh, MeshBuilder, PBRMaterial, Quaternion, StandardMaterial, TransformNode, Vector3, type Scene } from '@babylonjs/core';
+import '@babylonjs/loaders/glTF/2.0'; // 2.0 only: the barrel also carries the glTF 1.0 loader
+import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import type { Scene } from '@babylonjs/core/scene';
 
 const WING_SCALE = 10;
 // In the model's own metres (root transform reset): the eye at the fuselage wall, looking out along
@@ -59,7 +66,7 @@ export async function createWing(scene: Scene, seat: Seat = 'behind') {
 	}
 
 	const lamp = (name: string) => {
-		const ball = MeshBuilder.CreateSphere(name, { diameter: 0.3, segments: 6 }, scene);
+		const ball = CreateSphere(name, { diameter: 0.3, segments: 6 }, scene);
 		const material = new StandardMaterial(name, scene);
 		material.disableLighting = true;
 		ball.material = material;
