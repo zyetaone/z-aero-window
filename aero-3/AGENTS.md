@@ -104,7 +104,10 @@ One reason to change per file:
   rest (villa districts like the Palm's fronds were dark). It carries a baked ambient-occlusion
   lightmap (UV2, `useLightmapAsShadowmap`) so walls darken toward the street, and a generated
   normal map that recesses every window on the lit-room grid (mipmaps flatten it with distance, so
-  it reads as relief close in and never aliases). Moonlight reaches the buildings and the ground. Not 3D Tiles on purpose — that format
+  it reads as relief close in and never aliases). Moonlight reaches the buildings and the ground.
+  Small buildings: a lit house's door wall maps onto a lamp-pool cell of the lit-room texture
+  (bright at the foot, gone by the eaves), and 20% of small roofs onto a soft roof-pool cell. Same
+  texture, same draw call; those two cells are flat in the normal map. Not 3D Tiles on purpose — that format
   earns its traversal cost for photogrammetry, not boxes. Fetch with
   `python3 ../aero-2/tools/fetch-buildings.py <place> --lat <pin> --lon <pin> --radius 13000 --max-features 40000 --out .`
   (the pin from places.ts; 13 km covers the orbit, and the cap keeps the biggest footprints).

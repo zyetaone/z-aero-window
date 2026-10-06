@@ -12,7 +12,8 @@
  * still reads as separate houses; roofs a touch darker than the walls. A baked
  * lightmap (second UV set) darkens each wall toward the street as ambient
  * occlusion, so blocks sit on the ground. At night one emissive texture lights
- * rooms in short runs along each floor, and a generated normal map recesses
+ * rooms in short runs along each floor (and, on small buildings, a door lamp's
+ * pool falling off up the wall, or a lit roof), and a generated normal map recesses
  * every window on the same grid, so a facade catches the sun and the moon as
  * relief, not a flat white (or, at night, flat black) slab. Each building stands
  * on the terrain under its first corner.
@@ -34,6 +35,12 @@ const ROOF_M2 = 3_000; // one roof light (stair heads, terrace bulbs, signs) per
 const ROOF_LIT = 0.45; // and only on this share of buildings: most roofs are dark
 const WINDOW_MIN_M = 12;
 const HOUSE_LIT = 0.6; // share of buildings under WINDOW_MIN_M with a light on
+const ROOF_POOL = 0.2; // share of buildings under WINDOW_MIN_M with a lit terrace or roof lamp
+// Two cells of the lit-room texture (canvas row 0, so the top of UV space) hold light pools, not rooms:
+// a lamp's wash up a house's door wall, and a soft patch for a lit roof. Inset a texel against bleed.
+const POOL = { wall: 15, roof: 14 } as const;
+const cellU = (col: number, t: number) => (col * CELL_PX + 1 + t * (CELL_PX - 2)) / (CELLS * CELL_PX);
+const cellV = (t: number) => 1 - (CELL_PX - 1 - t * (CELL_PX - 2)) / (CELLS * CELL_PX); // t 0 bottom, 1 top
 const RELIEF = 0.8; // normal-map strength: mipmaps average it flat with distance, so it never aliases
 
 export function createBuildings(features: Footprint[], project: (lon: number, lat: number) => [x: number, z: number], groundAt: (x: number, z: number) => number, scene: Scene) {
@@ -61,6 +68,8 @@ export function createBuildings(features: Footprint[], project: (lon: number, la
 			return sum + x * nz - nx * z;
 		}, 0);
 		const out = area > 0 ? 1 : -1;
+		const small = properties.height < WINDOW_MIN_M;
+		const [houseLit, roofPool] = [small && random() < HOUSE_LIT, small && random() < ROOF_POOL];
 
 		let along = u0;
 		for (const [i, [x0, z0]] of ring.entries()) {
@@ -70,7 +79,9 @@ export function createBuildings(features: Footprint[], project: (lon: number, la
 			const u1 = along + len / FACADE_M;
 			const v = positions.length / 3;
 			positions.push(x0, base, z0, x1, base, z1, x1, top, z1, x0, top, z0);
-			uvs.push(along, v0, u1, v0, u1, v0 + vTop, along, v0 + vTop);
+			// A lit house's door wall carries the lamp's pool, bright at the door and falling off up the wall.
+			if (houseLit && i === 0) uvs.push(cellU(POOL.wall, 0), cellV(0), cellU(POOL.wall, 1), cellV(0), cellU(POOL.wall, 1), cellV(1), cellU(POOL.wall, 0), cellV(1));
+			else uvs.push(along, v0, u1, v0, u1, v0 + vTop, along, v0 + vTop);
 			const aoTop = Math.min(1, properties.height / AO_M);
 			uvs2.push(0.5, 0, 0.5, 0, 0.5, aoTop, 0.5, aoTop);
 			for (let k = 0; k < 4; k++) normals.push(nx, 0, nz), colors.push(...wall);
@@ -81,7 +92,7 @@ export function createBuildings(features: Footprint[], project: (lon: number, la
 					const [t, floor] = [random(), Math.floor(random() * (properties.height / 3 - 1)) + 1];
 					windows.push(x0 + (x1 - x0) * t + nx, base + floor * 3 + 1.5, z0 + (z1 - z0) * t + nz);
 				}
-			} else if (i === 0 && random() < HOUSE_LIT) {
+			} else if (i === 0 && houseLit) {
 				// A house: one light by its first wall, at door height. Villa districts (the Palm's
 				// fronds, suburbs everywhere) were dark: no road lamps there, no tall windows.
 				windows.push(x0 + (x1 - x0) * 0.5 + nx, base + 2.5, z0 + (z1 - z0) * 0.5 + nz);
@@ -90,11 +101,15 @@ export function createBuildings(features: Footprint[], project: (lon: number, la
 		}
 
 		const v = positions.length / 3;
+		// A lit roof spreads the roof pool over its footprint's box; the rest sample a corner texel, dark in every cell.
+		const [minX, minZ] = [Math.min(...ring.map((p) => p[0])), Math.min(...ring.map((p) => p[1]))];
+		const [spanX, spanZ] = [Math.max(...ring.map((p) => p[0])) - minX || 1, Math.max(...ring.map((p) => p[1])) - minZ || 1];
 		for (const [x, z] of ring) {
 			positions.push(x, top, z);
 			normals.push(0, 1, 0);
 			colors.push(...roof);
-			uvs.push(1 / (CELLS * CELL_PX), 1 / (CELLS * CELL_PX)); // a corner texel, dark in every cell: roofs never light
+			if (roofPool) uvs.push(cellU(POOL.roof, (x - minX) / spanX), cellV((z - minZ) / spanZ));
+			else uvs.push(1 / (CELLS * CELL_PX), 1 / (CELLS * CELL_PX));
 			uvs2.push(0.5, 1); // roofs are open sky: unoccluded
 		}
 		const tris = earcut(ring.flat());
@@ -158,6 +173,19 @@ function litRooms(scene: Scene) {
 			}
 		}
 	}
+	// The pools (canvas row 0 is the top of UV space): a lamp by the door washing up the wall,
+	// brightest at the foot and gone by the eaves; and a soft patch for a lit terrace.
+	const pool = (col: number, x: number, y: number, r: number, colour: string) => {
+		ctx.fillStyle = '#000';
+		ctx.fillRect(col * CELL_PX, 0, CELL_PX, CELL_PX);
+		const g = ctx.createRadialGradient(col * CELL_PX + x, y, 0, col * CELL_PX + x, y, r);
+		g.addColorStop(0, colour);
+		g.addColorStop(1, '#000');
+		ctx.fillStyle = g;
+		ctx.fillRect(col * CELL_PX, 0, CELL_PX, CELL_PX);
+	};
+	pool(POOL.wall, CELL_PX / 2, CELL_PX, CELL_PX * 0.95, '#ffcf8a');
+	pool(POOL.roof, CELL_PX / 2, CELL_PX / 2, CELL_PX * 0.45, '#ffe2b0');
 	tex.update();
 	return tex;
 }
@@ -170,7 +198,10 @@ function litRooms(scene: Scene) {
  */
 function facadeRelief(scene: Scene) {
 	const N = CELLS * CELL_PX;
+	const N0 = CELLS * CELL_PX;
+	const inPool = (x: number, y: number) => ((x % N0) + N0) % N0 >= POOL.roof * CELL_PX && [0, CELLS - 1].includes(Math.floor((((y % N0) + N0) % N0) / CELL_PX));
 	const inWindow = (x: number, y: number) => {
+		if (inPool(x, y)) return false; // the pool cells are plain wall and roof: flat
 		const [cx, cy] = [((x % CELL_PX) + CELL_PX) % CELL_PX, ((y % CELL_PX) + CELL_PX) % CELL_PX];
 		return cx >= 2 && cx < CELL_PX - 2 && cy >= 4 && cy < CELL_PX - 4;
 	};
