@@ -7,7 +7,7 @@
  * the same city from the same wall second. The Himalayas stay out of it, as in
  * aero-2: a catalogue entry for ?place=, not a rotation stop.
  */
-import { mulberry32 } from './math.ts';
+import { mulberry32 } from '../math.ts';
 
 /** [lat, lon, ground elevation m, orbit radius m (default 9 km)] at each place's pin. */
 export const PLACES: Record<string, [number, number, number, number?]> = {

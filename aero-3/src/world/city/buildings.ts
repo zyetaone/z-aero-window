@@ -27,7 +27,7 @@ import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import type { Scene } from '@babylonjs/core/scene';
-import { mulberry32 } from '../math.ts';
+import { mulberry32 } from '../../math.ts';
 
 type Footprint = { geometry: { coordinates: number[][][] }; properties: { height: number } };
 

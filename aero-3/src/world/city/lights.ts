@@ -26,7 +26,7 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import type { Scene } from '@babylonjs/core/scene';
-import { hash, noise1 } from '../math.ts';
+import { hash, noise1 } from '../../math.ts';
 import type { Road } from '../ground/maps.ts';
 
 

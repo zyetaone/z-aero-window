@@ -1,5 +1,5 @@
 /** Web Mercator, as the tile packs use it: one home for the grid both ground/terrain.ts and ground/maps.ts read. */
-import { RAD } from '../math.ts';
+import { RAD } from '../../math.ts';
 
 export const TILE = 256; // px per tile
 /** `span` × `span` tiles at zoom `z`, top-left tile (x0, y0). */

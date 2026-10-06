@@ -11,7 +11,7 @@
  * altitude: a cruise band (low, mid or high over the ground) and a slow climb or
  * descent across the visit, so no two visits sit at the same height.
  */
-import { hash, noise1, RAD } from './math.ts';
+import { hash, noise1, RAD } from '../math.ts';
 import { DWELL_SEC } from './places.ts';
 
 const SPEED_M_S = 230; // ~450 kt

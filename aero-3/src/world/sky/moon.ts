@@ -12,7 +12,7 @@ import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder';
 import type { Scene } from '@babylonjs/core/scene';
-import { RAD, smoothstep } from '../math.ts';
+import { RAD, smoothstep } from '../../math.ts';
 import { moonAt } from './ephemeris.ts';
 
 const DISTANCE_M = 600_000;

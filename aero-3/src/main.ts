@@ -20,27 +20,28 @@ import { Color4 } from '@babylonjs/core/Maths/math.color';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Scene } from '@babylonjs/core/scene';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
-import { createBuildings } from './city/buildings.ts';
-import { createClouds } from './sky/clouds.ts';
-import { dayFor } from './day.ts';
-import { flight, SEAT_PITCH } from './flight.ts';
-import { createLights } from './city/lights.ts';
-import { createTrees } from './ground/trees.ts';
-import { destinationAt, DWELL_SEC, PLACES, placeName, slotAt } from './places.ts';
-import { createHaze } from './city/haze.ts';
-import { adminQr, cabinDrone, cabinOverlay } from './cabin.ts';
-import { createMoon } from './sky/moon.ts';
-import { createWing, SEATS, seatFor, type Seat } from './wing.ts';
-import { createStars } from './sky/stars.ts';
-import { atSolarHour, hhmm, moonAt, solarHour, sunAt } from './sky/ephemeris.ts';
-import { createTerrain } from './ground/terrain.ts';
+import { createHud } from './cabin/hud.ts';
+import { adminQr, cabinDrone, cabinOverlay } from './cabin/cabin.ts';
+import { RAD } from './math.ts';
+import { keepAlive } from './ops/kiosk.ts';
 import { fetchWall, NO_WALL } from './ops/wall.ts';
-import { hash, RAD } from './math.ts';
-import { lightingAt, moonlightAt, type Knobs } from './lighting.ts';
-import { readParams } from './params.ts';
+import { readParams } from './visit/params.ts';
+import { SEAT_PITCH } from './visit/flight.ts';
+import { slotAt } from './visit/places.ts';
+import { visitFor } from './visit/visit.ts';
+import { lightingAt, moonlightAt, type Knobs } from './world/lighting.ts';
+import { createBuildings } from './world/city/buildings.ts';
+import { createHaze } from './world/city/haze.ts';
+import { createLights } from './world/city/lights.ts';
+import { createTerrain } from './world/ground/terrain.ts';
+import { createTrees } from './world/ground/trees.ts';
+import { createClouds } from './world/sky/clouds.ts';
+import { atSolarHour, moonAt, sunAt } from './world/sky/ephemeris.ts';
+import { createMoon } from './world/sky/moon.ts';
+import { createStars } from './world/sky/stars.ts';
+import { createWing } from './world/wing.ts';
 
 const CLEAR_M = 2_000; // over the highest terrain within 4 km of the track
-const ORBIT_M = 9000;
 const GLOW = 0.35;
 
 const P = readParams(location.search);
@@ -50,42 +51,25 @@ const wall = await fetchWall(P.wall);
 // A push not yet due: wait for its second (the blind is closed in the markup), so a pane that boots
 // in the 10 s lead does not show the new scene before the others change over.
 if (wall.applyAt * 1000 > Date.now()) await new Promise((r) => setTimeout(r, wall.applyAt * 1000 - Date.now()));
-// ?place= (or the wall) pins a city; otherwise the wall-clock rotation picks it, the same on every pane.
-const asked = P.place ?? wall.place;
-const pinnedPlace = asked && Object.hasOwn(PLACES, asked) ? asked : null;
 // Every visit slot (10 min) is a fresh flight: a new city when following the rotation, a new
-// direction and today's weather either way. The blind closes over the boundary and the page reloads
-// behind it, which also frees every buffer of the last visit. ?blind=0 holds one visit (screenshots).
-const bootSlot = slotAt(Date.now() / 1000);
-const placeId = pinnedPlace ?? destinationAt(Date.now() / 1000);
+// direction and today's weather either way (visit/visit.ts). The blind closes over the boundary and
+// the page reloads behind it, which also frees every buffer of the last visit. ?blind=0 holds one.
+const visit = visitFor(P, wall, Date.now());
+const { slot: bootSlot, placeId, pinnedPlace, lat, lon, groundM, track, day, paneYaw } = visit;
 if (P.blind) setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && location.reload(), 1000);
-const [lat, lon, groundM, orbitM = ORBIT_M] = PLACES[placeId]!;
-const track = flight(Math.floor(hash(bootSlot * 0x2545f491 + groundM) * 2 ** 31), orbitM);
-// The pane's place in the wall: the outer two look 24° off the centre (aero-2's parallax), ?yaw= exact.
-const ROLE_YAW: Record<string, number> = { left: -24, right: 24 };
-const paneYaw = (P.yaw ?? (P.role ? ROLE_YAW[P.role] ?? 0 : 0)) * RAD;
 // The atmosphere's day exposure (?sky=, 1.7): at 1 a clear afternoon rendered dark slate. See lighting.ts.
 const knobs: Knobs = { sky: P.sky, lift: P.lift, lamps: P.lamps, carpet: P.carpet, moonlight: P.moonlight };
-let pinnedHour: number | null = P.clock;
-if (Number.isNaN(pinnedHour)) pinnedHour = wall.clock;
+const clock = { pinned: visit.clock }; // the HUD's slider writes it
 // The Lights panel's live gains (lightsPanel): street lamps, building lights, far towns, bloom.
 const mix = { street: 1, building: 1, far: 1, glow: GLOW, haze: 0.12 };
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const engine = await createEngine(canvas, P.webgpu, P.aa);
-// A kiosk has no one to press reload. A failed boot (tiles not served yet, a truncated pack)
-// retries, and a lost GL context reloads: clearCachedVertexData below leaves nothing to rebuild from.
-addEventListener('unhandledrejection', recover, { once: true });
-engine.onContextLostObservable.add(recover);
 const baseScale = P.scale;
 engine.setHardwareScalingLevel(baseScale);
-// A hot Pi sheds (health-check.sh, served at /api/thermal): fewer pixels, no bloom, no haze, until it cools.
-let shedding = false;
-setInterval(async () => {
-	const state = await fetch('/api/thermal').then((r) => r.json()).catch(() => null);
-	shedding = state?.action === 'shed';
-	engine.setHardwareScalingLevel(shedding ? baseScale * 1.5 : baseScale);
-}, 30_000);
+// A kiosk has no one to press reload (ops/kiosk.ts): failed boots and lost contexts reload, a hot Pi sheds.
+let frames = 0;
+const kiosk = keepAlive(engine, baseScale, () => frames);
 
 const scene = new Scene(engine);
 scene.clearColor = new Color4(0, 0, 0, 1);
@@ -107,8 +91,6 @@ camera.maxZ = 1_000_000;
 
 const roadsLoad = fetchPack('roads'); // the ground paints them in by day, the lamps follow them by night
 const terrain = await createTerrain(scene, lat, lon, await roadsLoad);
-// Today for this place, from the visit's slot start: the same on every pane, different tomorrow.
-const day = dayFor(placeId, bootSlot * DWELL_SEC * 1000, P.weather ?? wall.weather);
 sunLight.intensity = day.sun;
 if (atmosphere) {
 	atmosphere.aerialPerspectiveIntensity *= day.haze;
@@ -140,7 +122,7 @@ const [buildings, roads, clouds, stars] = await Promise.all([
 // has its own night fill, wing.ts). The white buildings take it at full strength: moonlit concrete.
 moonLight?.includedOnlyMeshes.push(...[scene.getMeshByName('near'), scene.getMeshByName('far'), ...(buildings?.meshes ?? [])].filter((m) => m !== null));
 const moon = createMoon(scene, camera, lat, lon);
-const wing = !P.wing ? null : await createWing(scene, P.seat && Object.hasOwn(SEATS, P.seat) ? (P.seat as Seat) : seatFor(hash(bootSlot * 0x9e3779b1 + 7)));
+const wing = !P.wing ? null : await createWing(scene, visit.seat);
 // One pane makes the sound: the centre (or a lone pane). ?audio=0 for silence.
 const drone = P.audio && (P.role ?? 'center') === 'center' ? cabinDrone() : null;
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
@@ -168,9 +150,7 @@ if (glow && lights) {
 // The wing too: its unlit meshes draw black into the bloom, so the city's glow stops at its edge.
 for (const mesh of [...(buildings?.meshes ?? []), ...(wing?.meshes ?? [])]) glow?.addIncludedOnlyMesh(mesh);
 
-// Off on a wall pane (the kiosk URL carries ?role=): a touch on one pane's slider would split the wall.
-const hud = P.hud ? clockControls() : null;
-if (hud) lightsPanel(), placePicker();
+const hud = P.hud ? createHud(engine, lon, clock, mix, pinnedPlace) : null;
 /** ?debug: set `aim.at` to a world point (or `aim.moon = true`) to hold the camera on it for a screenshot. */
 const aim: { at: Vector3 | null; moon: boolean } = { at: null, moon: false };
 if (P.debug) Object.assign(globalThis, { scene, camera, terrain, treeCount, day, aim, wing, atmosphere }); // for the console and frame-cost ablations
@@ -192,16 +172,15 @@ setInterval(async () => {
 	setTimeout(() => location.reload(), Math.max(0, wait));
 }, 5_000);
 
-let frames = 0;
 engine.runRenderLoop(() => {
 	// tools/pi-bench.ts waits for this: the scene is built and drawing, so it measures running, not booting.
 	if (++frames === 60) document.documentElement.dataset.ready = '1';
 	const now = Date.now();
-	const skyMs = pinnedHour === null ? now : atSolarHour(now, lon, pinnedHour);
+	const skyMs = clock.pinned === null ? now : atSolarHour(now, lon, clock.pinned);
 	const s = sunAt(skyMs, lat, lon);
 	sunLight.direction.set(-s.x, -s.y, -s.z);
 
-	const light = lightingAt(s.elevationDeg, knobs, mix, day.haze, day.lights, shedding);
+	const light = lightingAt(s.elevationDeg, knobs, mix, day.haze, day.lights, kiosk.shedding);
 	const dark = light.dark;
 	if (moonLight && frames % 30 === 1) {
 		const m = moonlightAt(moonAt(skyMs, lat, lon), dark, knobs.moonlight); // twice a second: the moon crawls
@@ -243,33 +222,6 @@ engine.runRenderLoop(() => {
 });
 addEventListener('resize', () => engine.resize());
 
-// Every 30 s: this pane's frame rate to its own server (/api/status, so health-check.sh reports
-// it), and a stall check. A visible page that drew no frame in 30 s is wedged (a GPU hang, a lost
-// context that never fired its event): reload through recover()'s budget. Hidden tabs throttle rAF.
-let framesAt = 0;
-setInterval(() => {
-	if (!document.hidden && frames === framesAt) recover();
-	framesAt = frames;
-	fetch('/api/fps', { method: 'POST', body: String(engine.getFps()) }).catch(() => {});
-}, 30_000);
-
-/**
- * Reload after a failure, but not in a loop: at most three error reloads an hour, then one every
- * five minutes. The count lives in sessionStorage, which survives a reload of the same tab.
- */
-function recover() {
-	if (recover.once) return;
-	recover.once = true;
-	const now = Date.now();
-	let recent: number[] = [];
-	try {
-		recent = (JSON.parse(sessionStorage.getItem('aero-recoveries') ?? '[]') as number[]).filter((t) => now - t < 3_600_000);
-		sessionStorage.setItem('aero-recoveries', JSON.stringify([...recent, now]));
-	} catch {}
-	setTimeout(() => location.reload(), recent.length >= 3 ? 300_000 : 10_000);
-}
-recover.once = false;
-
 /**
  * MSAA on (?aa=0 off, for the bench): without it every building edge and lit-window texel is
  * sampled once per pixel and flickers as the plane moves, which read as noise on the city. Mali
@@ -296,43 +248,4 @@ async function loadBuildings() {
 async function fetchPack(kind: 'buildings' | 'roads') {
 	const res = await fetch(`/${kind}/${placeId}.geojson`);
 	return res.ok ? (await res.json()).features : null;
-}
-
-/** The place picker: Rotation follows the wall clock; a city pins it (?place=). Both reload. */
-function placePicker() {
-	const select = document.querySelector<HTMLSelectElement>('#place')!;
-	select.add(new Option('Rotation', ''));
-	for (const id of Object.keys(PLACES)) select.add(new Option(placeName(id), id));
-	select.value = pinnedPlace ?? '';
-	select.addEventListener('change', () => {
-		const url = new URL(location.href);
-		if (select.value) url.searchParams.set('place', select.value);
-		else url.searchParams.delete('place');
-		location.assign(url);
-	});
-}
-
-/** The Lights panel: each slider writes one gain in `mix`, read by the render loop. */
-function lightsPanel() {
-	for (const input of document.querySelectorAll<HTMLInputElement>('#lights input')) {
-		const key = input.name as keyof typeof mix;
-		input.value = String(mix[key]);
-		input.addEventListener('input', () => (mix[key] = Number(input.value)));
-	}
-}
-
-/** The time-of-day slider: drag to pin the sky to an hour, "Now" to follow the real sun again. */
-function clockControls() {
-	const panel = document.querySelector<HTMLElement>('#hud')!;
-	const slider = panel.querySelector<HTMLInputElement>('input')!;
-	const [readout, live] = [panel.querySelector('output')!, panel.querySelector('button')!];
-	panel.hidden = false;
-	slider.addEventListener('input', () => (pinnedHour = Number(slider.value)));
-	live.addEventListener('click', () => (pinnedHour = null));
-	return (skyMs: number, elevationDeg: number) => {
-		const hour = solarHour(skyMs, lon);
-		slider.value = String(hour);
-		readout.textContent = `${hhmm(hour)} solar · sun ${elevationDeg.toFixed(0)}° · ${Number.isFinite(engine.getFps()) ? engine.getFps().toFixed(0) : '–'} fps ${engine.isWebGPU ? 'WebGPU' : 'WebGL2'}`;
-		live.disabled = pinnedHour === null;
-	};
 }

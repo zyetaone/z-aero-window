@@ -17,7 +17,7 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder';
 import type { Scene } from '@babylonjs/core/scene';
 import { crop, groundDetail, lightDome, lightSites, nightGround, paintRoads, paintSea, seaColour, waterMask } from './maps.ts';
-import { RAD } from '../math.ts';
+import { RAD } from '../../math.ts';
 import { gridsFor, mercX, mercY, TILE, type Grid } from './mercator.ts';
 import type { Road } from './maps.ts';
 

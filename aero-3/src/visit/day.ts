@@ -7,7 +7,7 @@
  * a pane booted: three panes that reload a few seconds apart around midnight
  * still agree. `?weather=` pins a regime.
  */
-import { hash } from './math.ts';
+import { hash } from '../math.ts';
 
 /** How the near and mid clouds are arranged: anywhere, in rows along the wind, massed on one side, in a few groups. */
 export type Layout = 'scatter' | 'streets' | 'front' | 'clumps';
