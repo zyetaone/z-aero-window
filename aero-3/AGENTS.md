@@ -61,6 +61,10 @@ One reason to change per file:
   Mirrored for left-side windows; nav light (green starboard, red port) and aero-2's double-pulse
   strobe on the wall clock. It sits in the glow pass so the city's bloom stops at its edge.
   `?wing=0` to skip. Merged by material at load: 28 draw calls, not the export's 65.
+  Each visit deals a seat row (`seatFor`, from the visit seed so the panes agree): behind the wing
+  half the time, over it a third, ahead of the leading edge the rest (the wing behind you: only the
+  aft-looking pane sees it). `?seat=behind|over|ahead` pins one. Verified in-frame with markers: the
+  model's nose is +z (root chord z -2..7, tip -5..-3, winglet leans to -z) and follows the travel.
 - `src/math.ts` — `RAD`, `smoothstep`, and the seeded noises (`hash`, `mulberry32`, `noise1`, `noise2`, `fbm`) every module shares.
 
 **`src/sky/`** — what is above: sun, moon and star positions, the stars, the moon, the clouds.

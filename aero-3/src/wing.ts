@@ -16,12 +16,20 @@ import '@babylonjs/loaders/glTF';
 import { ImportMeshAsync, Mesh, MeshBuilder, PBRMaterial, Quaternion, StandardMaterial, TransformNode, Vector3, type Scene } from '@babylonjs/core';
 
 const WING_SCALE = 10;
-// In the model's own metres (root transform reset): the eye at the fuselage wall, just behind the
-// trailing edge and above it, looking out along +x toward the tip; +z is the nose. And the wingtip light.
-const EYE = new Vector3(-8.5, 2.4, -5.5);
+// In the model's own metres (root transform reset): the eye at the fuselage wall, looking out along
+// +x toward the tip; +z is the nose. Which row it sits in is dealt per visit (seatFor): behind the
+// wing (the classic view across the whole span), over it (the wing below the window, the tip out to
+// the side), or ahead of the leading edge (the wing behind you: only the aft-looking pane sees it).
+export const SEATS = { behind: -5.5, over: 1.5, ahead: 9 } as const;
+export type Seat = keyof typeof SEATS;
+/** A row from a visit's 0..1 draw: behind half the time, over the wing a third, ahead the rest. */
+export const seatFor = (u: number): Seat => (u < 0.5 ? 'behind' : u < 0.83 ? 'over' : 'ahead');
+const EYE_X = -8.5;
+const EYE_Y = 2.4;
 const TIP = new Vector3(7, 0.55, -3.5);
 
-export async function createWing(scene: Scene) {
+export async function createWing(scene: Scene, seat: Seat = 'behind') {
+	const EYE = new Vector3(EYE_X, EYE_Y, SEATS[seat]);
 	const loaded = await ImportMeshAsync('/models/wing.glb', scene);
 	const root = loaded.meshes[0]!;
 	// The loader's handedness flip on the root is replaced by our own mapping: model x (span) out of
@@ -42,8 +50,8 @@ export async function createWing(scene: Scene) {
 	root.rotation.set(0, -Math.PI / 2, 0);
 	root.scaling.setAll(WING_SCALE);
 	root.position.set(EYE.z * WING_SCALE, -EYE.y * WING_SCALE, -EYE.x * WING_SCALE);
-	const seat = new TransformNode('seat', scene);
-	root.parent = seat;
+	const mount = new TransformNode('seat', scene);
+	root.parent = mount;
 	const materials = new Set<PBRMaterial>();
 	for (const m of meshes) {
 		m.isPickable = false;
@@ -68,12 +76,12 @@ export async function createWing(scene: Scene) {
 		meshes: [...meshes, nav.ball, strobe.ball],
 		/** Follow the airframe: `eye` the camera's position, `aircraft` heading × bank, `side` +1 right window, -1 left. */
 		update(eye: Vector3, aircraft: Quaternion, side: number, nowMs: number, dark: number) {
-			seat.position.copyFrom(eye);
-			Quaternion.RotationYawPitchRollToRef(side * (Math.PI / 2), 0, 0, seat.rotationQuaternion ??= new Quaternion());
-			aircraft.multiplyToRef(seat.rotationQuaternion, seat.rotationQuaternion);
+			mount.position.copyFrom(eye);
+			Quaternion.RotationYawPitchRollToRef(side * (Math.PI / 2), 0, 0, mount.rotationQuaternion ??= new Quaternion());
+			aircraft.multiplyToRef(mount.rotationQuaternion, mount.rotationQuaternion);
 			// Mirror so the model's nose (+z) points the way the aircraft flies: measured on screen, travel
 			// and +z must share a sign (it was -side, and the wing flew backwards).
-			seat.scaling.x = side;
+			mount.scaling.x = side;
 			nav.material.emissiveColor.set(side > 0 ? 0.1 : 1, side > 0 ? 1 : 0.12, 0.1).scaleInPlace(0.3 + 0.7 * dark);
 			const cycle = (nowMs % 1800) / 1800; // aero-2's double pulse
 			strobe.ball.setEnabled((cycle > 0.9 && cycle < 0.93) || (cycle > 0.96 && cycle < 0.99));

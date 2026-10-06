@@ -49,6 +49,8 @@ export function readParams(search: string) {
 		glow: !off('glow'),
 		trees: !off('trees'),
 		wing: !off('wing'),
+		/** Pin the row: behind, over or ahead of the wing; absent, the visit's own. */
+		seat: q.get('seat'),
 		// The engine
 		scale: Math.max(0.25, num('scale', 1)),
 		webgpu: q.get('gpu') === 'webgpu',

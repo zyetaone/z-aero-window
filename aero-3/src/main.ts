@@ -20,7 +20,7 @@ import { destinationAt, DWELL_SEC, PLACES, placeName, slotAt } from './places.ts
 import { createHaze } from './city/haze.ts';
 import { adminQr, cabinDrone, cabinOverlay } from './cabin.ts';
 import { createMoon } from './sky/moon.ts';
-import { createWing } from './wing.ts';
+import { createWing, SEATS, seatFor, type Seat } from './wing.ts';
 import { createStars } from './sky/stars.ts';
 import { atSolarHour, hhmm, moonAt, solarHour, sunAt } from './sky/ephemeris.ts';
 import { createTerrain } from './ground/terrain.ts';
@@ -130,7 +130,7 @@ const [buildings, roads, clouds, stars] = await Promise.all([
 // has its own night fill, wing.ts). The white buildings take it at full strength: moonlit concrete.
 moonLight?.includedOnlyMeshes.push(...[scene.getMeshByName('near'), scene.getMeshByName('far'), ...(buildings?.meshes ?? [])].filter((m) => m !== null));
 const moon = createMoon(scene, camera, lat, lon);
-const wing = !P.wing ? null : await createWing(scene);
+const wing = !P.wing ? null : await createWing(scene, P.seat && Object.hasOwn(SEATS, P.seat) ? (P.seat as Seat) : seatFor(hash(bootSlot * 0x9e3779b1 + 7)));
 // One pane makes the sound: the centre (or a lone pane). ?audio=0 for silence.
 const drone = P.audio && (P.role ?? 'center') === 'center' ? cabinDrone() : null;
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
