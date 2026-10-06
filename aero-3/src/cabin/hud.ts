@@ -4,8 +4,8 @@
  * would split the wall.
  */
 import type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine';
-import { PLACES, placeName } from '../visit/places.ts';
-import { hhmm, solarHour } from '../world/sky/ephemeris.ts';
+import { PLACES, placeName } from '#visit/places.ts';
+import { hhmm, solarHour } from '#world/sky/ephemeris.ts';
 
 /** Mounts the panels. `clock.pinned` and `mix` are the render loop's own: the panels write them. */
 export function createHud<M extends Record<string, number>>(engine: AbstractEngine, lon: number, clock: { pinned: number | null }, mix: M, pinnedPlace: string | null) {

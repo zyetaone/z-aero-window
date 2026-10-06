@@ -9,7 +9,7 @@
  * ahead of or behind the mean clock through the year) is applied, so the sun
  * stands where it really does; the HUD's hour stays mean solar time.
  */
-import { RAD } from '../../math.ts';
+import { RAD } from '#math.ts';
 const DAY_MS = 86_400_000;
 
 /** A clock hour (0-24, fractional) as HH:MM. */

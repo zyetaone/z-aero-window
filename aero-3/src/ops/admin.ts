@@ -1,9 +1,9 @@
 /** The /admin page: one form that pushes a wall (src/ops/wall.ts). The token stays in the form, never in storage. */
-import { PLACES, placeName } from '../visit/places.ts';
-import { hhmm } from '../world/sky/ephemeris.ts';
-import { REGIME_NAMES } from '../visit/day.ts';
+import { PLACES, placeName } from '#visit/places.ts';
+import { hhmm } from '#world/sky/ephemeris.ts';
+import { REGIME_NAMES } from '#visit/day.ts';
 import { fetchWall, PRESETS, type Wall } from './wall.ts';
-import { CREDITS } from '../cabin/credits.ts';
+import { CREDITS } from '#cabin/credits.ts';
 import { STALE_SEC, type FleetRow } from './fleet.ts';
 
 const form = document.querySelector('form')!;

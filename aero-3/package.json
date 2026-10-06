@@ -21,6 +21,10 @@
     "compile": "bun build --compile --minify --target=bun-linux-arm64 server.ts --outfile dist/aero-3",
     "smoke": "bun tools/smoke.ts",
     "build": "bun tools/build.ts",
-    "serve": "NODE_ENV=production bun build/index.js"
+    "serve": "NODE_ENV=production bun build/index.js",
+    "coverage": "bun test --coverage"
+  },
+  "imports": {
+    "#*": "./src/*"
   }
 }

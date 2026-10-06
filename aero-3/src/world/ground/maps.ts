@@ -8,7 +8,7 @@
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import type { Scene } from '@babylonjs/core/scene';
-import { fbm, hash, noise2, smoothstep } from '../../math.ts';
+import { fbm, hash, noise2, smoothstep } from '#math.ts';
 import { mercX, mercY, TILE, type Grid } from './mercator.ts';
 
 /** One OSM road from a place's pack: painted into the ground by day (paintRoads), lamps along it by night (city/lights.ts). */

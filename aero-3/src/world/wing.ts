@@ -21,7 +21,7 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
-import type { Seat } from '../visit/visit.ts';
+import type { Seat } from '#visit/visit.ts';
 
 const WING_SCALE = 10;
 // In the model's own metres (root transform reset): the eye at the fuselage wall, looking out along

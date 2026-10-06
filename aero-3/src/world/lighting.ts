@@ -3,7 +3,7 @@
  * exposure the eye adapts to, and every gain that follows from those. Pure, so the
  * rules (and the traps they encode) are tested, and main.ts only applies the numbers.
  */
-import { smoothstep } from '../math.ts';
+import { smoothstep } from '#math.ts';
 
 export type Knobs = {
 	/** The atmosphere's exposure by day (`?sky=`). */

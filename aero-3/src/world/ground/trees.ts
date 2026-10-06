@@ -10,7 +10,7 @@ import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder';
 import { CreateIcoSphere } from '@babylonjs/core/Meshes/Builders/icoSphereBuilder';
 import type { Scene } from '@babylonjs/core/scene';
-import { hash } from '../../math.ts';
+import { hash } from '#math.ts';
 
 const RADIUS_M = 9_000; // the orbit's reach: from cruise a tree is a few pixels, a clump a speckle of green
 const STEP_M = 37; // one Sentinel-2 z12 pixel

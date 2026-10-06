@@ -27,11 +27,11 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Sprite } from '@babylonjs/core/Sprites/sprite';
 import { SpriteManager } from '@babylonjs/core/Sprites/spriteManager';
 import type { Scene } from '@babylonjs/core/scene';
-import { mulberry32, smoothstep } from '../../math.ts';
-import type { Day } from '../../visit/day.ts';
-import cloud from '../../assets/cloud.webp';
-import cloudDark from '../../assets/cloud-dark.webp';
-import cloudSmoke from '../../assets/cloud-smoke.webp';
+import { mulberry32, smoothstep } from '#math.ts';
+import type { Day } from '#visit/day.ts';
+import cloud from '#assets/cloud.webp';
+import cloudDark from '#assets/cloud-dark.webp';
+import cloudSmoke from '#assets/cloud-smoke.webp';
 
 const CELL = 256;
 const UNDERGLOW = new Color3(0.07, 0.05, 0.035);

@@ -8,8 +8,8 @@
  * Every field is optional in effect: null means "the default" (follow the
  * rotation, today's weather, the real clock). URL params still win, for dev.
  */
-import { PLACES } from '../visit/places.ts';
-import { REGIME_NAMES } from '../visit/day.ts';
+import { PLACES } from '#visit/places.ts';
+import { REGIME_NAMES } from '#visit/day.ts';
 
 export type Push = { place: string | null; weather: string | null; clock: number | null };
 export type Wall = Push & { version: number; applyAt: number };

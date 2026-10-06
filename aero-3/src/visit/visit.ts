@@ -4,8 +4,8 @@
  * operator's wall (ops/wall.ts) and the boot second in, one plain object out. Every input but the
  * pane's role is the same on all three panes, so they agree without talking.
  */
-import type { Wall } from '../ops/wall.ts';
-import { hash, RAD } from '../math.ts';
+import type { Wall } from '#ops/wall.ts';
+import { hash, RAD } from '#math.ts';
 import { dayFor } from './day.ts';
 import { flight } from './flight.ts';
 import type { Params } from './params.ts';

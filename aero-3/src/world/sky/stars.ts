@@ -5,13 +5,13 @@
  * than punching dark dots in it, and the terrain's depth hides those below the
  * horizon.
  */
-import { RAD } from '../../math.ts';
+import { RAD } from '#math.ts';
 import type { Camera } from '@babylonjs/core/Cameras/camera';
 import { Constants } from '@babylonjs/core/Engines/constants';
 import { Color4 } from '@babylonjs/core/Maths/math.color';
 import { PointsCloudSystem } from '@babylonjs/core/Particles/pointsCloudSystem';
 import type { Scene } from '@babylonjs/core/scene';
-import { yaleCatalog } from '../../vendor/yale-stars.ts';
+import { yaleCatalog } from '#vendor/yale-stars.ts';
 import { siderealDeg } from './ephemeris.ts';
 
 const SKY_M = 800_000; // inside the camera's 1000 km far plane, past the horizon

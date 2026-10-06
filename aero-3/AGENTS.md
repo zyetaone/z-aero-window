@@ -20,6 +20,9 @@ tools/           build, smoke, pi-bench, fetch-terrain, ship-pack
 ../deploy/       Pi OS: units, install, updater, health-check (shared with aero-1/2)
 ```
 
+Cross-folder imports use the package `imports` alias (`#visit/day.ts`, `#math.ts`: `#*` → `./src/*`,
+native to Bun and TypeScript); same-folder imports stay `./`. `bun run coverage` covers the pure layers.
+
 Where things not built yet go: remote actions and admin panels in `ops/`, media (video, music)
 in `cabin/`, a camera-pose model in `visit/flight.ts`. A folder appears with its first file.
 
@@ -246,7 +249,7 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
    so `aero-app.service` and `aero-updater.sh` need no edits. `install.sh --app aero-3 --wall
    http://<centre-pi>:3000` stores `AERO_WALL_URL` (validated, kept across re-runs) and the kiosk
    URL carries `&wall=`. CI's `aero-3` job gates `release`. Thermal shedding reads
-   health-check.sh's `/run/aero/thermal.json` via `/api/thermal`. `tools/ship-pack.sh <user@pi>` rsyncs
+   health-check.sh's `/run/aero/thermal.json` via `/api/thermal`. `bun tools/ship-pack.ts <user@pi>` rsyncs
    the ~320 MB aero-3 reads (Sentinel-2 z7/8/11/12, Terrarium z8/10, VIIRS z8, roads, OSM
    buildings), restarts the app and checks `/api/status` `data` lists every route.
 5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.

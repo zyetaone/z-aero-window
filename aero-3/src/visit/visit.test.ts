@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { NO_WALL } from '../ops/wall.ts';
+import { NO_WALL } from '#ops/wall.ts';
 import { readParams } from './params.ts';
 import { visitFor } from './visit.ts';
 
