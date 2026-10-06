@@ -35,8 +35,22 @@
 				<label>Place <select name="place"></select></label>
 				<label>Weather <select name="weather"></select></label>
 				<label>Time of day <input name="clock" type="number" min="0" max="24" step="0.25" placeholder="Real local time" /></label>
+			<label>Street lamps <input name="street" type="number" min="0" max="2" step="0.05" placeholder="Default 1" /></label>
+			<label>Building lights <input name="building" type="number" min="0" max="2" step="0.05" placeholder="Default 1" /></label>
+			<label>Far towns <input name="far" type="number" min="0" max="2" step="0.05" placeholder="Default 1" /></label>
+			<label>Night haze <input name="haze" type="number" min="0" max="1" step="0.05" placeholder="Default 0.12" /></label>
+			<label>Bloom <input name="glow" type="number" min="0" max="1" step="0.05" placeholder="Default 0.35" /></label>
+			<label>Audio playlist <input name="audio" type="text" placeholder="track.mp3, next.ogg (empty = silent)" /></label>
+			<label>Video clip <input name="video" type="text" placeholder="clip.mp4 (empty = flight)" /></label>
 				<label>Admin token <input name="token" type="password" autocomplete="off" placeholder="not needed on a dev server" /></label>
 				<button type="submit">Push to wall</button>
+			</form>
+			<h2>Media library</h2>
+			<p>Upload music and clips, then attach them to the push above. Files live on this Pi; panes fetch them from here.</p>
+			<ul id="library"></ul>
+			<form id="upload">
+				<label>New file <input name="file" type="file" accept=".mp3,.wav,.ogg,.mp4,.webm" /></label>
+				<button type="submit">Upload</button>
 			</form>
 			<output aria-live="polite"></output>
 			<h2>Panes</h2>

@@ -22,6 +22,7 @@ import { Scene } from '@babylonjs/core/scene';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { createHud } from './cabin/hud.ts';
 import { adminQr, cabinDrone, cabinOverlay } from './cabin/cabin.ts';
+import { playAudioPlaylist, showVideo } from './cabin/media.ts';
 import { RAD } from './math.ts';
 import { keepAlive } from './ops/kiosk.ts';
 import { fetchWall, NO_WALL } from './ops/wall.ts';
@@ -61,7 +62,15 @@ if (P.blind) setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && locatio
 const knobs: Knobs = { sky: P.sky, lift: P.lift, lamps: P.lamps, carpet: P.carpet, moonlight: P.moonlight };
 const clock = { pinned: plan.clock }; // the HUD's slider writes it
 // The Lights panel's live gains (lightsPanel): street lamps, building lights, far towns, bloom.
-const mix = { street: 1, building: 1, far: 1, glow: GLOW, haze: 0.12 };
+// A wall push overrides these defaults (wall.ts gains: replace, never multiply); a lone pane's
+// HUD sliders still edit the result locally. `?.` because a wall stored before gains keeps working.
+const mix = {
+	street: wall.gains?.street ?? 1,
+	building: wall.gains?.building ?? 1,
+	far: wall.gains?.far ?? 1,
+	glow: wall.gains?.glow ?? GLOW,
+	haze: wall.gains?.haze ?? 0.12
+};
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const engine = await createEngine(canvas, P.webgpu, P.aa);
@@ -124,7 +133,12 @@ moonLight?.includedOnlyMeshes.push(...[scene.getMeshByName('near'), scene.getMes
 const moon = createMoon(scene, camera, lat, lon);
 const wing = !P.wing ? null : await createWing(scene, plan.seat);
 // One pane makes the sound: the centre (or a lone pane). ?audio=0 for silence.
-const drone = P.audio && (P.role ?? 'center') === 'center' ? cabinDrone() : null;
+const tracks = wall.media?.audio ?? []; // `?.`: a wall stored before media keeps playing
+const clip = wall.media?.video ?? null;
+// A pushed playlist replaces the synthesised drone (same gate: centre/solo, ?audio=0 off).
+const drone = P.audio && (P.role ?? 'center') === 'center' && !tracks.length ? cabinDrone() : null;
+if ((P.role ?? 'center') === 'center' && P.audio && tracks.length) playAudioPlaylist(tracks, P.wall);
+if (clip) showVideo(clip, P.wall); // muted everywhere: a video wall is one image, not three soundtracks
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
 // towns on the far ring past the roads (city/lights.ts).
 const lights = createLights(roads ?? [], terrain.project, terrain.groundAt, scene, buildings?.roofLights, terrain.sites, buildings?.windows);

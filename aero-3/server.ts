@@ -10,13 +10,13 @@
  * Defaults resolve from the working directory, not `import.meta.dir`: inside a
  * `--compile`d binary that is the embedded filesystem, where no tiles live.
  */
-import { existsSync } from 'node:fs';
-import { rename } from 'node:fs/promises';
+import { existsSync, mkdirSync } from 'node:fs';
+import { readdir, rename } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import index from './index.html';
 import admin from './admin.html';
-import { LEAD_SEC, MAX_PUSH_BYTES, NO_WALL, parsePush, type Wall } from './src/ops/wall.ts';
+import { LEAD_SEC, MAX_PUSH_BYTES, MEDIA_ID, NO_WALL, parsePush, type Wall } from './src/ops/wall.ts';
 import { MAX_DEVICES, MAX_HEARTBEAT_BYTES, parseHeartbeat, type FleetRow } from './src/ops/fleet.ts';
 
 const IMAGERY_DIR = Bun.env.IMAGERY_DIR ?? '../data/tiles/sentinel2';
@@ -26,6 +26,21 @@ const LIGHTS_DIR = Bun.env.LIGHTS_DIR ?? '../aero-2/data/tiles/viirs';
 const BUILDINGS_DIR = Bun.env.BUILDINGS_DIR ?? './data/buildings';
 // The road packs aero-1 and aero-2 already ship (aero-1/tools/tile-packager/src/roads.ts), stamped with class.
 const ROADS_DIR = Bun.env.ROADS_DIR ?? '../data/roads';
+// Operator-uploaded music and clips (/api/media): created at boot so the static route below always mounts.
+const MEDIA_DIR = Bun.env.MEDIA_DIR ?? './data/media';
+mkdirSync(MEDIA_DIR, { recursive: true });
+// One file, multipart/form-data, refused on the declared length first (aero-2's lesson:
+// formData() buffers the whole body, so checking after means already paying for it).
+const MEDIA_MB = Number(Bun.env.AERO_MEDIA_MB ?? 50);
+const MAX_MEDIA_BYTES = (Number.isFinite(MEDIA_MB) && MEDIA_MB > 0 ? MEDIA_MB : 50) * 1024 * 1024;
+/** Bare store names: no slashes, no dotfiles, audio/video extensions only. */
+const MEDIA_EXTS = ['.mp3', '.wav', '.ogg', '.mp4', '.webm'];
+const mediaName = (raw: string) => {
+	const base = raw.split('/').pop()!.split('\\').pop()!;
+	if (!MEDIA_ID.test(base) || base.startsWith('.') || base.includes('..')) return null;
+	if (!MEDIA_EXTS.some((ext) => base.toLowerCase().endsWith(ext))) return null;
+	return base;
+};
 // aero-2's 737 wing, ~1 MB: CC-BY-4.0, by "A Random Modeler" on Sketchfab (credited in src/wing.ts).
 const MODELS_DIR = Bun.env.MODELS_DIR ?? '../aero-2/static/models';
 // The wall (src/ops/wall.ts): what the operator last pushed, kept across restarts.
@@ -55,7 +70,7 @@ const lan = () => Object.values(networkInterfaces()).flat().find((a) => a?.famil
 let page: 'building' | 'ok' | 'failed' = 'building';
 // Only the data that is here: a { dir } route throws at startup on a missing folder, and a Pi
 // without a pack (or CI, where data/ is gitignored) must still answer /api/status.
-const DATA = { '/tiles/imagery/*': IMAGERY_DIR, '/tiles/terrain/*': TERRAIN_DIR, '/tiles/lights/*': LIGHTS_DIR, '/buildings/*': BUILDINGS_DIR, '/roads/*': ROADS_DIR, '/models/*': MODELS_DIR };
+const DATA = { '/tiles/imagery/*': IMAGERY_DIR, '/tiles/terrain/*': TERRAIN_DIR, '/tiles/lights/*': LIGHTS_DIR, '/buildings/*': BUILDINGS_DIR, '/roads/*': ROADS_DIR, '/models/*': MODELS_DIR, '/media/*': MEDIA_DIR };
 const mounted = Object.entries(DATA).filter(([, dir]) => existsSync(dir));
 
 /** A bearer check that takes the same time whatever the guess. */
@@ -96,12 +111,41 @@ const server = Bun.serve({
 				try {
 					push = parsePush(JSON.parse(text));
 				} catch {}
-				if (!push) return new Response('expected { place, weather, clock }: a known place, a known regime, an hour 0-24, or null', { status: 400 });
+				if (!push) return new Response('expected { place, weather, clock, gains, media }: a known place, a known regime, an hour 0-24, gains street/building/far 0-2 haze/glow 0-1, media store IDs (8 audio, 1 video), or null', { status: 400 });
 				wall = { ...push, version: wall.version + 1, applyAt: Math.ceil(Date.now() / 1000) + LEAD_SEC };
 				const tmp = `${WALL_FILE}.${wall.version}.tmp`; // one per push: two overlapping pushes must not share it
 				await Bun.write(tmp, JSON.stringify(wall));
 				await rename(tmp, WALL_FILE); // whole or not at all, across a crash
 				return Response.json(wall);
+			}
+		},
+		// The operator's music and clips: open to list (a venue LAN discloses nothing
+		// the panes are not already fetching), token-gated to fill, like aero-1's
+		// /api/assets and aero-2's /api/media. Files serve from /media/* above.
+		'/api/media': {
+			GET: async () => {
+				const names = await readdir(MEDIA_DIR).catch(() => [] as string[]);
+				return Response.json({ media: names.filter((n) => mediaName(n)).sort() }, { headers: { 'Cache-Control': 'no-store' } });
+			},
+			async POST(req, srv) {
+				const devOpen = !ADMIN_TOKEN && DEV && LOOPBACK.includes(srv.requestIP(req)?.address ?? '');
+				if (!ADMIN_TOKEN && !devOpen) return new Response('media upload is off: set AERO_ADMIN_TOKEN', { status: 503 });
+				if (!devOpen && !authorised(req, ADMIN_TOKEN)) return new Response('wrong token', { status: 401 });
+				const declared = Number(req.headers.get('content-length') ?? 0);
+				if (Number.isFinite(declared) && declared > MAX_MEDIA_BYTES) return new Response(`too large: limit is ${MAX_MEDIA_BYTES} bytes`, { status: 413 });
+				let form: FormData;
+				try {
+					form = await req.formData();
+				} catch {
+					return new Response('expected multipart/form-data', { status: 400 });
+				}
+				const file = form.get('file');
+				if (!(file instanceof File)) return new Response('no `file` part in the upload', { status: 400 });
+				if (file.size > MAX_MEDIA_BYTES) return new Response(`too large: limit is ${MAX_MEDIA_BYTES} bytes`, { status: 413 });
+				const name = mediaName(file.name);
+				if (!name) return new Response('expected an audio/video filename (mp3, wav, ogg, mp4, webm)', { status: 400 });
+				await Bun.write(`${MEDIA_DIR}/${name}`, file);
+				return Response.json({ media: name });
 			}
 		},
 		// The kiosk on this machine reports its frame rate every 30 s; nobody else may.
