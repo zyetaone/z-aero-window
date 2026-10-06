@@ -78,7 +78,7 @@ export async function wing(scene: Scene) {
 			const cycle = (nowMs % 1800) / 1800; // aero-2's double pulse
 			strobe.ball.setEnabled((cycle > 0.9 && cycle < 0.93) || (cycle > 0.96 && cycle < 0.99));
 			strobe.material.emissiveColor.setAll(1);
-			// Shade takes the sky's light by day (see buildings.ts); at night a faint cool fill, as
+			// Shade takes the sky's light by day (see city/buildings.ts); at night a faint cool fill, as
 			// moonlight and the cabin's spill catch the near metal, instead of a black cut-out.
 			for (const m of materials) m.ambientColor.set(1 - dark + 0.05 * dark, 1 - dark + 0.06 * dark, 1 - dark + 0.09 * dark);
 		}

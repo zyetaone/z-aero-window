@@ -1,14 +1,16 @@
 /**
  * The ground's baked maps: pure canvas-to-canvas work done once at boot, out of
- * the tiles world.ts fetches. Night ground (VIIRS x imagery x roads x noise), the
+ * the tiles ground/terrain.ts fetches. Night ground (VIIRS x imagery x roads x noise), the
  * light dome for the haze, the water roughness mask, far-ring town lights, the
  * imagery crop trees sample, roads painted into the imagery, and the tiling detail
  * map. No mesh, no scene state: each takes canvases and returns one.
  */
 import { RawTexture, Texture, type Scene } from '@babylonjs/core';
-import { fbm, hash, noise2, smoothstep } from './math.ts';
+import { fbm, hash, noise2, smoothstep } from '../math.ts';
 import { mercX, mercY, TILE, type Grid } from './mercator.ts';
-import type { Road } from './lights.ts';
+
+/** One OSM road from a place's pack: painted into the ground by day (paintRoads), lamps along it by night (city/lights.ts). */
+export type Road = { geometry: { coordinates: number[][] }; properties: { class: string } };
 
 /** Carriageway widths in metres, drawn narrow to wide so motorways land on top. */
 const ROAD_M: [cls: string, metres: number][] = [['residential', 8], ['tertiary', 11], ['secondary', 15], ['primary', 20], ['trunk', 26], ['motorway', 32]];
@@ -16,7 +18,7 @@ const ROAD_M: [cls: string, metres: number][] = [['residential', 8], ['tertiary'
 const GLOW = 0.12; // NASA's radiance as a faint carpet: the points carry the detail
 const REVEAL = 0.3; // how much of the real ground a lit district shows at night
 const ROAD_GLOW = 0.35; // sodium on the asphalt of a lit district's streets
-const CROP_M = 9_000; // imagery kept for sampling (trees.ts, which plant within 9 km), either side of the pin
+const CROP_M = 9_000; // imagery kept for sampling (ground/trees.ts, which plant within 9 km), either side of the pin
 
 /**
  * The night ground, once at boot, from NASA's VIIRS radiance: aero-2's

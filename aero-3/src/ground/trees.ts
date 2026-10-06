@@ -5,7 +5,7 @@
  * hashes the pixel, so every pane grows the same forest.
  */
 import { Color3, Matrix, MeshBuilder, PBRMaterial, Quaternion, Vector3, type Scene } from '@babylonjs/core';
-import { hash } from './math.ts';
+import { hash } from '../math.ts';
 
 const RADIUS_M = 9_000; // the orbit's reach: from cruise a tree is a few pixels, a clump a speckle of green
 const STEP_M = 37; // one Sentinel-2 z12 pixel
@@ -65,7 +65,7 @@ export function trees(
 
 	const material = new PBRMaterial('trees', scene);
 	material.albedoColor = Color3.White(); // the instance colour carries the green
-	material.ambientColor = Color3.White(); // take the sky's light in shade (see buildings.ts)
+	material.ambientColor = Color3.White(); // take the sky's light in shade (see city/buildings.ts)
 	material.metallic = 0;
 	material.roughness = 0.9;
 	for (const { mesh, matrices, colors } of shapes) {

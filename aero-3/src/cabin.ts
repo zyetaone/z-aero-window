@@ -10,7 +10,7 @@ import { CREDITS } from './credits.ts';
 import { qrSvg } from './vendor/qr.ts';
 import { mulberry32 } from './math.ts';
 import { DWELL_SEC, placeName } from './places.ts';
-import { hhmm, solarHour } from './sun.ts';
+import { hhmm, solarHour } from './sky/ephemeris.ts';
 
 const BLIND_LEAD_SEC = 6; // down this long before the boundary
 const LAG_SEC = 12; // and up no sooner than this after it, so panes lift together

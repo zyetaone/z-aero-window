@@ -5,15 +5,15 @@
  *
  * Scene frame: metres (Babylon's atmosphere reads scene units as metres), x
  * east, y up, z north, origin at sea level over the centre of the detail patch.
- * Positions come from global Mercator (mercator.ts), so the two patches, the
+ * Positions come from global Mercator (ground/mercator.ts), so the two patches, the
  * buildings and the pin share one projection. The maps baked from the tiles
- * (night, water, roads, detail) live in ground-maps.ts.
+ * (night, water, roads, detail) live in ground/maps.ts.
  */
 import { Color3, MeshBuilder, PBRMaterial, Texture, VertexBuffer, VertexData, type Scene } from '@babylonjs/core';
-import { crop, groundDetail, lightDome, lightSites, nightGround, paintRoads, paintSea, seaColour, waterMask } from './ground-maps.ts';
-import { RAD } from './math.ts';
+import { crop, groundDetail, lightDome, lightSites, nightGround, paintRoads, paintSea, seaColour, waterMask } from './maps.ts';
+import { RAD } from '../math.ts';
 import { gridsFor, mercX, mercY, TILE, type Grid } from './mercator.ts';
-import type { Road } from './lights.ts';
+import type { Road } from './maps.ts';
 
 const EARTH_M = 6_371_000;
 const DETAIL_M = 350; // one repeat of the ground's detail map
@@ -190,11 +190,11 @@ export async function createWorld(scene: Scene, lat: number, lon: number, roads:
 		/** Ground in scene metres under (x, z), curvature included. */
 		groundAt: (x: number, z: number) => heightAt(mx0 + x / mPerMerc, my0 - z / mPerMerc) - drop(x, z),
 		materials,
-		/** Far-ring towns from NASA's radiance: [x, y, z, radiance 0..1] per light (lights.ts). */
+		/** Far-ring towns from NASA's radiance: [x, y, z, radiance 0..1] per light (city/lights.ts). */
 		sites,
-		/** The imagery's RGB under (x, z) within CROP_M of the pin, else null (trees.ts). */
+		/** The imagery's RGB under (x, z) within CROP_M of the pin, else null (ground/trees.ts). */
 		imagery,
-		/** The light dome over the near patch: VIIRS blurred, broken up by noise (haze.ts). */
+		/** The light dome over the near patch: VIIRS blurred, broken up by noise (city/haze.ts). */
 		hazeMap,
 		/** The near patch's side in metres, centred on the origin. */
 		nearSizeM: (near.span / 2 ** near.z) * mPerMerc

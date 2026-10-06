@@ -19,7 +19,7 @@
  */
 import earcut from 'earcut';
 import { Color3, DynamicTexture, Mesh, PBRMaterial, RawTexture, Texture, VertexData, type Scene } from '@babylonjs/core';
-import { mulberry32 } from './math.ts';
+import { mulberry32 } from '../math.ts';
 
 type Footprint = { geometry: { coordinates: number[][][] }; properties: { height: number } };
 
@@ -39,8 +39,8 @@ const RELIEF = 0.8; // normal-map strength: mipmaps average it flat with distanc
 export function buildings(features: Footprint[], project: (lon: number, lat: number) => [x: number, z: number], groundAt: (x: number, z: number) => number, scene: Scene) {
 	// uvs2 is the lightmap: v is height up the wall, 0 at the street.
 	const [positions, normals, uvs, uvs2, colors, indices] = [[], [], [], [], [], []] as number[][];
-	const roofLights: number[] = []; // flat [x, y, z]: lights on the flat roofs (lights.ts)
-	const windows: number[] = []; // flat [x, y, z]: lit windows as points (lights.ts), crisp at range
+	const roofLights: number[] = []; // flat [x, y, z]: lights on the flat roofs (city/lights.ts)
+	const windows: number[] = []; // flat [x, y, z]: lit windows as points (city/lights.ts), crisp at range
 	const random = mulberry32(0xae3);
 
 	for (const { geometry, properties } of features) {

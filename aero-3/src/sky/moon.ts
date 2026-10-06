@@ -6,8 +6,8 @@
  * 3.5× its true size, so a 0.5° moon still reads on a wall across a room.
  */
 import { Constants, Effect, MeshBuilder, ShaderMaterial, Vector3, type Camera, type Scene } from '@babylonjs/core';
-import { RAD, smoothstep } from './math.ts';
-import { moonAt } from './sun.ts';
+import { RAD, smoothstep } from '../math.ts';
+import { moonAt } from './ephemeris.ts';
 
 const DISTANCE_M = 600_000;
 const SIZE_M = 2 * DISTANCE_M * Math.tan(0.26 * RAD) * 3.5;

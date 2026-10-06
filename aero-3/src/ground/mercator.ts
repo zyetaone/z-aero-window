@@ -1,5 +1,5 @@
-/** Web Mercator, as the tile packs use it: one home for the grid both world.ts and ground-maps.ts read. */
-import { RAD } from './math.ts';
+/** Web Mercator, as the tile packs use it: one home for the grid both ground/terrain.ts and ground/maps.ts read. */
+import { RAD } from '../math.ts';
 
 export const TILE = 256; // px per tile
 /** `span` × `span` tiles at zoom `z`, top-left tile (x0, y0). */
@@ -8,7 +8,7 @@ export type Grid = { z: number; x0: number; y0: number; span: number };
 export const mercX = (lon: number) => (lon + 180) / 360;
 export const mercY = (lat: number) => (1 - Math.asinh(Math.tan(lat * RAD)) / Math.PI) / 2;
 
-/** The two ground patches around a place: one home, read by world.ts and tools/fetch-terrain.ts. */
+/** The two ground patches around a place: one home, read by ground/terrain.ts and tools/fetch-terrain.ts. */
 export function gridsFor(lat: number, lon: number): { near: Grid; far: Grid } {
 	const [cx, cy] = [Math.floor(mercX(lon) * 2 ** 10), Math.floor(mercY(lat) * 2 ** 10)];
 	return {

@@ -1,6 +1,6 @@
 /**
  * aero-3's whole server: the page, the tiles off local disk, and the wall an
- * operator pushes to every pane (`/admin`, src/wall.ts).
+ * operator pushes to every pane (`/admin`, src/ops/wall.ts).
  *
  * Bun bundles `index.html` and everything it imports (no Vite, no SvelteKit),
  * and the `{ dir }` routes serve the tile trees with content types and range
@@ -16,8 +16,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import index from './index.html';
 import admin from './admin.html';
-import { LEAD_SEC, MAX_PUSH_BYTES, NO_WALL, parsePush, type Wall } from './src/wall.ts';
-import { MAX_DEVICES, MAX_HEARTBEAT_BYTES, parseHeartbeat, type FleetRow } from './src/fleet.ts';
+import { LEAD_SEC, MAX_PUSH_BYTES, NO_WALL, parsePush, type Wall } from './src/ops/wall.ts';
+import { MAX_DEVICES, MAX_HEARTBEAT_BYTES, parseHeartbeat, type FleetRow } from './src/ops/fleet.ts';
 
 const IMAGERY_DIR = Bun.env.IMAGERY_DIR ?? '../data/tiles/sentinel2';
 const TERRAIN_DIR = Bun.env.TERRAIN_DIR ?? '../aero-2/data/tiles/terrarium';
@@ -28,7 +28,7 @@ const BUILDINGS_DIR = Bun.env.BUILDINGS_DIR ?? './data/buildings';
 const ROADS_DIR = Bun.env.ROADS_DIR ?? '../data/roads';
 // aero-2's 737 wing, ~1 MB: CC-BY-4.0, by "A Random Modeler" on Sketchfab (credited in src/wing.ts).
 const MODELS_DIR = Bun.env.MODELS_DIR ?? '../aero-2/static/models';
-// The wall (src/wall.ts): what the operator last pushed, kept across restarts.
+// The wall (src/ops/wall.ts): what the operator last pushed, kept across restarts.
 const WALL_FILE = Bun.env.WALL_FILE ?? './data/wall.json';
 // Fails closed: with no token set, nothing can push.
 const ADMIN_TOKEN = Bun.env.AERO_ADMIN_TOKEN ?? '';

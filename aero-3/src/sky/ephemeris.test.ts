@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { atSolarHour, siderealDeg, solarHour, sunAt } from './sun.ts';
+import { atSolarHour, siderealDeg, solarHour, sunAt } from './ephemeris.ts';
 
 const MARCH_EQUINOX = Date.UTC(2026, 2, 20);
 const at = (hour: number, lon = 78.4) => atSolarHour(MARCH_EQUINOX, lon, hour);
@@ -27,7 +27,7 @@ test('sidereal angle: Greenwich at J2000 noon is 280.46 deg, and the sky gains ~
 });
 
 test('the moon is full on 26 Oct 2026 and new on 10 Oct 2026', () => {
-	const { moonAt } = require('./sun.ts');
+	const { moonAt } = require('./ephemeris.ts');
 	expect(moonAt(Date.parse('2026-10-26T04:00Z'), 17.44, 78.38).illumination).toBeGreaterThan(0.98);
 	expect(moonAt(Date.parse('2026-10-10T17:00Z'), 17.44, 78.38).illumination).toBeLessThan(0.02);
 });

@@ -1,6 +1,6 @@
 /**
  * The haze over a lit city at night: one additive sheet a few hundred metres
- * above the near patch, carrying world.ts's light dome (VIIRS blurred, broken
+ * above the near patch, carrying ground/terrain.ts's light dome (VIIRS blurred, broken
  * up by noise). From the window it is the amber murk a city sits in, softening
  * the lamps under it and glowing where the city is densest. Bent by the same
  * curvature as the ground, so it hugs the horizon instead of flying off it.

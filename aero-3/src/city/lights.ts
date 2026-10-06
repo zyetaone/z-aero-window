@@ -12,7 +12,7 @@
  *
  * Buildings add lit windows and (on about half of them) a roof light, and the
  * towns past the road pack come as clusters from NASA's VIIRS radiance
- * (ground-maps.ts). Lit roads break into stretches by their own seeded noise.
+ * (ground/maps.ts). Lit roads break into stretches by their own seeded noise.
  *
  * One small shader does what an unlit material cannot: each light dims with
  * distance, fading out and reddening toward the horizon (no atmosphere touches unlit points,
@@ -20,10 +20,9 @@
  * at its own slow rate, the scintillation a city shows through 3 km of warm air. All of it runs off wall-clock seconds: panes agree.
  */
 import { Constants, Effect, Mesh, ShaderMaterial, Vector3, VertexData, type Scene } from '@babylonjs/core';
-import { hash, noise1 } from './math.ts';
+import { hash, noise1 } from '../math.ts';
+import type { Road } from '../ground/maps.ts';
 
-/** One OSM road from a place's pack (aero-2/tools: roads extractor). Shared by world.ts (painted by day). */
-export type Road = { geometry: { coordinates: number[][] }; properties: { class: string } };
 
 /** Metres between lamps, how bright they read, and the share of roads lit, by road class. */
 const CLASS: Record<string, [spacing: number, gain: number, litShare: number]> = {
@@ -84,11 +83,11 @@ export function streetlights(
 	project: (lon: number, lat: number) => [x: number, z: number],
 	groundAt: (x: number, z: number) => number,
 	scene: Scene,
-	/** Lights on the flat roofs: flat [x, y, z] (buildings.ts). */
+	/** Lights on the flat roofs: flat [x, y, z] (city/buildings.ts). */
 	roofs: number[] = [],
-	/** VIIRS-derived towns and villages: flat [x, y, z, radiance] (world.ts lightSites). */
+	/** VIIRS-derived towns and villages: flat [x, y, z, radiance] (ground/terrain.ts lightSites). */
 	sites: number[] = [],
-	/** Lit windows on building walls: flat [x, y, z] (buildings.ts). */
+	/** Lit windows on building walls: flat [x, y, z] (city/buildings.ts). */
 	windows: number[] = []
 ) {
 	const positions: number[] = [];

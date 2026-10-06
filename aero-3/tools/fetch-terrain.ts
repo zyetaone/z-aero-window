@@ -2,7 +2,7 @@
  * Fill the terrain pack: every place's near (z10) and far (z8) terrarium tiles, from the
  * AWS Open Data `elevation-tiles-prod` bucket (Mapzen, public domain; no key). Skips what is
  * already on disk, so re-running is cheap. Without a place's far tiles its far ring is flat at
- * 0 m and has no sea floor, which the far ring's sea repaint (ground-maps.ts paintSea) reads.
+ * 0 m and has no sea floor, which the far ring's sea repaint (ground/maps.ts paintSea) reads.
  *
  *   bun tools/fetch-terrain.ts            # every place
  *   bun tools/fetch-terrain.ts dubai      # one
@@ -10,7 +10,7 @@
  * Stored {z}/{y}/{x}.png like the rest of the pack; TERRAIN_DIR as in server.ts.
  */
 import { PLACES } from '../src/places.ts';
-import { gridsFor } from '../src/mercator.ts';
+import { gridsFor } from '../src/ground/mercator.ts';
 
 const DIR = Bun.env.TERRAIN_DIR ?? '../aero-2/data/tiles/terrarium';
 const SOURCE = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';

@@ -3,7 +3,7 @@
  * Babylon's physically based sky and the real stars, seen from a camera
  * circling the place's pin.
  *
- * Units are metres, y up, x east, z north (see world.ts). Everything that moves
+ * Units are metres, y up, x east, z north (see ground/terrain.ts). Everything that moves
  * moves on the wall clock, so three panes agree without talking.
  *
  * Params (all optional, so `frame-cost.mjs` can pin a scene):
@@ -18,21 +18,21 @@
  */
 import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, PBRMaterial, Quaternion, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
-import { buildings } from './buildings.ts';
-import { clouds } from './clouds.ts';
+import { buildings } from './city/buildings.ts';
+import { clouds } from './sky/clouds.ts';
 import { dayFor } from './day.ts';
 import { flight, SEAT_PITCH } from './flight.ts';
-import { streetlights } from './lights.ts';
-import { trees } from './trees.ts';
+import { streetlights } from './city/lights.ts';
+import { trees } from './ground/trees.ts';
 import { destinationAt, DWELL_SEC, PLACES, placeName, slotAt } from './places.ts';
-import { haze } from './haze.ts';
+import { haze } from './city/haze.ts';
 import { adminQr, cabinDrone, cabinOverlay } from './cabin.ts';
-import { moon } from './moon.ts';
+import { moon } from './sky/moon.ts';
 import { wing } from './wing.ts';
-import { stars } from './stars.ts';
-import { atSolarHour, hhmm, moonAt, solarHour, sunAt } from './sun.ts';
-import { createWorld } from './world.ts';
-import { fetchWall, NO_WALL } from './wall.ts';
+import { stars } from './sky/stars.ts';
+import { atSolarHour, hhmm, moonAt, solarHour, sunAt } from './sky/ephemeris.ts';
+import { createWorld } from './ground/terrain.ts';
+import { fetchWall, NO_WALL } from './ops/wall.ts';
 import { hash, RAD, smoothstep } from './math.ts';
 
 const CLEAR_M = 2_000; // over the highest terrain within 4 km of the track
@@ -43,7 +43,7 @@ const GLOW = 0.35;
 const q = new URLSearchParams(location.search);
 /** A numeric param, or its default when absent or not a finite number (?scale=abc must not NaN the engine). */
 const num = (name: string, fallback: number) => (q.has(name) && Number.isFinite(Number(q.get(name))) ? Number(q.get(name)) : fallback);
-// The operator's wall (wall.ts), from ?wall=<center Pi's origin> or this pane's own server. Read
+// The operator's wall (ops/wall.ts), from ?wall=<center Pi's origin> or this pane's own server. Read
 // before anything is chosen; unreachable within 2 s means no wall. URL params still win.
 const wallOrigin = q.get('wall') ?? '';
 const wall = await fetchWall(wallOrigin);
@@ -152,7 +152,7 @@ const plane = q.get('wing') === '0' ? null : await wing(scene);
 // One pane makes the sound: the centre (or a lone pane). ?audio=0 for silence.
 const drone = q.get('audio') !== '0' && !ROLE_YAW[q.get('role') ?? ''] ? cabinDrone() : null;
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
-// towns on the far ring past the roads (lights.ts).
+// towns on the far ring past the roads (city/lights.ts).
 const lamps = streetlights(roads ?? [], world.project, world.groundAt, scene, city?.roofLights, world.sites, city?.windows);
 const treeCount = q.get('trees') === '0' ? 0 : trees(scene, [pinX, pinZ], world.imagery, world.groundAt);
 const cityHaze = await haze(scene, world.hazeMap, world.nearSizeM, groundM, world.drop);
@@ -219,7 +219,7 @@ engine.runRenderLoop(() => {
 		moonLight.direction.set(-m.x * up, -Math.max(m.y, 0) * up - (1 - up), -m.z * up).normalize();
 		moonLight.intensity = MOONLIGHT * dark * (0.25 + 0.75 * up);
 	}
-	// The VIIRS texture bakes its own balance (world.ts); ?carpet= scales it from there.
+	// The VIIRS texture bakes its own balance (ground/terrain.ts); ?carpet= scales it from there.
 	// The twilight lift multiplies emissive too, so divide it back out: 0.12 means 0.12 at night.
 	const exposure = SKY_EXPOSURE + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;
@@ -299,7 +299,7 @@ async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean, anti
 	return new Engine(target, antialias, { stencil: false, powerPreference: 'high-performance' });
 }
 
-/** The place's OSM footprints, if it has a pack (see buildings.ts). */
+/** The place's OSM footprints, if it has a pack (see city/buildings.ts). */
 async function loadCity() {
 	const features = await fetchPack('buildings');
 	return features && buildings(features, world.project, world.groundAt, scene);

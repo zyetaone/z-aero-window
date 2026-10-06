@@ -7,7 +7,8 @@ The fleet still runs aero-1. Nothing here is wired into `deploy/`.
 
 One reason to change per file:
 
-- `server.ts` — `Bun.serve` with HTML-import bundling and `{ dir }` tile routes. No Vite, no SvelteKit.
+**`src/` root** — the composition root and what every folder reads:
+
 - `src/main.ts` — scene, light, the wiring, the time-of-day slider, the place picker, the render
   loop. Each visit deals a cruise band (~3, 5.5 or 8.5 km AGL, jittered,
   all over the cloud deck) and a climb or descent of up to 2 km; never under 2 km over the highest
@@ -33,24 +34,67 @@ One reason to change per file:
 - `src/places.ts` — the place table and aero-2's rotation, ported as is: 600 s per city, the day's
   order a Fisher-Yates shuffle seeded by the day number. Each slot is a visit: with no `?place=`
   a new city, either way a new flight. The Himalayas are `?place=` only.
-- `src/world.ts` — the ground. A 3×3 z10 detail patch (terrarium + z12 Sentinel-2, 3072 px: the
+- One sea (ground/maps.ts `paintSea`): where the terrain says sea floor, cloud and no-data in the
+  imagery become the near patch's own water colour, and the far ring's two sources (Sentinel z8
+  over an older z7) are pulled toward it. A cloudy Sentinel scene over the Gulf read as a snowy
+  plateau with straight edges; z8 no-data drew black wedges (now transparent, `clearNoData`).
+- `src/day.ts` deals per place per day: regime, cloud layout (scatter, streets along the wind,
+  a front, clumps), wind direction, contrast (`scene.imageProcessingConfiguration`) and Mie scale
+  (deep blue to milky sky). The atmosphere's own exposure is 1.7 by day (`?sky=`): at 1 a clear
+  afternoon sky rendered dark slate. Image-processing exposure does not reach the sky.
+- **Roads by day**: the place's OSM road pack is stroked into the near imagery canvas before it
+  becomes a texture (asphalt, 8-32 m by class, sub-pixel roads at partial alpha), so Sentinel's
+  smeared streets read crisp. The same pack lights the lamps at night, and a white mask of it
+  composes into the night ground: road × VIIRS radiance × ~430 m breakup noise = sodium on the
+  asphalt of lit districts only. Lamps are soft 3 px discs, so they slide between pixels, not snap.
+- **Ground detail**: a tiling 256² PBR detail map (`material.detailMap`, raw bytes: R albedo,
+  G/A normal, B roughness) repeats every 350 m on the near patch for grain the imagery can't hold.
+- **Water** comes from the imagery too: dark, green-or-teal pixels get a smooth roughness map
+  (ground/maps.ts `waterMask`), broken up by fractal noise into ruffled patches and calm slicks, so lakes
+  and sea catch the sun as glitter rather than a mirror.
+- `src/wing.ts` — aero-2's 737 wing (CC-BY-4.0, credited in the file; served from
+  `../aero-2/static/models`, `MODELS_DIR`) on a seat node that follows heading and bank but not
+  the gaze or the pane's yaw. Drawn 10× size 10× further out, so it clears the 10 m near plane.
+  Mirrored for left-side windows; nav light (green starboard, red port) and aero-2's double-pulse
+  strobe on the wall clock. It sits in the glow pass so the city's bloom stops at its edge.
+  `?wing=0` to skip. Merged by material at load: 28 draw calls, not the export's 65.
+- `src/math.ts` — `RAD`, `smoothstep`, and the seeded noises (`hash`, `mulberry32`, `noise1`, `noise2`, `fbm`) every module shares.
+
+**`src/sky/`** — what is above: sun, moon and star positions, the stars, the moon, the clouds.
+
+- `src/sky/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
+  systems, flat banks on the horizon, cirrus; per-tier wrap so wind never blows the deck off the
+  place. day.ts sets the cover, deck height, wind, how far cumulus heap up and how grey each
+  cluster runs. No card reaches below the ground, or the terrain
+  clips it flat.
+- `src/sky/moon.ts` — a phase-lit disc (each fragment a point on a sphere, lit toward the sun, faint
+  earthshine) 600 km out along `sky/ephemeris.ts` `moonAt` (aero-2's series), 3.5× true size, after the sky
+  like the stars.
+- `src/sky/stars.ts` — aero-2's Yale catalogue (vendored in `src/vendor/`) turned by sidereal time.
+- `src/sky/ephemeris.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
+  (no time zones). Tested.
+
+**`src/ground/`** — the earth: terrain patches, their baked maps, the tile grid, the trees.
+
+- `src/ground/terrain.ts` — the ground. A 3×3 z10 detail patch (terrarium + z12 Sentinel-2, 3072 px: the
   Pi's 4096 px texture limit is the ceiling) inside a 5×5 z8 ring (~750 km, past the horizon), both
   bent by Earth's curvature. Night is NASA's VIIRS radiance (GIBS, capped at z8) through aero-2's
   luminance knee as a faint glow, and as a mask that shows the real imagery warm under lit
   districts. The far ring sinks 3 km under the detail patch (z8's coarse peaks overshoot z10's in
   the mountains). Textures upload from JPEG blobs, so no CPU canvas outlives boot;
   `scene.clearCachedVertexData()` drops the mesh copies after build.
-- `server.ts` fleet: `/api/status` carries `fps` (the page POSTs `/api/fps` from loopback every 30 s)
-  and `commit` for `deploy/pi/health-check.sh`; `/api/fleet/heartbeat` takes its heartbeat (bearer
-  `AERO_FLEET_TOKEN`, fail-closed; dev loopback open) into an in-memory table `/admin` shows.
-  The same 30 s tick reloads a visible page that drew no frame (through `recover()`'s budget).
-  `src/credits.ts` is the one attribution list: the blind (while down) and `/admin`'s footer.
-- `src/ground-maps.ts` — the maps baked from those tiles, pure canvas in, canvas out: night ground
+- `src/ground/maps.ts` — the maps baked from those tiles, pure canvas in, canvas out: night ground
   (VIIRS × imagery × road mask × noise), light dome (haze), water mask, far-ring town lights, the
   imagery crop trees sample, roads painted into the imagery, the tiling detail map.
   `src/mercator.ts` is the one home of the tile grid both read. `src/vendor/` holds aero-2's QR
   encoder and star catalogue, copied so aero-3 builds alone.
-- `src/buildings.ts` — OSM footprints extruded at boot into one white mesh (an architect's model:
+- `src/ground/trees.ts` — low-poly crowns, cones and bushes in clumps of 1-6 wherever the imagery within
+  5 km of the pin reads green, tinted by that pixel: thin instances, a draw call per shape
+  (`?trees=0` to skip).
+
+**`src/city/`** — what people built: buildings, every light, the night haze.
+
+- `src/city/buildings.ts` — OSM footprints extruded at boot into one white mesh (an architect's model:
   painted facades, window grids and glass tints aliased into dark specks from cruise height),
   a shade off white per building, roofs a touch darker; rooms lit in runs at night from one
   emissive texture. Lit-window points on buildings 12 m and up, and one house light on 60% of the
@@ -63,62 +107,32 @@ One reason to change per file:
   (the pin from places.ts; 13 km covers the orbit, and the cap keeps the biggest footprints).
   Terrain: `bun tools/fetch-terrain.ts [place]` fills each place's near z10 and far z8 terrarium
   tiles from AWS Open Data; without the far ones the far ring is flat and its sea goes unpainted.
-- One sea (ground-maps.ts `paintSea`): where the terrain says sea floor, cloud and no-data in the
-  imagery become the near patch's own water colour, and the far ring's two sources (Sentinel z8
-  over an older z7) are pulled toward it. A cloudy Sentinel scene over the Gulf read as a snowy
-  plateau with straight edges; z8 no-data drew black wedges (now transparent, `clearNoData`).
-- `src/day.ts` deals per place per day: regime, cloud layout (scatter, streets along the wind,
-  a front, clumps), wind direction, contrast (`scene.imageProcessingConfiguration`) and Mie scale
-  (deep blue to milky sky). The atmosphere's own exposure is 1.7 by day (`?sky=`): at 1 a clear
-  afternoon sky rendered dark slate. Image-processing exposure does not reach the sky.
-- `src/lights.ts` — every light is a single point from map data, in three groups: street lamps
+- `src/city/lights.ts` — every light is a single point from map data, in three groups: street lamps
   every 32–55 m along the road pack (`../data/roads`), with only a share of each class lit (back
   streets 50%), dark stretches where the road's own 1D noise dips, and per-lamp brightness jitter; building lights, one per ~3,000 m² on 45% of flat
-  roofs and a few lit windows on walls of buildings 12 m and up (buildings.ts); and far-ring towns
-  from bright NASA VIIRS pixels past the roads (ground-maps.ts). One additive point cloud on a small
+  roofs and a few lit windows on walls of buildings 12 m and up (city/buildings.ts); and far-ring towns
+  from bright NASA VIIRS pixels past the roads (ground/maps.ts). One additive point cloud on a small
   shader: each light fades and reddens toward the horizon and twinkles faintly. Mix: sodium 65%,
   warm white 15%, white 10%, red 5%, blue 5%. The HUD's Lights panel sets each group's gain and
   the bloom live. `GlowLayer` blooms the lamps and the buildings' lit windows, at night only.
-- `src/haze.ts` — the amber murk over a lit city: one additive sheet 450 m up carrying ground-maps.ts's
+- `src/city/haze.ts` — the amber murk over a lit city: one additive sheet 450 m up carrying ground/maps.ts's
   light dome (VIIRS downsampled into a blur, kneed so only the city domes, × fbm noise from math.ts).
   Gain = Haze slider × darkness ÷ exposure.
-- `src/trees.ts` — low-poly crowns, cones and bushes in clumps of 1-6 wherever the imagery within
-  5 km of the pin reads green, tinted by that pixel: thin instances, a draw call per shape
-  (`?trees=0` to skip).
-- **Roads by day**: the place's OSM road pack is stroked into the near imagery canvas before it
-  becomes a texture (asphalt, 8-32 m by class, sub-pixel roads at partial alpha), so Sentinel's
-  smeared streets read crisp. The same pack lights the lamps at night, and a white mask of it
-  composes into the night ground: road × VIIRS radiance × ~430 m breakup noise = sodium on the
-  asphalt of lit districts only. Lamps are soft 3 px discs, so they slide between pixels, not snap.
-- **Ground detail**: a tiling 256² PBR detail map (`material.detailMap`, raw bytes: R albedo,
-  G/A normal, B roughness) repeats every 350 m on the near patch for grain the imagery can't hold.
-- **Water** comes from the imagery too: dark, green-or-teal pixels get a smooth roughness map
-  (ground-maps.ts `waterMask`), broken up by fractal noise into ruffled patches and calm slicks, so lakes
-  and sea catch the sun as glitter rather than a mirror.
-- `src/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
-  systems, flat banks on the horizon, cirrus; per-tier wrap so wind never blows the deck off the
-  place. day.ts sets the cover, deck height, wind, how far cumulus heap up and how grey each
-  cluster runs. No card reaches below the ground, or the terrain
-  clips it flat.
-- `src/wall.ts` + `/api/wall` + `/admin` — what an operator pushes to every pane: place, weather,
+
+**`server.ts` + `src/ops/`** — the operator side: the wall, fleet health, `/admin`.
+
+- `server.ts` — `Bun.serve` with HTML-import bundling and `{ dir }` tile routes. No Vite, no SvelteKit.
+- `server.ts` fleet: `/api/status` carries `fps` (the page POSTs `/api/fps` from loopback every 30 s)
+  and `commit` for `deploy/pi/health-check.sh`; `/api/fleet/heartbeat` takes its heartbeat (bearer
+  `AERO_FLEET_TOKEN`, fail-closed; dev loopback open) into an in-memory table `/admin` shows.
+  The same 30 s tick reloads a visible page that drew no frame (through `recover()`'s budget).
+  `src/credits.ts` is the one attribution list: the blind (while down) and `/admin`'s footer.
+- `src/ops/wall.ts` + `/api/wall` + `/admin` — what an operator pushes to every pane: place, weather,
   clock (null = default). The server keeps it in `WALL_FILE` (`./data/wall.json`, written via a
   rename); `POST` needs `Authorization: Bearer $AERO_ADMIN_TOKEN` and is off (503) without one.
   Panes read it at boot (2 s timeout, then none) from `?wall=<origin>` or their own server, poll
   every 5 s, and on a new version lower the blind and reload on its `applyAt` second (10 s ahead).
   URL params beat the wall. Panes take `?role=left|center|right` (±24°).
-- `src/wing.ts` — aero-2's 737 wing (CC-BY-4.0, credited in the file; served from
-  `../aero-2/static/models`, `MODELS_DIR`) on a seat node that follows heading and bank but not
-  the gaze or the pane's yaw. Drawn 10× size 10× further out, so it clears the 10 m near plane.
-  Mirrored for left-side windows; nav light (green starboard, red port) and aero-2's double-pulse
-  strobe on the wall clock. It sits in the glow pass so the city's bloom stops at its edge.
-  `?wing=0` to skip. Merged by material at load: 28 draw calls, not the export's 65.
-- `src/moon.ts` — a phase-lit disc (each fragment a point on a sphere, lit toward the sun, faint
-  earthshine) 600 km out along `sun.ts` `moonAt` (aero-2's series), 3.5× true size, after the sky
-  like the stars.
-- `src/stars.ts` — aero-2's Yale catalogue (imported, not copied) turned by sidereal time.
-- `src/sun.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
-  (no time zones). Tested.
-- `src/math.ts` — `RAD`, `smoothstep`, and the seeded noises (`hash`, `mulberry32`, `noise1`, `noise2`, `fbm`) every module shares.
 
 ## Traps (each cost a debugging pass)
 
@@ -147,7 +161,7 @@ One reason to change per file:
   haze sheet's gain is the level, or it washes the city flat orange.
 - **An `ALPHA_ONEONE` material at `alpha = 1` draws in the opaque pass**, where the blend mode never
   applies: the haze sheet painted a black square over the near ground from dusk on. Additive
-  materials set `alpha = 0.999` (haze.ts, stars.ts).
+  materials set `alpha = 0.999` (city/haze.ts, sky/stars.ts).
 - **The ground's atmosphere-plugin PBR takes a light ~30× weaker than plain PBR.** The moon light is
   scoped to the ground meshes (`includedOnlyMeshes`) so the wing does not blow out.
 - **120k additive points sum to a white sheet**: per-lamp alpha is ~0.2.
@@ -201,7 +215,7 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
 5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.
    Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
    lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.
-6. **Content** — presets done (`wall.ts` PRESETS: five named scenes that fill `/admin`'s form).
+6. **Content** — presets done (`ops/wall.ts` PRESETS: five named scenes that fill `/admin`'s form).
    Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers. Admin QR done: hold the glass 15 s for the wall Pi's `/admin` (`src/vendor/qr.ts`).
 
 ## Not built yet
