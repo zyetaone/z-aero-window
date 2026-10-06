@@ -9,7 +9,7 @@
 import { CREDITS } from './credits.ts';
 import { qrSvg } from './qr.ts';
 import { mulberry32 } from '#math.ts';
-import { DWELL_SEC, placeName } from '#flight/places.ts';
+import { DWELL_SEC, PLACES, placeName } from '#flight/places.ts';
 import { hhmm, solarHour } from '#world/sky/ephemeris.ts';
 
 const BLIND_LEAD_SEC = 6; // down this long before the boundary
@@ -23,9 +23,11 @@ const READY_FRAMES = 30; // and not before the scene has drawn this many frames
  */
 export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon: number, pane: number, openAfter = 0) {
 	const [blind, drops] = ['#blind', '#rain'].map((s) => document.querySelector<HTMLElement>(s)!) as [HTMLElement, HTMLElement];
+	const clockEl = document.querySelector<HTMLElement>('#clock')!;
 	blind.hidden = !blinds;
 	blind.querySelector('span')!.textContent = placeName(place);
 	blind.querySelector('small')!.textContent = CREDITS.join(' · '); // on the blind only: the open window stays a window
+	clockEl.querySelector('span')!.textContent = placeName(place); // the tap clock (loneGestures): same visit, same city
 	if (rain) beads(drops, pane);
 
 	let [frames, last, held, night, clock] = [0, 0, false, '', ''];
@@ -36,7 +38,7 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 			blind.classList.remove('open');
 		},
 		/** Once per frame; touches the DOM four times a second at most. */
-		update(wallSec: number, dark: number) {
+		update(wallSec: number, dark: number, skyMs = wallSec * 1000) {
 			if (++frames < READY_FRAMES || wallSec - last < 0.25 || held) return;
 			last = wallSec;
 			// Steps of 0.05, and only on change: each write repaints the full-pane rim and rain.
@@ -45,9 +47,13 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 			const phase = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
 			const since = wallSec - Math.max(wallSec - phase, openAfter);
 			blind.classList.toggle('open', phase < DWELL_SEC - BLIND_LEAD_SEC && since >= LAG_SEC);
-			const hour = solarHour(wallSec * 1000, lon);
+			const hour = solarHour(skyMs, lon); // the sky's hour: a pinned clock shows its own time, not the wall's
 			const t = hhmm(hour);
-			if (t !== clock) blind.querySelector('time')!.textContent = clock = t;
+			if (t !== clock) {
+				clock = t;
+				blind.querySelector('time')!.textContent = t;
+				clockEl.querySelector('time')!.textContent = `${t} local`;
+			}
 		}
 	};
 }
@@ -107,7 +113,12 @@ export function adminQr(wallOrigin: string) {
 		setTimeout(() => (qr.hidden = true), 60_000);
 	}
 	addEventListener('pointerdown', (e: PointerEvent) => {
-		if (!qr.hidden) return void (qr.hidden = true);
+		if (!qr.hidden) {
+			// A tap on the code keeps it up for aiming the phone; outside it drops.
+			if (e.target instanceof Element && e.target.closest('#qr')) return;
+			qr.hidden = true;
+			return;
+		}
 		if (e.target instanceof Element && e.target.closest('#hud')) return;
 		started = performance.now();
 		[x0, y0] = [e.clientX, e.clientY];
@@ -117,6 +128,79 @@ export function adminQr(wallOrigin: string) {
 	// A drag is looking around, not a hold.
 	addEventListener('pointermove', (e: PointerEvent) => !hold.hidden && Math.hypot(e.clientX - x0, e.clientY - y0) > 12 && stop());
 	for (const end of ['pointerup', 'pointercancel', 'pointerleave'] as const) addEventListener(end, stop);
+}
+
+/** A downward pull commits to a new place past this many px; less springs back. */
+export const BLIND_DEPART_PX = 120;
+
+/** Past the depart threshold (and downward): the finger has voted for a new city. */
+export const dragCommits = (dyPx: number) => dyPx > BLIND_DEPART_PX;
+
+/**
+ * Pure: a different place for a blind-drag departure. Lone pane only, so an
+ * unsynced draw is fine (the cabin drone rolls its own noise the same way).
+ */
+export function pickOtherPlace(ids: readonly string[], current: string | null, u: number): string {
+	const pool = ids.filter((id) => id !== current);
+	if (!pool.length) return current ?? ids[0] ?? '';
+	return pool[Math.min(pool.length - 1, Math.floor(u * pool.length))]!;
+}
+
+/**
+ * Lone-pane glass gestures (main.ts calls this only without `?role=`): a downward
+ * drag pulls the open blind with the finger and, past BLIND_DEPART_PX, departs for
+ * a different place (`?place=` reload, the placePicker pattern); a tap toggles the
+ * clock overlay. Never on a wall pane: a departure would split the wall, and only
+ * /admin pushes shared state. HUD and QR gestures keep priority: drags and taps
+ * starting in #hud are ignored, and a tap that dismisses the QR never toggles.
+ */
+export function loneGestures(currentPlace: string) {
+	const blind = document.querySelector<HTMLElement>('#blind')!;
+	const clockEl = document.querySelector<HTMLElement>('#clock')!;
+	const qr = document.querySelector<HTMLElement>('#qr')!;
+	let [x0, y0, t0, dragging, suppressTap] = [0, 0, 0, false, false];
+	const onGlass = (e: PointerEvent) => !(e.target instanceof Element && e.target.closest('#hud'));
+
+	addEventListener('pointerdown', (e: PointerEvent) => {
+		if (!onGlass(e)) return;
+		[x0, y0, t0, dragging, suppressTap] = [e.clientX, e.clientY, performance.now(), false, !qr.hidden];
+	});
+	addEventListener('pointermove', (e: PointerEvent) => {
+		if (!t0) return;
+		if (e.pointerType === 'mouse' && e.buttons === 0) {
+			t0 = 0; // a hover, not a drag: the button came up outside the window
+			blind.style.transform = '';
+			return;
+		}
+		if (!onGlass(e)) return;
+		const dy = e.clientY - y0;
+		if (!dragging) {
+			if (Math.hypot(e.clientX - x0, dy) <= 12) return; // still a possible tap or QR hold
+			dragging = true;
+		}
+		// Follow the finger down only: up, or a closed blind, springs back to the CSS pose.
+		blind.style.transform = dy > 0 && blind.classList.contains('open') ? `translateY(calc(-101% + ${Math.min(dy, innerHeight)}px))` : '';
+	});
+	const end = (e: PointerEvent) => {
+		if (!t0) return;
+		const [dy, dt, wasDrag, suppress] = [e.clientY - y0, performance.now() - t0, dragging, suppressTap];
+		[t0, dragging, suppressTap] = [0, false, false];
+		blind.style.transform = ''; // the CSS transition springs it back (or the reload takes it)
+		if (!onGlass(e)) return;
+		if (wasDrag) {
+			if (dragCommits(dy) && blind.classList.contains('open')) {
+				const next = pickOtherPlace(Object.keys(PLACES), currentPlace, Math.random());
+				if (next && next !== currentPlace) {
+					const url = new URL(location.href);
+					url.searchParams.set('place', next);
+					location.assign(url);
+				}
+			}
+			return;
+		}
+		if (dt < 400 && !suppress) clockEl.hidden = !clockEl.hidden;
+	};
+	for (const endOf of ['pointerup', 'pointercancel'] as const) addEventListener(endOf, end);
 }
 
 /**

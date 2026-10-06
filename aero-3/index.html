@@ -85,6 +85,10 @@
 			}
 			#qr { z-index: 5; display: grid; place-content: center; justify-items: center; gap: 12px; background: #000c; color: #fffd; font: 16px/1.4 ui-sans-serif, system-ui, sans-serif; pointer-events: auto; }
 			#qr svg { width: min(60vh, 320px); height: auto; background: #fff; border-radius: 8px; }
+			/* The tap clock (cabin.ts loneGestures): a solid translucent pill, never backdrop-filter (Pi cost). */
+			#clock { z-index: 4; display: grid; justify-items: center; align-content: start; padding-top: 18px; }
+			#clock p { margin: 0; background: #000c; color: #fffd; border-radius: 999px; padding: 8px 16px; font: 14px/1.4 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+			#clock span { opacity: 0.7; text-transform: capitalize; }
 			@media (prefers-reduced-motion: reduce) { #blind { transition-duration: 0.3s; } #rain span { animation: none; opacity: var(--o); } }
 		</style>
 	</head>
@@ -95,6 +99,7 @@
 		<div id="blind" class="cabin" aria-hidden="true"><span></span><time></time><small></small></div>
 		<div id="hold" class="cabin" hidden aria-hidden="true"></div>
 		<div id="qr" class="cabin" hidden role="dialog" aria-label="Open the wall controls on a phone"><div></div><p></p></div>
+	<div id="clock" class="cabin" hidden aria-hidden="true"><p><time></time> · <span></span></p></div>
 		<div id="hud" hidden>
 			<input type="range" min="0" max="24" step="0.05" aria-label="Time of day (local solar hour)" />
 			<button type="button">Now</button>

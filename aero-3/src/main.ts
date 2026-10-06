@@ -21,7 +21,7 @@ import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Scene } from '@babylonjs/core/scene';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { createHud } from './cabin/hud.ts';
-import { adminQr, cabinDrone, cabinOverlay } from './cabin/cabin.ts';
+import { adminQr, cabinDrone, cabinOverlay, loneGestures } from './cabin/cabin.ts';
 import { playAudioPlaylist, showVideo } from './cabin/media.ts';
 import { RAD } from './math.ts';
 import { keepAlive } from './ops/kiosk.ts';
@@ -175,6 +175,9 @@ camera.rotationQuaternion = new Quaternion();
 const cabin = cabinOverlay(P.blind, weather.rain, placeId, lon, P.role ? ['left', 'center', 'right'].indexOf(P.role) + 1 : 0, wall.applyAt);
 document.querySelector<HTMLElement>('#frame')!.hidden = !P.frame;
 adminQr(P.wall);
+// Lone pane only (no ?role=): blind-drag departures and the tap clock stay local,
+// so they can never split a wall. Wall panes get the QR hold and nothing else.
+if (!P.role) loneGestures(placeId);
 // A new push: every pane lowers the blind and reloads into it on the wall's applyAt second.
 let changeover = false;
 setInterval(async () => {
@@ -221,7 +224,7 @@ engine.runRenderLoop(() => {
 	wing?.update(camera.position, aircraft, Math.sign(Math.sin(p.look)) || 1, now, dark);
 	if (aim.moon) aim.at = scene.getMeshByName('moon')!.position;
 	if (aim.at) camera.setTarget(aim.at);
-	cabin.update(now / 1000, dark);
+	cabin.update(now / 1000, dark, skyMs);
 
 	clouds.update(now, toSun.set(s.x, s.y, s.z), dark);
 	stars.update(skyMs, light.stars);
