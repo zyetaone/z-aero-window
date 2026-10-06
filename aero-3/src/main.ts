@@ -18,20 +18,20 @@
  */
 import { Color4, DirectionalLight, Engine, FreeCamera, GlowLayer, PBRMaterial, Quaternion, Scene, Vector3, WebGPUEngine, type AbstractEngine } from '@babylonjs/core';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
-import { buildings } from './city/buildings.ts';
-import { clouds } from './sky/clouds.ts';
+import { createBuildings } from './city/buildings.ts';
+import { createClouds } from './sky/clouds.ts';
 import { dayFor } from './day.ts';
 import { flight, SEAT_PITCH } from './flight.ts';
-import { streetlights } from './city/lights.ts';
-import { trees } from './ground/trees.ts';
+import { createLights } from './city/lights.ts';
+import { createTrees } from './ground/trees.ts';
 import { destinationAt, DWELL_SEC, PLACES, placeName, slotAt } from './places.ts';
-import { haze } from './city/haze.ts';
+import { createHaze } from './city/haze.ts';
 import { adminQr, cabinDrone, cabinOverlay } from './cabin.ts';
-import { moon } from './sky/moon.ts';
-import { wing } from './wing.ts';
-import { stars } from './sky/stars.ts';
+import { createMoon } from './sky/moon.ts';
+import { createWing } from './wing.ts';
+import { createStars } from './sky/stars.ts';
 import { atSolarHour, hhmm, moonAt, solarHour, sunAt } from './sky/ephemeris.ts';
-import { createWorld } from './ground/terrain.ts';
+import { createTerrain } from './ground/terrain.ts';
 import { fetchWall, NO_WALL } from './ops/wall.ts';
 import { hash, RAD, smoothstep } from './math.ts';
 
@@ -114,7 +114,7 @@ camera.minZ = 10;
 camera.maxZ = 1_000_000;
 
 const roadsLoad = fetchPack('roads'); // the ground paints them in by day, the lamps follow them by night
-const world = await createWorld(scene, lat, lon, await roadsLoad);
+const terrain = await createTerrain(scene, lat, lon, await roadsLoad);
 // Today for this place, from the visit's slot start: the same on every pane, different tomorrow.
 const day = dayFor(placeId, bootSlot * DWELL_SEC * 1000, q.get('weather') ?? wall.weather);
 sunLight.intensity = day.sun;
@@ -125,7 +125,7 @@ if (atmosphere) {
 }
 // Today's punch: a clear day's shadows and colours snap, a hazy one's lie flat. ?contrast= pins it.
 scene.imageProcessingConfiguration.contrast = num('contrast', day.contrast);
-const [pinX, pinZ] = world.project(lon, lat);
+const [pinX, pinZ] = terrain.project(lon, lat);
 // Each visit's own cruise (flight.ts: a band and a climb), but never into the ground: the track clears
 // the highest terrain within 4 km of it (one circuit, sampled once) by CLEAR_M, a floor in the loop.
 let peakM = -Infinity;
@@ -133,32 +133,32 @@ for (let i = 0; i < 720; i++) {
 	const [tx, tz] = track.at((i / 720) * track.periodSec);
 	for (const [dx, dz] of [[0, 0], [4e3, 0], [-4e3, 0], [0, 4e3], [0, -4e3]]) {
 		const [x, z] = [pinX + tx + dx!, pinZ + tz + dz!];
-		peakM = Math.max(peakM, world.groundAt(x, z) + world.drop(x, z));
+		peakM = Math.max(peakM, terrain.groundAt(x, z) + terrain.drop(x, z));
 	}
 }
 const floorM = peakM + CLEAR_M;
-const [city, roads, deck, sky] = await Promise.all([
-	loadCity(),
+const [buildings, roads, clouds, stars] = await Promise.all([
+	loadBuildings(),
 	roadsLoad,
-	clouds(scene, camera, sunLight, [pinX, pinZ], groundM + day.deckM, world.groundAt, world.drop, day, num('clouds', 1)),
-	stars(scene, camera, lat, lon)
+	createClouds(scene, camera, sunLight, [pinX, pinZ], groundM + day.deckM, terrain.groundAt, terrain.drop, day, num('clouds', 1)),
+	createStars(scene, camera, lat, lon)
 ]);
 // The ground and the city, not the wing: the ground's atmosphere-plugin materials take a light ~30x
 // weaker than plain PBR (measured), so a strength that shows the desert would blow the wing out (it
 // has its own night fill, wing.ts). The white buildings take it at full strength: moonlit concrete.
-moonLight?.includedOnlyMeshes.push(...[scene.getMeshByName('near'), scene.getMeshByName('far'), ...(city?.meshes ?? [])].filter((m) => m !== null));
-const luna = moon(scene, camera, lat, lon);
-const plane = q.get('wing') === '0' ? null : await wing(scene);
+moonLight?.includedOnlyMeshes.push(...[scene.getMeshByName('near'), scene.getMeshByName('far'), ...(buildings?.meshes ?? [])].filter((m) => m !== null));
+const moon = createMoon(scene, camera, lat, lon);
+const wing = q.get('wing') === '0' ? null : await createWing(scene);
 // One pane makes the sound: the centre (or a lone pane). ?audio=0 for silence.
 const drone = q.get('audio') !== '0' && !ROLE_YAW[q.get('role') ?? ''] ? cabinDrone() : null;
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
 // towns on the far ring past the roads (city/lights.ts).
-const lamps = streetlights(roads ?? [], world.project, world.groundAt, scene, city?.roofLights, world.sites, city?.windows);
-const treeCount = q.get('trees') === '0' ? 0 : trees(scene, [pinX, pinZ], world.imagery, world.groundAt);
-const cityHaze = await haze(scene, world.hazeMap, world.nearSizeM, groundM, world.drop);
+const lights = createLights(roads ?? [], terrain.project, terrain.groundAt, scene, buildings?.roofLights, terrain.sites, buildings?.windows);
+const treeCount = q.get('trees') === '0' ? 0 : createTrees(scene, [pinX, pinZ], terrain.imagery, terrain.groundAt);
+const haze = await createHaze(scene, terrain.hazeMap, terrain.nearSizeM, groundM, terrain.drop);
 // Everything is built: drop the CPU copies of vertex data (the GPU has them; nothing here picks or edits).
 scene.clearCachedVertexData();
-const glowing = [...world.materials, ...(city?.materials ?? [])];
+const glowing = [...terrain.materials, ...(buildings?.materials ?? [])];
 // Everything that takes the sky's ambient light by day (ambientColor white); faded out after dusk,
 // where the twilight exposure lift would otherwise turn the night sky's faint light into grey.
 const skyLit = [...glowing, scene.getMaterialByName('trees')].filter((m) => m instanceof PBRMaterial);
@@ -168,20 +168,20 @@ const skyLit = [...glowing, scene.getMaterialByName('trees')].filter((m) => m in
 const glow = q.get('glow') === '0' ? null : new GlowLayer('glow', scene, { mainTextureRatio: 0.25, blurKernelSize: 16 });
 // Lamps only: the glow pass re-renders whatever it includes, and re-rendering the ground's
 // atmosphere-plugin PBR materials blew the dusk sky to white.
-if (glow && lamps) {
-	glow.addIncludedOnlyMesh(lamps.mesh);
-	glow.referenceMeshToUseItsOwnMaterial(lamps.mesh);
+if (glow && lights) {
+	glow.addIncludedOnlyMesh(lights.mesh);
+	glow.referenceMeshToUseItsOwnMaterial(lights.mesh);
 }
 // Lit windows halo too: the glow pass draws the city through its own emissive shader.
 // The wing too: its unlit meshes draw black into the bloom, so the city's glow stops at its edge.
-for (const mesh of [...(city?.meshes ?? []), ...(plane?.meshes ?? [])]) glow?.addIncludedOnlyMesh(mesh);
+for (const mesh of [...(buildings?.meshes ?? []), ...(wing?.meshes ?? [])]) glow?.addIncludedOnlyMesh(mesh);
 
 // Off on a wall pane (the kiosk URL carries ?role=): a touch on one pane's slider would split the wall.
 const hud = (q.get('hud') ?? (q.has('role') ? '0' : '1')) === '0' ? null : clockControls();
 if (hud) lightsPanel(), placePicker();
 /** ?debug: set `aim.at` to a world point (or `aim.moon = true`) to hold the camera on it for a screenshot. */
 const aim: { at: Vector3 | null; moon: boolean } = { at: null, moon: false };
-if (q.has('debug')) Object.assign(globalThis, { scene, camera, world, treeCount, day, aim, plane, atmosphere }); // for the console and frame-cost ablations
+if (q.has('debug')) Object.assign(globalThis, { scene, camera, terrain, treeCount, day, aim, wing, atmosphere }); // for the console and frame-cost ablations
 let hudAt = 0;
 const toSun = new Vector3();
 const [aircraft, seat] = [new Quaternion(), new Quaternion()];
@@ -224,10 +224,10 @@ engine.runRenderLoop(() => {
 	const exposure = SKY_EXPOSURE + twilightLift * dark;
 	if (atmosphere) atmosphere.exposure = exposure;
 	for (const m of skyLit) m.ambientColor.setAll(1 - dark);
-	cityHaze(shedding ? 0 : (mix.haze * day.haze * dark) / exposure); // emissive, so it rides the exposure lift too
-	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (world.materials.includes(m) ? carpet : 1)) / exposure;
+	haze(shedding ? 0 : (mix.haze * day.haze * dark) / exposure); // emissive, so it rides the exposure lift too
+	for (const m of glowing) m.emissiveIntensity = (lampGain * dark * (terrain.materials.includes(m) ? carpet : 1)) / exposure;
 	// Faint per lamp: ~200k additive points sum to a white sheet at anything brighter.
-	lamps?.update(camera.position, now, Math.min(0.999, LAMP_ALPHA * lampGain * day.lights * dark), mix);
+	lights?.update(camera.position, now, Math.min(0.999, LAMP_ALPHA * lampGain * day.lights * dark), mix);
 	if (glow) {
 		glow.isEnabled = dark > 0.02 && !shedding;
 		glow.intensity = mix.glow * dark;
@@ -236,18 +236,18 @@ engine.runRenderLoop(() => {
 	// The aircraft (heading, bank), then the seat in it: turned to the window, looking a little down.
 	const p = track.pose(now / 1000);
 	const [x, z] = [pinX + p.x, pinZ + p.z];
-	camera.position.set(x, Math.max(groundM + (Number.isNaN(ALT_M) ? track.cruiseM + p.climbM : ALT_M), floorM) - world.drop(x, z), z);
+	camera.position.set(x, Math.max(groundM + (Number.isNaN(ALT_M) ? track.cruiseM + p.climbM : ALT_M), floorM) - terrain.drop(x, z), z);
 	Quaternion.RotationYawPitchRollToRef(p.heading, 0, -p.bank, aircraft);
 	Quaternion.RotationYawPitchRollToRef(p.look + paneYaw, SEAT_PITCH, 0, seat);
 	aircraft.multiplyToRef(seat, camera.rotationQuaternion!);
-	plane?.update(camera.position, aircraft, Math.sign(Math.sin(p.look)) || 1, now, dark);
+	wing?.update(camera.position, aircraft, Math.sign(Math.sin(p.look)) || 1, now, dark);
 	if (aim.moon) aim.at = scene.getMeshByName('moon')!.position;
 	if (aim.at) camera.setTarget(aim.at);
 	cabin.update(now / 1000, dark);
 
-	deck.update(now, toSun.set(s.x, s.y, s.z), dark);
-	sky.update(skyMs, 1 - smoothstep(-14, -4, s.elevationDeg));
-	luna.update(skyMs, s, dark);
+	clouds.update(now, toSun.set(s.x, s.y, s.z), dark);
+	stars.update(skyMs, 1 - smoothstep(-14, -4, s.elevationDeg));
+	moon.update(skyMs, s, dark);
 	drone?.setAltitude(camera.position.y);
 	scene.render();
 
@@ -300,9 +300,9 @@ async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean, anti
 }
 
 /** The place's OSM footprints, if it has a pack (see city/buildings.ts). */
-async function loadCity() {
+async function loadBuildings() {
 	const features = await fetchPack('buildings');
-	return features && buildings(features, world.project, world.groundAt, scene);
+	return features && createBuildings(features, terrain.project, terrain.groundAt, scene);
 }
 
 /** A place's GeoJSON pack's features, or null when the place has none. */

@@ -12,7 +12,7 @@ import { siderealDeg } from './ephemeris.ts';
 
 const SKY_M = 800_000; // inside the camera's 1000 km far plane, past the horizon
 
-export async function stars(scene: Scene, camera: Camera, latDeg: number, lonDeg: number) {
+export async function createStars(scene: Scene, camera: Camera, latDeg: number, lonDeg: number) {
 	const { ra, dec, vmag, bv } = yaleCatalog();
 	const pcs = new PointsCloudSystem('stars', 2, scene);
 	pcs.addPoints(ra.length, (p: { color: Color4 }, i: number) => {

@@ -46,7 +46,7 @@ void main() {
 	gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * (lit * maria * limb + 0.03) * edge * gain, 1.0);
 }`;
 
-export function moon(scene: Scene, camera: Camera, latDeg: number, lonDeg: number) {
+export function createMoon(scene: Scene, camera: Camera, latDeg: number, lonDeg: number) {
 	const disc = MeshBuilder.CreatePlane('moon', { size: SIZE_M, sideOrientation: 2 }, scene);
 	const material = new ShaderMaterial('moon', scene, 'moon', {
 		attributes: ['position', 'uv'],

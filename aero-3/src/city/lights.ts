@@ -78,7 +78,7 @@ void main() {
 	gl_FragColor = vec4(vColor * gain * 1.7 * (1.0 - smoothstep(0.2, 1.0, r)), 1.0); // 1.7: the disc's light matches the old 2x2 square
 }`;
 
-export function streetlights(
+export function createLights(
 	roads: Road[],
 	project: (lon: number, lat: number) => [x: number, z: number],
 	groundAt: (x: number, z: number) => number,

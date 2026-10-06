@@ -9,7 +9,7 @@ import { Color3, Constants, MeshBuilder, StandardMaterial, Texture, VertexBuffer
 
 const ABOVE_M = 450; // the haze layer's height over the ground at the centre
 
-export async function haze(scene: Scene, map: OffscreenCanvas, sizeM: number, groundM: number, drop: (x: number, z: number) => number) {
+export async function createHaze(scene: Scene, map: OffscreenCanvas, sizeM: number, groundM: number, drop: (x: number, z: number) => number) {
 	const sheet = MeshBuilder.CreateGround('haze', { width: sizeM, height: sizeM, subdivisions: 48, updatable: true }, scene);
 	const positions = sheet.getVerticesData(VertexBuffer.PositionKind)!;
 	for (let i = 0; i < positions.length; i += 3) positions[i + 1] = groundM + ABOVE_M - drop(positions[i]!, positions[i + 2]!);

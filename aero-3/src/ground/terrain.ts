@@ -19,7 +19,7 @@ const EARTH_M = 6_371_000;
 const DETAIL_M = 350; // one repeat of the ground's detail map
 
 /** `roads` (the place's OSM pack, or null) are painted into the near imagery by day. */
-export async function createWorld(scene: Scene, lat: number, lon: number, roads: Road[] | null = null) {
+export async function createTerrain(scene: Scene, lat: number, lon: number, roads: Road[] | null = null) {
 	const { near, far } = gridsFor(lat, lon);
 
 	const [mx0, my0] = [(near.x0 + near.span / 2) / 2 ** 10, (near.y0 + near.span / 2) / 2 ** 10];

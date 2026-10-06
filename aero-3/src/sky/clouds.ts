@@ -47,7 +47,7 @@ const TIERS = [
 	{ r0: 20_000, rs: 140_000, s0: 9_000, ss: 12_000, n0: 3, ns: 4, lonely: 0.2, lift: 6_500, squash: 0.25, count: 12, cells: [2] }
 ];
 
-export async function clouds(
+export async function createClouds(
 	scene: Scene,
 	camera: Camera,
 	sun: DirectionalLight,

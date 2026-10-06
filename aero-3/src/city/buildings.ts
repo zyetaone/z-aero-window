@@ -36,7 +36,7 @@ const WINDOW_MIN_M = 12;
 const HOUSE_LIT = 0.6; // share of buildings under WINDOW_MIN_M with a light on
 const RELIEF = 0.8; // normal-map strength: mipmaps average it flat with distance, so it never aliases
 
-export function buildings(features: Footprint[], project: (lon: number, lat: number) => [x: number, z: number], groundAt: (x: number, z: number) => number, scene: Scene) {
+export function createBuildings(features: Footprint[], project: (lon: number, lat: number) => [x: number, z: number], groundAt: (x: number, z: number) => number, scene: Scene) {
 	// uvs2 is the lightmap: v is height up the wall, 0 at the street.
 	const [positions, normals, uvs, uvs2, colors, indices] = [[], [], [], [], [], []] as number[][];
 	const roofLights: number[] = []; // flat [x, y, z]: lights on the flat roofs (city/lights.ts)

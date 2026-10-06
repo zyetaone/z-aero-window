@@ -134,6 +134,14 @@ One reason to change per file:
   every 5 s, and on a new version lower the blind and reload on its `applyAt` second (10 s ahead).
   URL params beat the wall. Panes take `?role=left|center|right` (±24°).
 
+## Naming
+
+Scene builders are `create<Noun>()` and main.ts binds the plain noun: `createTerrain` → `terrain`,
+`createBuildings` → `buildings`, `createLights` → `lights`, `createClouds` → `clouds`, and so on.
+Pure models are `<noun>At` / `<noun>For` (`sunAt`, `moonAt`, `slotAt`, `dayFor`). Babylon mesh and
+material names (`near`, `far`, `buildings`, `streetlights`, `stars`, `moon`, `trees`) are a contract:
+`tools/smoke.ts` asserts them and main.ts looks some up by string. Rename exports freely, never those.
+
 ## Traps (each cost a debugging pass)
 
 - **PBR `ambientColor` defaults to black**, which throws away the sky light the atmosphere writes
@@ -193,7 +201,7 @@ finds at startup are served, the rest 404, so a Pi without a pack still boots. M
 `aero-2/tools/frame-cost.mjs` works on any page with a canvas. Pin the scene:
 `?place=hyderabad&clock=10&hud=0`. Also `?scale=2` (half resolution), `?gpu=webgpu`,
 `?yaw=<deg>` (pane offset), `?lamps=1` (lamp gain), `?lift=8` (twilight exposure), `?clouds=0..1`
-(cover), `?glow=0` (no bloom), `?debug` (exposes `scene`, `camera`, `world` for ablations). Compare against aero-2 on the same Pi.
+(cover), `?glow=0` (no bloom), `?debug` (exposes `scene`, `camera`, `terrain`, `atmosphere`, `aim` for ablations). Compare against aero-2 on the same Pi.
 
 ## Roadmap
 

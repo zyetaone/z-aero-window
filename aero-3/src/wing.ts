@@ -21,7 +21,7 @@ const WING_SCALE = 10;
 const EYE = new Vector3(-8.5, 2.4, -5.5);
 const TIP = new Vector3(7, 0.55, -3.5);
 
-export async function wing(scene: Scene) {
+export async function createWing(scene: Scene) {
 	const loaded = await ImportMeshAsync('/models/wing.glb', scene);
 	const root = loaded.meshes[0]!;
 	// The loader's handedness flip on the root is replaced by our own mapping: model x (span) out of

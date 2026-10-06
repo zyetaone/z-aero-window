@@ -11,7 +11,7 @@ const RADIUS_M = 9_000; // the orbit's reach: from cruise a tree is a few pixels
 const STEP_M = 37; // one Sentinel-2 z12 pixel
 const MAX_TREES = 30_000; // thin instances of 20-60-triangle shapes: ~1M triangles at the cap
 
-export function trees(
+export function createTrees(
 	scene: Scene,
 	center: [x: number, z: number],
 	imagery: (x: number, z: number) => [number, number, number] | null,
