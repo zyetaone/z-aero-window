@@ -49,6 +49,12 @@ export function readParams(search: string) {
 		glow: !off('glow'),
 		trees: !off('trees'),
 		wing: !off('wing'),
+		/**
+		 * Perf caps (buildings, street lamps): OFF until the Pi bench says they are needed. Measured
+		 * 2026-10-06, the building cap keeps the 25k footprints nearest the pin, so the city ends
+		 * 3.7-5.7 km out under a 9-13 km orbit (Denver loses half). `?caps=1` benches it.
+		 */
+		caps: q.get('caps') === '1',
 		/** Pin the row: behind, over or ahead of the wing; absent, the visit's own. */
 		seat: q.get('seat'),
 		// The engine

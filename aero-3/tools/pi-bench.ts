@@ -23,7 +23,7 @@ const { PLACES } = await import('../src/flight/places.ts');
 const pinned = (place: string, clock: number, extra = '') => `place=${place}&clock=${clock}&weather=scattered&blind=0&audio=0&hud=0${extra}`;
 let scenes: [string, string][] = Object.keys(PLACES).flatMap((p) => [[`${p} day`, pinned(p, 12)], [`${p} night`, pinned(p, 22)]] as [string, string][]);
 // What each layer costs, on the heaviest scene.
-for (const [label, extra] of [['no wing', '&wing=0'], ['no bloom', '&glow=0'], ['no trees', '&trees=0'], ['scale 1.5', '&scale=1.5']])
+for (const [label, extra] of [['no wing', '&wing=0'], ['no bloom', '&glow=0'], ['no trees', '&trees=0'], ['caps', '&caps=1'], ['scale 1.5', '&scale=1.5']])
 	scenes.push([`dubai night, ${label}`, pinned('dubai', 22, extra)]);
 if (Bun.argv.includes('--quick')) scenes = scenes.filter(([l]) => ['hyderabad night', 'dubai night', 'himalayas day'].includes(l));
 

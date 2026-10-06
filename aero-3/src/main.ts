@@ -31,7 +31,7 @@ import { SEAT_PITCH } from './flight/path.ts';
 import { slotAt } from './flight/places.ts';
 import { planFlight } from './flight/plan.ts';
 import { lightingAt, moonlightAt, type Knobs } from './world/lighting.ts';
-import { createBuildings } from './world/city/buildings.ts';
+import { BUILDING_CAP, createBuildings } from './world/city/buildings.ts';
 import { createHaze } from './world/city/haze.ts';
 import { createLights } from './world/city/lights.ts';
 import { createTerrain } from './world/ground/terrain.ts';
@@ -141,7 +141,7 @@ if ((P.role ?? 'center') === 'center' && P.audio && tracks.length) playAudioPlay
 if (clip) showVideo(clip, P.wall); // muted everywhere: a video wall is one image, not three soundtracks
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
 // towns on the far ring past the roads (city/lights.ts).
-const lights = createLights(roads ?? [], terrain.project, terrain.groundAt, scene, buildings?.roofLights, terrain.sites, buildings?.windows);
+const lights = createLights(roads ?? [], terrain.project, terrain.groundAt, scene, buildings?.roofLights, terrain.sites, buildings?.windows, P.caps ? [pinX, pinZ] : null);
 const treeCount = !P.trees ? 0 : createTrees(scene, [pinX, pinZ], terrain.imagery, terrain.groundAt);
 const haze = await createHaze(scene, terrain.hazeMap, terrain.nearSizeM, groundM, terrain.drop);
 // Everything is built: drop the CPU copies of vertex data (the GPU has them; nothing here picks or edits).
@@ -260,10 +260,10 @@ async function createEngine(target: HTMLCanvasElement, wantWebGPU: boolean, anti
 	return new Engine(target, antialias, { stencil: false, powerPreference: 'high-performance' });
 }
 
-/** The place's OSM footprints, if it has a pack (see city/buildings.ts). */
+/** The place's OSM footprints, if it has a pack (see city/buildings.ts). Capped around the pin only with ?caps=1 (flight/params.ts: off by default). */
 async function loadBuildings() {
 	const features = await fetchPack('buildings');
-	return features && createBuildings(features, terrain.project, terrain.groundAt, scene);
+	return features && createBuildings(features, terrain.project, terrain.groundAt, scene, P.caps ? { ...BUILDING_CAP, center: { lon, lat } } : null);
 }
 
 /** A place's GeoJSON pack's features, or null when the place has none. */

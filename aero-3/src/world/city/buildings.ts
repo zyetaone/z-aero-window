@@ -50,7 +50,47 @@ const cellU = (col: number, t: number) => (col * CELL_PX + 1 + t * (CELL_PX - 2)
 const cellV = (t: number) => 1 - (CELL_PX - 1 - t * (CELL_PX - 2)) / (CELLS * CELL_PX); // t 0 bottom, 1 top
 const RELIEF = 0.8; // normal-map strength: mipmaps average it flat with distance, so it never aliases
 
-export function createBuildings(features: Footprint[], project: (lon: number, lat: number) => [x: number, z: number], groundAt: (x: number, z: number) => number, scene: Scene) {
+/** Perf caps (Slice 3): Dubai ships ~1.1M building vertices. Everything past the cap never extrudes. */
+export const BUILDING_CAP = { maxCount: 25_000, coreM: 10_000, minAreaM2: 400 };
+export type BuildingCap = { maxCount: number; coreM: number; minAreaM2: number };
+
+/**
+ * Pure: which footprints survive. Everything within coreM of the pin stays (the
+ * orbit flies over it); past that only footprints of at least minAreaM2 (blocks
+ * and landmarks read at range; sheds don't); maxCount backstops the total,
+ * preferring near then large. Stable sort, no randomness: panes agree.
+ */
+export function capFootprints<F extends Footprint>(
+	features: F[],
+	project: (lon: number, lat: number) => [x: number, z: number],
+	center: { lon: number; lat: number },
+	cap: BuildingCap = BUILDING_CAP
+): F[] {
+	const [cx, cz] = project(center.lon, center.lat);
+	const scored: { f: F; dist: number; area: number }[] = [];
+	for (const f of features) {
+		const ring = f.geometry.coordinates[0]!;
+		let [minX, maxX, minZ, maxZ] = [Infinity, -Infinity, Infinity, -Infinity];
+		for (const [lon, lat] of ring) {
+			const [x, z] = project(lon!, lat!);
+			if (x < minX) minX = x;
+			if (x > maxX) maxX = x;
+			if (z < minZ) minZ = z;
+			if (z > maxZ) maxZ = z;
+		}
+		const [fx, fz] = project(ring[0]![0]!, ring[0]![1]!);
+		const dist = Math.hypot(fx - cx, fz - cz);
+		const area = (maxX - minX) * (maxZ - minZ);
+		if (dist > cap.coreM && area < cap.minAreaM2) continue;
+		scored.push({ f, dist, area });
+	}
+	scored.sort((a, b) => a.dist - b.dist || b.area - a.area);
+	return scored.slice(0, cap.maxCount).map((s) => s.f);
+}
+
+export function createBuildings(features: Footprint[], project: (lon: number, lat: number) => [x: number, z: number], groundAt: (x: number, z: number) => number, scene: Scene, cap: (BuildingCap & { center: { lon: number; lat: number } }) | null = null) {
+	// Null caps nothing (tests, bench ablations): main.ts passes the place pin with P.caps on.
+	if (cap) features = capFootprints(features, project, cap.center, cap);
 	// uvs2 is the lightmap: v is height up the wall, 0 at the street.
 	const [positions, normals, uvs, uvs2, colors, indices] = [[], [], [], [], [], []] as number[][];
 	const roofLights: number[] = []; // flat [x, y, z]: lights on the flat roofs (city/lights.ts)

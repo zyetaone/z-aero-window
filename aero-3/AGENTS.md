@@ -23,8 +23,7 @@ tools/           build, smoke, pi-bench, fetch-terrain, ship-pack
 Cross-folder imports use the package `imports` alias (`#flight/weather.ts`, `#math.ts`: `#*` → `./src/*`,
 native to Bun and TypeScript); same-folder imports stay `./`. `bun run coverage` covers the pure layers.
 
-Where things not built yet go: remote actions and admin panels in `ops/`, media (video, music)
-in `cabin/`, a camera-pose model in `flight/path.ts`. A folder appears with its first file.
+Where things not built yet go: remote actions in `ops/`, a camera-pose model in `flight/path.ts`. A folder appears with its first file.
 
 **`src/flight/`, `src/cabin/` and the frame's light** — the flight this pane is on, and how it is shown:
 
@@ -94,7 +93,9 @@ in `cabin/`, a camera-pose model in `flight/path.ts`. A folder appears with its 
   systems, flat banks on the horizon, cirrus; per-tier wrap so wind never blows the deck off the
   place. weather.ts sets the cover, deck height, wind, how far cumulus heap up and how grey each
   cluster runs. No card reaches below the ground, or the terrain
-  clips it flat.
+  clips it flat. At night (`nightTerms`, tested) the moon takes the sun's place on each puff (its
+  cool white, a body term plus a moon side) and the city's lamps light the deck from below,
+  falling off over ~30 km from the pin: night cumulus over a lit city read grey, not black.
 - `src/world/sky/moon.ts` — a phase-lit disc (each fragment a point on a sphere, lit toward the sun, faint
   earthshine) 600 km out along `sky/ephemeris.ts` `moonAt` (aero-2's series), 3.5× true size, after the sky
   like the stars.
@@ -165,6 +166,19 @@ in `cabin/`, a camera-pose model in `flight/path.ts`. A folder appears with its 
   Panes read it at boot (2 s timeout, then none) from `?wall=<origin>` or their own server, poll
   every 5 s, and on a new version lower the blind and reload on its `applyAt` second (10 s ahead).
   URL params beat the wall. Panes take `?role=left|center|right` (±24°).
+  A push may also carry the five Lights gains (street, building, far 0-2; haze, glow 0-1), which
+  REPLACE the pane's defaults (never multiply; a lone pane's sliders still edit them), and media.
+- `src/ops/media.ts` + `/api/media` + `/media/*` — the operator's music and clips in `MEDIA_DIR`
+  (`./data/media`, gitignored; `AERO_MEDIA_MB`, 50). `GET` lists, `POST` uploads one multipart file
+  (token-gated like the wall; length refused before the body is read; bare names, mp3/wav/ogg/mp4/
+  webm only). A push carries at most eight store IDs, never URLs (the 1024-byte budget), and every
+  pane resolves them against the wall origin it polls: the file lives on the uploader.
+  `src/cabin/media.ts` plays them: the playlist on the centre or lone pane only (replacing the drone,
+  skipping missing files), a clip muted on every pane under the blind.
+- Lone pane only (no `?role=`; `cabin.ts` `loneGestures`): pull the open blind down past 120 px to
+  depart for another city (a `?place=` reload), tap the glass for the clock (the sky's hour, so a
+  pinned clock shows its own time; a solid pill, no backdrop-filter). A tap outside the admin QR
+  dismisses it. A wall pane never acts alone: only /admin, with the token, changes shared state.
 
 ## Naming
 
@@ -253,8 +267,10 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
    the ~320 MB aero-3 reads (Sentinel-2 z7/8/11/12, Terrarium z8/10, VIIRS z8, roads, OSM
    buildings), restarts the app and checks `/api/status` `data` lists every route.
 5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.
-   Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
-   lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.
+   Levers if it is slow: `?caps=1` (built, off by default: `capFootprints` keeps 25k footprints
+   by distance then area, `thinStreetLamps` 150k street lamps; measured, the building cap ends
+   the city 3.7-5.7 km from the pin under a 9-13 km orbit, so an area-first cap may be the
+   better shape),  lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.
 6. **Content** — presets done (`ops/wall.ts` PRESETS: five named scenes that fill `/admin`'s form).
    Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers. Admin QR done: hold the glass 15 s for the wall Pi's `/admin` (`src/cabin/qr.ts`).
 

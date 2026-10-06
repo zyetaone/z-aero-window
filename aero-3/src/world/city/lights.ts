@@ -52,6 +52,33 @@ const KINDS: [weight: number, colour: [number, number, number]][] = [
 const LAMP_HEIGHT_M = 10;
 const FADE_M = 18_000; // a lamp this far away reads half as bright
 
+/** Perf caps (Slice 3): ~300k lamp points in Dubai sum toward a white sheet. Street lamps only: roofs, windows and far towns are sparse (and shrink with the building cap). */
+export const LAMP_CAP = { maxStreet: 150_000, coreM: 10_000 };
+
+/**
+ * Pure: thin a flat [x,y,z,r,g,b] street-lamp list to the budget. Inside the core
+ * everything stays; past it the lowest position hashes deal the remainder evenly
+ * (the trees' keep-rate pattern, stable across panes); only when the core alone
+ * overflows does the whole list thin. Exact counts, not rates: a cap that holds
+ * ~200 of 400 by luck is not a cap.
+ */
+export function thinStreetLamps(lamps: readonly number[], cx: number, cz: number, max = LAMP_CAP.maxStreet, coreM = LAMP_CAP.coreM): { kept: number[]; dropped: number } {
+	const STRIDE = 6;
+	const n = Math.floor(lamps.length / STRIDE);
+	if (n <= max) return { kept: [...lamps], dropped: 0 };
+	const h = (i: number) => hash(Math.imul(Math.round(lamps[i * STRIDE]! * 10), 0x27d4eb2d) ^ Math.round(lamps[i * STRIDE + 2]! * 10));
+	const inCore = (i: number) => Math.hypot(lamps[i * STRIDE]! - cx, lamps[i * STRIDE + 2]! - cz) <= coreM;
+	const inside = Array.from({ length: n }, (_, i) => i).filter(inCore);
+	// Core alone overflows: the lowest hashes win everywhere. Else the core stays
+	// whole and the outskirts share what is left. Output keeps file order.
+	const take =
+		inside.length >= max
+			? Array.from({ length: n }, (_, i) => i).sort((a, b) => h(a) - h(b)).slice(0, max)
+			: [...inside, ...Array.from({ length: n }, (_, i) => i).filter((i) => !inCore(i)).sort((a, b) => h(a) - h(b)).slice(0, max - inside.length)];
+	take.sort((a, b) => a - b);
+	return { kept: take.flatMap((i) => lamps.slice(i * STRIDE, i * STRIDE + STRIDE)), dropped: n - take.length };
+}
+
 Effect.ShadersStore.lampsVertexShader = `
 precision highp float;
 attribute vec3 position;
@@ -94,10 +121,13 @@ export function createLights(
 	/** VIIRS-derived towns and villages: flat [x, y, z, radiance] (ground/terrain.ts lightSites). */
 	sites: number[] = [],
 	/** Lit windows on building walls: flat [x, y, z] (city/buildings.ts). */
-	windows: number[] = []
+	windows: number[] = [],
+	/** The pin in world metres, or null for no street-lamp cap (tests, bench ablations). */
+	pin: readonly [x: number, z: number] | null = null
 ) {
 	const positions: number[] = [];
 	const colors: number[] = [];
+	const street: number[] = []; // flat x,y,z,r,g,b: thinned to LAMP_CAP below, then dealt in
 
 	for (const { geometry, properties } of roads) {
 		const [spacing, gain, litShare] = CLASS[properties.class] ?? CLASS.residential!;
@@ -118,13 +148,19 @@ export function createLights(
 				if (v < 0.02) continue; // the odd lamp out
 				const k = gain * (0.55 + 0.6 * v); // and no two quite alike
 				const [x, z] = [x0 + ((x1 - x0) * d) / len, z0 + ((z1 - z0) * d) / len];
-				positions.push(x, groundAt(x, z) + LAMP_HEIGHT_M, z);
-				colors.push(r * k, g * k, b * k, 1);
+				street.push(x, groundAt(x, z) + LAMP_HEIGHT_M, z, r * k, g * k, b * k);
 			}
 			run += len;
 			carry = (carry - len) % spacing;
 			if (carry < 0) carry += spacing;
 		}
+	}
+
+	// The street budget: group 1 in the shader, so the Lights panel's street gain still fits.
+	const { kept } = pin ? thinStreetLamps(street, pin[0], pin[1]) : { kept: street };
+	for (let i = 0; i < kept.length; i += 6) {
+		positions.push(kept[i]!, kept[i + 1]!, kept[i + 2]!);
+		colors.push(kept[i + 3]!, kept[i + 4]!, kept[i + 5]!, 1);
 	}
 
 	// Roof lights, dealt from the same mix by hash, dimmer than the streets.
