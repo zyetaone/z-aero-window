@@ -170,6 +170,9 @@ const aim: { at: Vector3 | null; moon: boolean } = { at: null, moon: false };
 if (P.debug) Object.assign(globalThis, { scene, camera, terrain, treeCount, weather, aim, wing, atmosphere }); // for the console and frame-cost ablations
 let hudAt = 0;
 const toSun = new Vector3();
+// The moon for the clouds (twice a second: it crawls): direction to it, and its dark-gated gain.
+const toMoon = new Vector3();
+let moonGain = 0;
 const [aircraft, seat] = [new Quaternion(), new Quaternion()];
 camera.rotationQuaternion = new Quaternion();
 const cabin = cabinOverlay(P.blind, weather.rain, placeId, lon, P.role ? ['left', 'center', 'right'].indexOf(P.role) + 1 : 0, wall.applyAt);
@@ -203,6 +206,8 @@ engine.runRenderLoop(() => {
 		const m = moonlightAt(moonAt(skyMs, lat, lon), dark, knobs.moonlight); // twice a second: the moon crawls
 		moonLight.direction.set(...m.direction);
 		moonLight.intensity = m.intensity;
+		toMoon.set(-m.direction[0], -m.direction[1], -m.direction[2]); // to the moon: the light points down
+		moonGain = m.intensity;
 	}
 	if (atmosphere) atmosphere.exposure = light.exposure;
 	for (const m of skyLit) m.ambientColor.setAll(light.ambient);
@@ -226,7 +231,7 @@ engine.runRenderLoop(() => {
 	if (aim.at) camera.setTarget(aim.at);
 	cabin.update(now / 1000, dark, skyMs);
 
-	clouds.update(now, toSun.set(s.x, s.y, s.z), dark);
+	clouds.update(now, toSun.set(s.x, s.y, s.z), dark, toMoon, moonGain, dark * weather.lights);
 	stars.update(skyMs, light.stars);
 	moon.update(skyMs, s, dark);
 	drone?.setAltitude(camera.position.y);

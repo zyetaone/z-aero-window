@@ -36,6 +36,28 @@ import cloudSmoke from './cloud-smoke.webp';
 const CELL = 256;
 const UNDERGLOW = new Color3(0.07, 0.05, 0.035);
 const NIGHT_FLOOR = new Color3(0.03, 0.035, 0.05);
+/** The moon's cool white (main.ts moonLight.diffuse): night clouds are moonlit, not sunlit. */
+const MOON = new Color3(0.62, 0.72, 1);
+/** City light catches clouds within about this far of the pin; past it the deck is moonlit only. */
+const CITY_SIGMA_M = 30_000;
+
+/**
+ * Pure: the night additions for one puff (Slice 5). Why they exist: after dusk the
+ * atmosphere drives the sun's colour and the sky's ambient to ~0 (it owns both;
+ * buildings.ts says so), so the day terms vanish and each card is left with only
+ * NIGHT_FLOOR + UNDERGLOW, ~0.08 grey — black against a lit city. The moon takes
+ * over the sun's shape (base body plus a moon side off the puff normal), and the
+ * city's lamps light the deck from below, falling off with distance from the pin.
+ * moonGain already carries the dark (moonlightAt) and cityGlow too (dark x lights),
+ * so by day both are exactly 0 and day rendering is bit-identical.
+ */
+export function nightTerms(dotMoon: number, moonGain: number, cityGlow: number, distM: number): { moonBody: number; city: number } {
+	const moonSide = Math.max(0, dotMoon) * moonGain;
+	return {
+		moonBody: 0.55 * moonGain + moonSide,
+		city: cityGlow * Math.exp(-((distM / CITY_SIGMA_M) ** 2))
+	};
+}
 
 type Puff = { sprite: Sprite; x: number; z: number; y: number; alpha: number; shade: number; normal: Vector3; wrap: number };
 
@@ -130,8 +152,12 @@ export async function createClouds(
 	const [sunColor, view] = [new Color3(), new Vector3()];
 	let frame = 0;
 	return {
-		/** `toSun` is the unit vector to the sun; `dark` 0 by day, 1 at night. */
-		update(nowMs: number, toSun: Vector3, dark: number) {
+		/**
+		 * `toSun` is the unit vector to the sun; `dark` 0 by day, 1 at night. `toMoon`
+		 * points at the moon with `moonGain` its light (moonlightAt, already dark-gated;
+		 * 0 with ?moon=0); `cityGlow` is dark x the city's lamp factor for the upglow.
+		 */
+		update(nowMs: number, toSun: Vector3, dark: number, toMoon: Vector3, moonGain: number, cityGlow: number) {
 			const shift = (nowMs / 1000) * weather.wind; // today's speed, toward today's direction
 			sun.diffuse.scaleToRef(Math.min(1, sun.intensity), sunColor);
 			const ambient = scene.ambientColor;
@@ -153,12 +179,15 @@ export async function createClouds(
 				const mie = Math.max(0, Vector3.Dot(view, toSun)) ** 6 * mieGain;
 				const sunSide = Math.max(0, Vector3.Dot(p.normal, toSun)) * (1 - dark) * 0.35;
 				const lit = p.shade * (0.7 + sunSide + mie * 1.5);
+				// After dusk the moon and the city below take over (nightTerms): moonlit body
+				// plus a moon side, and sodium upglow falling off with distance from the pin.
+				const { moonBody, city } = nightTerms(Vector3.Dot(p.normal, toMoon), moonGain, cityGlow, Math.hypot(x - center[0], z - center[1]));
 				const alpha = p.alpha * Math.max(0, edge) * (1 - smoothstep(190_000, 300_000, far));
 				s.isVisible = alpha > 0.01; // faded out at the wrap edge or past 190 km: skip the draw
 				s.color!.set(
-					Math.min(1, (ambient.r + sunColor.r * lit) * p.shade + NIGHT_FLOOR.r + UNDERGLOW.r * dark),
-					Math.min(1, (ambient.g + sunColor.g * lit) * p.shade + NIGHT_FLOOR.g + UNDERGLOW.g * dark),
-					Math.min(1, (ambient.b + sunColor.b * lit) * p.shade + NIGHT_FLOOR.b + UNDERGLOW.b * dark),
+					Math.min(1, (ambient.r + sunColor.r * lit) * p.shade + NIGHT_FLOOR.r + MOON.r * moonBody * p.shade + UNDERGLOW.r * city),
+					Math.min(1, (ambient.g + sunColor.g * lit) * p.shade + NIGHT_FLOOR.g + MOON.g * moonBody * p.shade + UNDERGLOW.g * city),
+					Math.min(1, (ambient.b + sunColor.b * lit) * p.shade + NIGHT_FLOOR.b + MOON.b * moonBody * p.shade + UNDERGLOW.b * city),
 					alpha // no aerial perspective on sprites, so the distant ones fade into the haze
 				);
 			}
