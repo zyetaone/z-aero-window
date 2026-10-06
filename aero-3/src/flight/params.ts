@@ -40,7 +40,7 @@ export function readParams(search: string) {
 		lamps: num('lamps', 1),
 		carpet: num('carpet', 1),
 		moonlight: num('moonlight', 0.4),
-		/** Final contrast; NaN takes today's (day.ts). */
+		/** Final contrast; NaN takes today's (weather.ts). */
 		contrast: num('contrast', NaN),
 		/** Cloud cover scale, 0 clear. */
 		clouds: num('clouds', 1),

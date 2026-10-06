@@ -7,9 +7,9 @@
  * main.ts reloads into the next visit. All of it from the wall clock.
  */
 import { CREDITS } from './credits.ts';
-import { qrSvg } from '#vendor/qr.ts';
+import { qrSvg } from './qr.ts';
 import { mulberry32 } from '#math.ts';
-import { DWELL_SEC, placeName } from '#visit/places.ts';
+import { DWELL_SEC, placeName } from '#flight/places.ts';
 import { hhmm, solarHour } from '#world/sky/ephemeris.ts';
 
 const BLIND_LEAD_SEC = 6; // down this long before the boundary

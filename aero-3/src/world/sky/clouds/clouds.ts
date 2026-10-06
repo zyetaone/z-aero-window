@@ -15,7 +15,7 @@
  * hand-tuned golden-hour tables, and cards are squashed vertically so a puff
  * stays between the hills and the window. Seeded layout and wall-clock wind
  * keep three panes identical without talking, and the weather changes daily:
- * day.ts deals each place a regime per UTC day, and a layout for the near and
+ * weather.ts deals each place a regime per UTC day, and a layout for the near and
  * mid tiers: scattered, in streets along the wind, massed in a front on one
  * side, or in a few separate groups. Draws in rendering group 1,
  * after the atmosphere composites the sky, so the sky cannot paint over it.
@@ -28,10 +28,10 @@ import { Sprite } from '@babylonjs/core/Sprites/sprite';
 import { SpriteManager } from '@babylonjs/core/Sprites/spriteManager';
 import type { Scene } from '@babylonjs/core/scene';
 import { mulberry32, smoothstep } from '#math.ts';
-import type { Day } from '#visit/day.ts';
-import cloud from '#assets/cloud.webp';
-import cloudDark from '#assets/cloud-dark.webp';
-import cloudSmoke from '#assets/cloud-smoke.webp';
+import type { Weather } from '#flight/weather.ts';
+import cloud from './cloud.webp';
+import cloudDark from './cloud-dark.webp';
+import cloudSmoke from './cloud-smoke.webp';
 
 const CELL = 256;
 const UNDERGLOW = new Color3(0.07, 0.05, 0.035);
@@ -62,7 +62,7 @@ export async function createClouds(
 	/** The ground under a puff: no card may reach below it, or the terrain clips it flat. */
 	groundAt: (x: number, z: number) => number,
 	drop: (x: number, z: number) => number,
-	weather: Day,
+	weather: Weather,
 	cover = 1
 ) {
 	const manager = new SpriteManager('clouds', await spriteSheet(), 2500, CELL, scene);

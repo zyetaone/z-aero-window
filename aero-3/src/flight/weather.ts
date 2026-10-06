@@ -41,7 +41,7 @@ const REGIMES: Record<string, Regime> = {
 
 export const REGIME_NAMES = Object.keys(REGIMES);
 
-export type Day = Omit<Regime, 'weight' | 'rain' | 'layouts'> & {
+export type Weather = Omit<Regime, 'weight' | 'rain' | 'layouts'> & {
 	name: string;
 	seed: number;
 	/** Rain on the glass today. */
@@ -59,7 +59,7 @@ export type Day = Omit<Regime, 'weight' | 'rain' | 'layouts'> & {
 	grey: number;
 };
 
-export function dayFor(place: string, ms: number, named?: string | null): Day {
+export function weatherFor(place: string, ms: number, named?: string | null): Weather {
 	const day = Math.floor(ms / 86_400_000);
 	const seed = Math.floor(hash(day * 0x9e3779b1 + [...place].reduce((h, c) => h * 31 + c.charCodeAt(0), 7)) * 2 ** 31);
 	const r = (k: number) => hash(seed + k);

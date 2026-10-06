@@ -6,12 +6,12 @@ The fleet still runs aero-1. Nothing here is wired into `deploy/`.
 ## Shape
 
 MRAX by folder, one reason to change per file. Dependencies point down the list: nothing in
-`visit/` imports Babylon, and `world/` never reads the URL or the wall.
+`flight/` imports Babylon, and `world/` never reads the URL or the wall.
 
 ```
 src/main.ts      boot: visit → world → render loop. Wiring only.
-src/math.ts      the shared seeded noise and smoothstep (the one util; vendor/ holds copied code)
-src/visit/       MODEL + RULES, pure and tested: params (URL), places, day, flight, visit.ts
+src/math.ts      the shared seeded noise and smoothstep: the one util
+src/flight/      MODEL + RULES, pure and tested: params (URL), places, weather, path, plan.ts
 src/world/       ACTIONS, Babylon: lighting.ts (pure, tested), wing.ts, sky/, ground/, city/
 src/cabin/       EXPERIENCE on the glass: rim, rain, blind, drone, credits, hud.ts (lone pane)
 src/ops/         the operator and the kiosk: wall, fleet, /admin, kiosk.ts (recover, watchdog, shed)
@@ -20,28 +20,28 @@ tools/           build, smoke, pi-bench, fetch-terrain, ship-pack
 ../deploy/       Pi OS: units, install, updater, health-check (shared with aero-1/2)
 ```
 
-Cross-folder imports use the package `imports` alias (`#visit/day.ts`, `#math.ts`: `#*` → `./src/*`,
+Cross-folder imports use the package `imports` alias (`#flight/weather.ts`, `#math.ts`: `#*` → `./src/*`,
 native to Bun and TypeScript); same-folder imports stay `./`. `bun run coverage` covers the pure layers.
 
 Where things not built yet go: remote actions and admin panels in `ops/`, media (video, music)
-in `cabin/`, a camera-pose model in `visit/flight.ts`. A folder appears with its first file.
+in `cabin/`, a camera-pose model in `flight/path.ts`. A folder appears with its first file.
 
-**`src/visit/`, `src/cabin/` and the frame's light** — what each visit is and how it is shown:
+**`src/flight/`, `src/cabin/` and the frame's light** — the flight this pane is on, and how it is shown:
 
-- `src/visit/visit.ts` — `visitFor(params, wall, now)`: the place, flight, day, seat row, pane yaw
+- `src/flight/plan.ts` — `planFlight(params, wall, now)`: the place, path, weather, seat row, pane yaw
   and pinned clock for this 10-min slot, one plain object (tested: three roles, one visit).
 
-- `src/visit/params.ts` — every URL knob, read once and typed: the one list of them (tested).
+- `src/flight/params.ts` — every URL knob, read once and typed: the one list of them (tested).
 - `src/world/lighting.ts` — one frame's light from the sun's and moon's height: darkness, exposure, every
   emissive gain divided back out of the night lift, lamp alpha held under 1 (tested; main.ts applies it).
-- `src/main.ts` — scene, light, the wiring and the render loop. Each visit deals a cruise band (~3, 5.5 or 8.5 km AGL, jittered,
+- `src/main.ts` — scene, light, the wiring and the render loop. Each visit deals a cruise band (~3.5, 6.5 or 10 km AGL, jittered,
   all over the cloud deck) and a climb or descent of up to 2 km; never under 2 km over the highest
   ground within 4 km of the track. `?alt=` pins it.
-- `src/visit/flight.ts` — the aircraft at a wall-clock second, pure in (seed, second): an elliptical
+- `src/flight/path.ts` (`pathFor`) — the aircraft at a wall-clock second, pure in (seed, second): an elliptical
   orbit (radius per place, default 9 km; Dubai 13, Himalayas 24) whose direction, start and tilt
   are seeded per visit, a slow climb, bank into the turn, the seat on the inside, the gaze panning
   ±18°. The camera is aircraft × seat quaternions. Tested.
-- `src/visit/day.ts` — one object per place and UTC day: regime (clear, fair, scattered, towering,
+- `src/flight/weather.ts` (`weatherFor`) — one object per place and UTC day: regime (clear, fair, scattered, towering,
   cirrus, hazy, overcast), sun strength, haze, rain, cloud deck height and wind, heap and grey,
   night-light gain. `?weather=` pins the regime.
 - `src/cabin/cabin.ts` — aero-2's synthesised cabin drone (centre or solo pane only, `?audio=0` off,
@@ -55,14 +55,14 @@ in `cabin/`, a camera-pose model in `visit/flight.ts`. A folder appears with its
 - `/api/status` answers 503 (`page: building|failed`) until the server has bundled the page once
   at startup, so a page that fails to build fails the updater's probe and rolls back.
   `?blind=0` holds one visit (screenshots, smoke).
-- `src/visit/places.ts` — the place table and aero-2's rotation, ported as is: 600 s per city, the day's
+- `src/flight/places.ts` — the place table and aero-2's rotation, ported as is: 600 s per city, the day's
   order a Fisher-Yates shuffle seeded by the day number. Each slot is a visit: with no `?place=`
   a new city, either way a new flight. The Himalayas are `?place=` only.
 - One sea (ground/maps.ts `paintSea`): where the terrain says sea floor, cloud and no-data in the
   imagery become the near patch's own water colour, and the far ring's two sources (Sentinel z8
   over an older z7) are pulled toward it. A cloudy Sentinel scene over the Gulf read as a snowy
   plateau with straight edges; z8 no-data drew black wedges (now transparent, `clearNoData`).
-- `src/visit/day.ts` deals per place per day: regime, cloud layout (scatter, streets along the wind,
+- `src/flight/weather.ts` deals per place per day: regime, cloud layout (scatter, streets along the wind,
   a front, clumps), wind direction, contrast (`scene.imageProcessingConfiguration`) and Mie scale
   (deep blue to milky sky). The atmosphere's own exposure is 1.7 by day (`?sky=`): at 1 a clear
   afternoon sky rendered dark slate. Image-processing exposure does not reach the sky.
@@ -82,7 +82,7 @@ in `cabin/`, a camera-pose model in `visit/flight.ts`. A folder appears with its
   Mirrored for left-side windows; nav light (green starboard, red port) and aero-2's double-pulse
   strobe on the wall clock. It sits in the glow pass so the city's bloom stops at its edge.
   `?wing=0` to skip. Merged by material at load: 28 draw calls, not the export's 65.
-  Each visit deals a seat row (`visit.ts` `seatFor`, from the visit seed so the panes agree): behind the wing
+  Each visit deals a seat row (`plan.ts` `seatFor`, from the visit seed so the panes agree): behind the wing
   half the time, over it a third, ahead of the leading edge the rest (the wing behind you: only the
   aft-looking pane sees it). `?seat=behind|over|ahead` pins one. Verified in-frame with markers: the
   model's nose is +z (root chord z -2..7, tip -5..-3, winglet leans to -z) and follows the travel.
@@ -90,15 +90,15 @@ in `cabin/`, a camera-pose model in `visit/flight.ts`. A folder appears with its
 
 **`src/world/sky/`** — what is above: sun, moon and star positions, the stars, the moon, the clouds.
 
-- `src/world/sky/clouds.ts` — aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
+- `src/world/sky/clouds/` — `clouds.ts` and its three sprite sheets. aero-2's cloud cluster model on one SpriteManager: near cumulus, horizon
   systems, flat banks on the horizon, cirrus; per-tier wrap so wind never blows the deck off the
-  place. day.ts sets the cover, deck height, wind, how far cumulus heap up and how grey each
+  place. weather.ts sets the cover, deck height, wind, how far cumulus heap up and how grey each
   cluster runs. No card reaches below the ground, or the terrain
   clips it flat.
 - `src/world/sky/moon.ts` — a phase-lit disc (each fragment a point on a sphere, lit toward the sun, faint
   earthshine) 600 km out along `sky/ephemeris.ts` `moonAt` (aero-2's series), 3.5× true size, after the sky
   like the stars.
-- `src/world/sky/stars.ts` — aero-2's Yale catalogue (vendored in `src/vendor/`) turned by sidereal time.
+- `src/world/sky/stars.ts` — aero-2's Yale catalogue (copied as is into `star-catalogue.ts`) turned by sidereal time.
 - `src/world/sky/ephemeris.ts` — sun position (with the equation of time) and sidereal angle from UTC + longitude
   (no time zones). Tested.
 
@@ -114,8 +114,8 @@ in `cabin/`, a camera-pose model in `visit/flight.ts`. A folder appears with its
 - `src/world/ground/maps.ts` — the maps baked from those tiles, pure canvas in, canvas out: night ground
   (VIIRS × imagery × road mask × noise), light dome (haze), water mask, far-ring town lights, the
   imagery crop trees sample, roads painted into the imagery, the tiling detail map.
-  `src/world/ground/mercator.ts` is the one home of the tile grid both read. `src/vendor/` holds aero-2's QR
-  encoder and star catalogue, copied so aero-3 builds alone.
+  `src/world/ground/mercator.ts` is the one home of the tile grid both read. Code copied from aero-2 (so aero-3 builds
+  alone) lives beside its one user: `cabin/qr.ts`, `world/sky/star-catalogue.ts`.
 - `src/world/ground/trees.ts` — low-poly crowns, cones and bushes in clumps of 1-6 wherever the imagery within
   5 km of the pin reads green, tinted by that pixel: thin instances, a draw call per shape
   (`?trees=0` to skip).
@@ -170,7 +170,7 @@ in `cabin/`, a camera-pose model in `visit/flight.ts`. A folder appears with its
 
 Scene builders are `create<Noun>()` and main.ts binds the plain noun: `createTerrain` → `terrain`,
 `createBuildings` → `buildings`, `createLights` → `lights`, `createClouds` → `clouds`, and so on.
-Pure models are `<noun>At` / `<noun>For` (`sunAt`, `moonAt`, `slotAt`, `dayFor`). Babylon mesh and
+Pure models are `<noun>At` / `<noun>For` (`sunAt`, `moonAt`, `slotAt`, `weatherFor`, `pathFor`, `planFlight`). Babylon mesh and
 material names (`near`, `far`, `buildings`, `streetlights`, `stars`, `moon`, `trees`) are a contract:
 `tools/smoke.ts` asserts them and main.ts looks some up by string. Rename exports freely, never those.
 
@@ -256,7 +256,7 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
    Levers if it is slow: cap buildings by distance and area (Dubai is 1.1M vertices), cap
    lights (~300k there), lower the glow's texture ratio, haze off, `?scale=1.5`, WebGPU.
 6. **Content** — presets done (`ops/wall.ts` PRESETS: five named scenes that fill `/admin`'s form).
-   Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers. Admin QR done: hold the glass 15 s for the wall Pi's `/admin` (`src/vendor/qr.ts`).
+   Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers. Admin QR done: hold the glass 15 s for the wall Pi's `/admin` (`src/cabin/qr.ts`).
 
 ## Not built yet
 

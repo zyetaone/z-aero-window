@@ -20,7 +20,7 @@ export type Mix = { haze: number; glow: number };
 
 const LAMP_ALPHA = 0.22; // faint per lamp: ~200k additive points sum to a white sheet at anything brighter
 
-/** One frame's numbers. `dayHaze` and `dayLights` are today's (day.ts); `shedding` is a hot Pi. */
+/** One frame's numbers. `dayHaze` and `dayLights` are today's (weather.ts); `shedding` is a hot Pi. */
 export function lightingAt(sunElevationDeg: number, knobs: Knobs, mix: Mix, dayHaze: number, dayLights: number, shedding: boolean) {
 	// Lamps, window glow, stars and the eye's twilight adaptation all follow the sun, not the hour.
 	const dark = 1 - smoothstep(-8, 2, sunElevationDeg);

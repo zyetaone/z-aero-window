@@ -6,8 +6,8 @@
  */
 import type { Wall } from '#ops/wall.ts';
 import { hash, RAD } from '#math.ts';
-import { dayFor } from './day.ts';
-import { flight } from './flight.ts';
+import { weatherFor } from './weather.ts';
+import { pathFor } from './path.ts';
 import type { Params } from './params.ts';
 import { destinationAt, DWELL_SEC, PLACES, slotAt } from './places.ts';
 
@@ -20,7 +20,7 @@ export type Seat = (typeof SEATS)[number];
 /** A row from a 0..1 draw: behind the wing half the time, over it a third, ahead of it the rest. */
 export const seatFor = (u: number): Seat => (u < 0.5 ? 'behind' : u < 0.83 ? 'over' : 'ahead');
 
-export function visitFor(P: Params, wall: Wall, nowMs: number) {
+export function planFlight(P: Params, wall: Wall, nowMs: number) {
 	// ?place= (or the wall) pins a city; otherwise the wall-clock rotation picks it.
 	const asked = P.place ?? wall.place;
 	const pinnedPlace = asked && Object.hasOwn(PLACES, asked) ? asked : null;
@@ -34,9 +34,9 @@ export function visitFor(P: Params, wall: Wall, nowMs: number) {
 		lat,
 		lon,
 		groundM,
-		track: flight(Math.floor(hash(slot * 0x2545f491 + groundM) * 2 ** 31), orbitM),
+		track: pathFor(Math.floor(hash(slot * 0x2545f491 + groundM) * 2 ** 31), orbitM),
 		// Today for this place, from the slot's start: the same on every pane, different tomorrow.
-		day: dayFor(placeId, slot * DWELL_SEC * 1000, P.weather ?? wall.weather),
+		weather: weatherFor(placeId, slot * DWELL_SEC * 1000, P.weather ?? wall.weather),
 		seat: (SEATS as readonly string[]).includes(P.seat ?? '') ? (P.seat as Seat) : seatFor(hash(slot * 0x9e3779b1 + 7)),
 		paneYaw: (P.yaw ?? (P.role ? (ROLE_YAW[P.role] ?? 0) : 0)) * RAD,
 		/** The pinned solar hour, or null to follow the real sun. */
@@ -44,4 +44,4 @@ export function visitFor(P: Params, wall: Wall, nowMs: number) {
 	};
 }
 
-export type Visit = ReturnType<typeof visitFor>;
+export type FlightPlan = ReturnType<typeof planFlight>;

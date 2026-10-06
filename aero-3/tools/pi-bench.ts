@@ -18,7 +18,7 @@ const arg = (name: string, fallback: string) => (Bun.argv.includes(`--${name}`) 
 const BASE = arg('base', 'http://127.0.0.1:3300');
 const CDP = Number(arg('cdp-port', '9455'));
 const [WARM_S, MEASURE_S] = [20, 30];
-const { PLACES } = await import('../src/visit/places.ts');
+const { PLACES } = await import('../src/flight/places.ts');
 
 const pinned = (place: string, clock: number, extra = '') => `place=${place}&clock=${clock}&weather=scattered&blind=0&audio=0&hud=0${extra}`;
 let scenes: [string, string][] = Object.keys(PLACES).flatMap((p) => [[`${p} day`, pinned(p, 12)], [`${p} night`, pinned(p, 22)]] as [string, string][]);

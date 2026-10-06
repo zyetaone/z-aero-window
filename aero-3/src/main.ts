@@ -25,17 +25,17 @@ import { adminQr, cabinDrone, cabinOverlay } from './cabin/cabin.ts';
 import { RAD } from './math.ts';
 import { keepAlive } from './ops/kiosk.ts';
 import { fetchWall, NO_WALL } from './ops/wall.ts';
-import { readParams } from './visit/params.ts';
-import { SEAT_PITCH } from './visit/flight.ts';
-import { slotAt } from './visit/places.ts';
-import { visitFor } from './visit/visit.ts';
+import { readParams } from './flight/params.ts';
+import { SEAT_PITCH } from './flight/path.ts';
+import { slotAt } from './flight/places.ts';
+import { planFlight } from './flight/plan.ts';
 import { lightingAt, moonlightAt, type Knobs } from './world/lighting.ts';
 import { createBuildings } from './world/city/buildings.ts';
 import { createHaze } from './world/city/haze.ts';
 import { createLights } from './world/city/lights.ts';
 import { createTerrain } from './world/ground/terrain.ts';
 import { createTrees } from './world/ground/trees.ts';
-import { createClouds } from './world/sky/clouds.ts';
+import { createClouds } from './world/sky/clouds/clouds.ts';
 import { atSolarHour, moonAt, sunAt } from './world/sky/ephemeris.ts';
 import { createMoon } from './world/sky/moon.ts';
 import { createStars } from './world/sky/stars.ts';
@@ -52,14 +52,14 @@ const wall = await fetchWall(P.wall);
 // in the 10 s lead does not show the new scene before the others change over.
 if (wall.applyAt * 1000 > Date.now()) await new Promise((r) => setTimeout(r, wall.applyAt * 1000 - Date.now()));
 // Every visit slot (10 min) is a fresh flight: a new city when following the rotation, a new
-// direction and today's weather either way (visit/visit.ts). The blind closes over the boundary and
+// direction and today's weather either way (flight/plan.ts). The blind closes over the boundary and
 // the page reloads behind it, which also frees every buffer of the last visit. ?blind=0 holds one.
-const visit = visitFor(P, wall, Date.now());
-const { slot: bootSlot, placeId, pinnedPlace, lat, lon, groundM, track, day, paneYaw } = visit;
+const plan = planFlight(P, wall, Date.now());
+const { slot: bootSlot, placeId, pinnedPlace, lat, lon, groundM, track, weather, paneYaw } = plan;
 if (P.blind) setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && location.reload(), 1000);
 // The atmosphere's day exposure (?sky=, 1.7): at 1 a clear afternoon rendered dark slate. See lighting.ts.
 const knobs: Knobs = { sky: P.sky, lift: P.lift, lamps: P.lamps, carpet: P.carpet, moonlight: P.moonlight };
-const clock = { pinned: visit.clock }; // the HUD's slider writes it
+const clock = { pinned: plan.clock }; // the HUD's slider writes it
 // The Lights panel's live gains (lightsPanel): street lamps, building lights, far towns, bloom.
 const mix = { street: 1, building: 1, far: 1, glow: GLOW, haze: 0.12 };
 
@@ -91,16 +91,16 @@ camera.maxZ = 1_000_000;
 
 const roadsLoad = fetchPack('roads'); // the ground paints them in by day, the lamps follow them by night
 const terrain = await createTerrain(scene, lat, lon, await roadsLoad);
-sunLight.intensity = day.sun;
+sunLight.intensity = weather.sun;
 if (atmosphere) {
-	atmosphere.aerialPerspectiveIntensity *= day.haze;
+	atmosphere.aerialPerspectiveIntensity *= weather.haze;
 	// Today's air: few aerosols is a deep blue sky down to the horizon, many a milky one.
-	atmosphere.physicalProperties.mieScatteringScale *= day.mie;
+	atmosphere.physicalProperties.mieScatteringScale *= weather.mie;
 }
 // Today's punch: a clear day's shadows and colours snap, a hazy one's lie flat. ?contrast= pins it.
-scene.imageProcessingConfiguration.contrast = Number.isNaN(P.contrast) ? day.contrast : P.contrast;
+scene.imageProcessingConfiguration.contrast = Number.isNaN(P.contrast) ? weather.contrast : P.contrast;
 const [pinX, pinZ] = terrain.project(lon, lat);
-// Each visit's own cruise (flight.ts: a band and a climb), but never into the ground: the track clears
+// Each visit's own cruise (flight/path.ts: a band and a climb), but never into the ground: the track clears
 // the highest terrain within 4 km of it (one circuit, sampled once) by CLEAR_M, a floor in the loop.
 let peakM = -Infinity;
 for (let i = 0; i < 720; i++) {
@@ -114,7 +114,7 @@ const floorM = peakM + CLEAR_M;
 const [buildings, roads, clouds, stars] = await Promise.all([
 	loadBuildings(),
 	roadsLoad,
-	createClouds(scene, camera, sunLight, [pinX, pinZ], groundM + day.deckM, terrain.groundAt, terrain.drop, day, P.clouds),
+	createClouds(scene, camera, sunLight, [pinX, pinZ], groundM + weather.deckM, terrain.groundAt, terrain.drop, weather, P.clouds),
 	createStars(scene, camera, lat, lon)
 ]);
 // The ground and the city, not the wing: the ground's atmosphere-plugin materials take a light ~30x
@@ -122,7 +122,7 @@ const [buildings, roads, clouds, stars] = await Promise.all([
 // has its own night fill, wing.ts). The white buildings take it at full strength: moonlit concrete.
 moonLight?.includedOnlyMeshes.push(...[scene.getMeshByName('near'), scene.getMeshByName('far'), ...(buildings?.meshes ?? [])].filter((m) => m !== null));
 const moon = createMoon(scene, camera, lat, lon);
-const wing = !P.wing ? null : await createWing(scene, visit.seat);
+const wing = !P.wing ? null : await createWing(scene, plan.seat);
 // One pane makes the sound: the centre (or a lone pane). ?audio=0 for silence.
 const drone = P.audio && (P.role ?? 'center') === 'center' ? cabinDrone() : null;
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
@@ -153,12 +153,12 @@ for (const mesh of [...(buildings?.meshes ?? []), ...(wing?.meshes ?? [])]) glow
 const hud = P.hud ? createHud(engine, lon, clock, mix, pinnedPlace) : null;
 /** ?debug: set `aim.at` to a world point (or `aim.moon = true`) to hold the camera on it for a screenshot. */
 const aim: { at: Vector3 | null; moon: boolean } = { at: null, moon: false };
-if (P.debug) Object.assign(globalThis, { scene, camera, terrain, treeCount, day, aim, wing, atmosphere }); // for the console and frame-cost ablations
+if (P.debug) Object.assign(globalThis, { scene, camera, terrain, treeCount, weather, aim, wing, atmosphere }); // for the console and frame-cost ablations
 let hudAt = 0;
 const toSun = new Vector3();
 const [aircraft, seat] = [new Quaternion(), new Quaternion()];
 camera.rotationQuaternion = new Quaternion();
-const cabin = cabinOverlay(P.blind, day.rain, placeId, lon, P.role ? ['left', 'center', 'right'].indexOf(P.role) + 1 : 0, wall.applyAt);
+const cabin = cabinOverlay(P.blind, weather.rain, placeId, lon, P.role ? ['left', 'center', 'right'].indexOf(P.role) + 1 : 0, wall.applyAt);
 document.querySelector<HTMLElement>('#frame')!.hidden = !P.frame;
 adminQr(P.wall);
 // A new push: every pane lowers the blind and reloads into it on the wall's applyAt second.
@@ -180,7 +180,7 @@ engine.runRenderLoop(() => {
 	const s = sunAt(skyMs, lat, lon);
 	sunLight.direction.set(-s.x, -s.y, -s.z);
 
-	const light = lightingAt(s.elevationDeg, knobs, mix, day.haze, day.lights, kiosk.shedding);
+	const light = lightingAt(s.elevationDeg, knobs, mix, weather.haze, weather.lights, kiosk.shedding);
 	const dark = light.dark;
 	if (moonLight && frames % 30 === 1) {
 		const m = moonlightAt(moonAt(skyMs, lat, lon), dark, knobs.moonlight); // twice a second: the moon crawls

@@ -9,7 +9,7 @@
  *
  * Stored {z}/{y}/{x}.png like the rest of the pack; TERRAIN_DIR as in server.ts.
  */
-import { PLACES } from '../src/visit/places.ts';
+import { PLACES } from '../src/flight/places.ts';
 import { gridsFor } from '../src/world/ground/mercator.ts';
 
 const DIR = Bun.env.TERRAIN_DIR ?? '../aero-2/data/tiles/terrarium';

@@ -17,11 +17,11 @@ import { DWELL_SEC } from './places.ts';
 const SPEED_M_S = 230; // ~450 kt
 const CLIMB_M = 350; // the slow altitude swing, either way
 /**
- * Cruise over the ground, m, dealt per visit by weight: low (~10,000 ft, streets and the cloud tops
- * close), mid (~18,000 ft), high (~28,000 ft, the city as a map and the coast past it). All three sit
- * over day.ts's cloud deck (1.3-2.5 km), so the window looks down onto weather, as it does in cruise.
+ * Cruise over the ground, m, dealt per visit by weight: low (~11,500 ft, streets and the cloud tops
+ * close), mid (~21,000 ft), high (~33,000 ft, a real cruise: the city as a map, the coast past it). All three sit
+ * over weather.ts's cloud deck (1.3-2.5 km), so the window looks down onto weather, as it does in cruise.
  */
-const BANDS: [weight: number, metres: number][] = [[0.25, 3_000], [0.45, 5_500], [0.3, 8_500]];
+const BANDS: [weight: number, metres: number][] = [[0.25, 3_500], [0.45, 6_500], [0.3, 10_000]];
 const STEP_M = 2_000; // the most a visit climbs or descends over its 10 minutes (~650 ft/min)
 const CLIMB_PERIOD_SEC = 2 * DWELL_SEC;
 const BANK_GAIN = 0.25; // of the true bank: a 9 km orbit at 450 kt banks ~30°, too steep to watch
@@ -32,7 +32,7 @@ export const SEAT_PITCH = 7 * RAD; // the window looks this far below the horizo
 /** `climbM` is metres off this visit's cruise (`cruiseM` on the flight), which main.ts floors over the terrain. */
 export type Pose = { x: number; z: number; climbM: number; heading: number; bank: number; look: number };
 
-export function flight(seed: number, orbitM: number) {
+export function pathFor(seed: number, orbitM: number) {
 	const dir = hash(seed) < 0.5 ? 1 : -1;
 	const [phase, aspect, tilt] = [hash(seed + 1) * 2 * Math.PI, 1 + 0.3 * hash(seed + 2), hash(seed + 3) * Math.PI];
 	const [cosT, sinT] = [Math.cos(tilt), Math.sin(tilt)];

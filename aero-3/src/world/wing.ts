@@ -21,11 +21,11 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
-import type { Seat } from '#visit/visit.ts';
+import type { Seat } from '#flight/plan.ts';
 
 const WING_SCALE = 10;
 // In the model's own metres (root transform reset): the eye at the fuselage wall, looking out along
-// +x toward the tip; +z is the nose. Which row it sits in is dealt per visit (visit/visit.ts seatFor): behind the
+// +x toward the tip; +z is the nose. Which row it sits in is dealt per visit (flight/plan.ts seatFor): behind the
 // wing (the classic view across the whole span), over it (the wing below the window, the tip out to
 // the side), or ahead of the leading edge (the wing behind you: only the aft-looking pane sees it).
 const ROW_Z: Record<Seat, number> = { behind: -5.5, over: 1.5, ahead: 9 };

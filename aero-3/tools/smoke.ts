@@ -23,7 +23,7 @@ type Check = [name: string, ok: boolean, detail: string];
 const results: Check[] = [];
 const scene = (expr: string) => `(() => { try { return JSON.stringify(${expr}) } catch (e) { return JSON.stringify({ error: String(e) }) } })()`;
 
-const { PLACES } = await import('../src/visit/places.ts');
+const { PLACES } = await import('../src/flight/places.ts');
 const places = Bun.argv.slice(2).length ? Bun.argv.slice(2) : Object.keys(PLACES);
 
 try {
