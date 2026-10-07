@@ -249,6 +249,16 @@ finds at startup are served, the rest 404, so a Pi without a pack still boots. M
 `?yaw=<deg>` (pane offset), `?lamps=1` (lamp gain), `?lift=8` (twilight exposure), `?clouds=0..1`
 (cover), `?glow=0` (no bloom), `?debug` (exposes `scene`, `camera`, `terrain`, `atmosphere`, `aim` for ablations). Compare against aero-2 on the same Pi.
 
+**The Pi bench, on site** (`tools/bench-kit.ts`): no Bun, `bun install` or checkout change on the Pi.
+1. `bun aero-3/tools/ship-pack.ts <kiosk-user>@<pi>`: the data, once (~390 MB).
+2. `bun aero-3/tools/bench-kit.ts <kiosk-user>@<pi>`: builds the server and `pi-bench` for
+   linux-arm64 plus `run-bench.sh`, copies them to `~/aero-bench`.
+3. `ssh -t <kiosk-user>@<pi> bash aero-bench/run-bench.sh [--quick]`: pauses the kiosk and the
+   updater timer, serves aero-3 on :3300 from `/opt/aero-window/aero-3` (`AERO_DIR=` to change),
+   benches in the kiosk's Chromium flags, restores both on exit, writes `bench-<host>-<date>.txt`.
+   Ssh as the kiosk's user: the X server (xinit, no cookie) only takes that user's windows.
+Rehearsed on a Mac (compiled server and bench, headless Chrome on :9455): runs end to end.
+
 ## Roadmap
 
 Each phase is small and lands with screenshots, `bun test`, and `bun run smoke`. Plain TS over
