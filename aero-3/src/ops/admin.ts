@@ -5,7 +5,7 @@ import { REGIME_NAMES } from '#flight/weather.ts';
 import { fetchWall, PRESETS, type Wall } from './wall.ts';
 import { listMedia, parseIdList, parseMediaId, uploadMedia } from './media.ts';
 import { CREDITS } from '#cabin/credits.ts';
-import { STALE_SEC, type FleetRow } from './fleet.ts';
+import { rollUp, STALE_SEC, type FleetRow } from './fleet.ts';
 
 const form = document.querySelector('form')!;
 const status = document.querySelector('output')!;
@@ -160,7 +160,14 @@ async function showFleet() {
 		const note = [r.thermalAction !== 'ok' && r.thermalAction, Math.abs(skew) > 2 && `clock ${skew > 0 ? '+' : ''}${skew}s`, r.crashCount && `${r.crashCount} restarts`, r.lastError].filter(Boolean).join(' · ');
 		line([`${r.role || '?'} ${r.deviceId}`, r.fps.toFixed(1), r.temp.toFixed(0), `${Math.round(r.uptime / 3600)} h`, ago < 60 ? 'now' : `${Math.round(ago / 60)} min ago`, r.commit.slice(0, 8), note], 'td', ago > STALE_SEC ? 'stale' : '');
 	}
-	document.querySelector('#fleet')!.replaceChildren(table);
+	const sum = rollUp(rows, now);
+	const headline = [
+		`${sum.live} of ${sum.total} panes live`,
+		sum.hottestC !== null && `hottest ${sum.hottestC.toFixed(0)} °C`,
+		sum.shedding && `${sum.shedding} throttling`,
+		sum.avgFps !== null && `${sum.avgFps.toFixed(1)} fps average`
+	].filter(Boolean).join(' · ');
+	document.querySelector('#fleet')!.replaceChildren(Object.assign(document.createElement('p'), { textContent: headline }), table);
 }
 showFleet();
 setInterval(showFleet, 30_000);

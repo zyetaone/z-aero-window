@@ -34,3 +34,19 @@ export function parseHeartbeat(body: unknown): Heartbeat | null {
 	const clock = typeof b.clockMs === 'number' && Number.isFinite(b.clockMs) ? { clockMs: b.clockMs } : {};
 	return { deviceId, role: str('role', 16), fps: num('fps'), temp: num('temp'), uptime: num('uptime'), crashCount: num('crashCount'), commit: str('commit', 40), lastError: str('lastError', 200), thermalAction: str('thermalAction', 16), ...clock };
 }
+
+/**
+ * The wall at a glance, from live panes only (aero-2's rollUpFleet): a Pi silent for STALE_SEC
+ * keeps its row in the table but its last temperature no longer heads the wall's numbers.
+ */
+export function rollUp(rows: FleetRow[], nowMs: number) {
+	const live = rows.filter((r) => nowMs - r.receivedAt <= STALE_SEC * 1000);
+	const fps = live.filter((r) => r.fps > 0);
+	return {
+		live: live.length,
+		total: rows.length,
+		hottestC: live.length ? Math.max(...live.map((r) => r.temp)) : null,
+		shedding: live.filter((r) => r.thermalAction === 'shed').length,
+		avgFps: fps.length ? fps.reduce((a, r) => a + r.fps, 0) / fps.length : null
+	};
+}
