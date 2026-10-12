@@ -47,7 +47,7 @@
 			   Water lenses the scene upside down: dark above, a bright rim below, one glint. Dimmer at night. */
 			#flash { z-index: 1; background: #dfe8ff; opacity: 0; } /* lightning: cabin.ts lightning(). No blend mode: a full-screen blend layer is a Pi cost */
 			#rain { z-index: 1; }
-			.standby canvas, .standby .cabin { visibility: hidden; } /* the wall's standby: black glass */
+			.standby canvas, .standby .cabin:not(#hold, #qr) { visibility: hidden; } /* the wall's standby: black glass, but the admin QR still answers a long press */
 			#rain canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: calc(1 - 0.65 * var(--night)); }
 			#rain span {
 				position: absolute; width: var(--s); height: calc(var(--s) * 1.15);
