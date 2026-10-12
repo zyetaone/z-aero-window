@@ -58,6 +58,7 @@ if (wall.applyAt * 1000 > Date.now()) await new Promise((r) => setTimeout(r, wal
 const plan = planFlight(P, wall, Date.now());
 const { slot: bootSlot, placeId, pinnedPlace, lat, lon, groundM, track, weather, paneYaw } = plan;
 // Standby draws nothing, so it has no visit to move on from: it waits for the next push.
+// ponytail: it still builds the whole scene once before going dark; skip the build if standby ever runs hot.
 const { mode } = wall;
 if (P.blind && mode !== 'standby') setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && location.reload(), 1000);
 document.documentElement.classList.toggle('standby', mode === 'standby');
