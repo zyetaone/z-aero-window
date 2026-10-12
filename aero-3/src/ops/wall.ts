@@ -60,7 +60,7 @@ export const PRESETS: Record<string, Push> = {
 	'Golden hour': { place: 'dubai', weather: 'fair', clock: 17.6, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
 	'Alpine dawn': { place: 'himalayas', weather: 'clear', clock: 6.5, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
 	'Gulf midnight': { place: 'dubai', weather: 'clear', clock: 23, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
-	'Storm transit': { place: 'mumbai', weather: 'towering', clock: 15, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
+	'Storm transit': { place: 'mumbai', weather: 'storm', clock: 15, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
 	'City lights': { place: 'hyderabad', weather: 'scattered', clock: 21, gains: { ...NO_GAINS }, media: { audio: [], video: null } }
 };
 export const MAX_PUSH_BYTES = 1024;

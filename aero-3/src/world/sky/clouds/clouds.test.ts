@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { nightTerms } from './clouds.ts';
+import { boltTerm, nightTerms } from './clouds.ts';
 
 test('by day the night terms are exactly zero: day rendering is bit-identical', () => {
 	// moonGain and cityGlow both carry the dark (moonlightAt, dark x lights), so day passes 0, 0.
@@ -26,4 +26,11 @@ test('a moonlit city cloud reads grey-blue, not black', () => {
 	// moonBody x shade (~0.84) x MOON blue (1.0) ≈ 0.35: ten times the old 0.03 floor.
 	expect(moonBody * 0.84).toBeGreaterThan(0.3);
 	expect(city).toBeCloseTo(Math.exp(-((5_000 / 30_000) ** 2)));
+});
+
+test('a strike lights the clouds around it and none far off', () => {
+	expect(boltTerm(0, 0)).toBe(0);
+	expect(boltTerm(1, 0)).toBeGreaterThan(1); // the cell it fires in goes white
+	expect(boltTerm(1, 5_000)).toBeGreaterThan(boltTerm(1, 15_000));
+	expect(boltTerm(1, 40_000)).toBeLessThan(0.01);
 });

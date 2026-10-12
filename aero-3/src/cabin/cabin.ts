@@ -11,6 +11,7 @@ import { qrSvg } from './qr.ts';
 import { mulberry32 } from '#math.ts';
 import { DWELL_SEC, PLACES, placeName } from '#flight/places.ts';
 import { hhmm, solarHour } from '#world/sky/ephemeris.ts';
+import { SOUND_MPS, strikeAt } from '#flight/storm.ts';
 
 const BLIND_LEAD_SEC = 6; // down this long before the boundary
 const LAG_SEC = 12; // and up no sooner than this after it, so panes lift together
@@ -62,8 +63,9 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
  * The cabin's sound: aero-2's synthesised drone (media/ambient-audio.ts), looped
  * noise through a low-pass whose cutoff falls as the aircraft climbs. No files.
  * A kiosk Chromium runs with autoplay allowed; anywhere else the first tap starts it.
+ * On a rainy day a hiss of rain on the skin rides on top, and a storm adds thunder.
  */
-export function cabinDrone(volume = 0.6) {
+export function cabinDrone(volume = 0.6, rain = false) {
 	const ctx = new AudioContext();
 	const gain = ctx.createGain();
 	gain.gain.value = volume * 0.35;
@@ -75,12 +77,66 @@ export function cabinDrone(volume = 0.6) {
 	const noise = Object.assign(ctx.createBufferSource(), { buffer, loop: true });
 	noise.connect(filter).connect(gain).connect(ctx.destination);
 	noise.start();
+	if (rain) {
+		// The same noise, high and quiet: rain on the fuselage, under the engines.
+		const hiss = Object.assign(ctx.createBufferSource(), { buffer, loop: true });
+		const band = Object.assign(ctx.createBiquadFilter(), { type: 'bandpass' as const });
+		band.frequency.value = 3_500;
+		band.Q.value = 0.6;
+		const level = ctx.createGain();
+		level.gain.value = volume * 0.05;
+		hiss.connect(band).connect(level).connect(ctx.destination);
+		hiss.start(0, 0.7); // offset from the drone's loop, so the two never beat
+	}
 	addEventListener('pointerdown', () => ctx.resume(), { once: true });
 	return {
+		/**
+		 * One roll of thunder, `delaySec` from now: a crack when it is close, a long low rumble
+		 * always, quieter with distance. Through the cabin wall, so everything above 400 Hz is gone.
+		 */
+		thunder(delaySec: number, distM: number) {
+			const at = ctx.currentTime + delaySec;
+			const near = Math.exp(-distM / 8_000);
+			const roll = Object.assign(ctx.createBufferSource(), { buffer });
+			const low = Object.assign(ctx.createBiquadFilter(), { type: 'lowpass' as const });
+			low.frequency.setValueAtTime(150 + 250 * near, at);
+			low.frequency.exponentialRampToValueAtTime(60, at + 4);
+			const env = ctx.createGain();
+			const peak = volume * (0.25 + 0.75 * near);
+			env.gain.setValueAtTime(0, at);
+			env.gain.linearRampToValueAtTime(peak, at + 0.04 + 0.4 * (1 - near));
+			env.gain.setTargetAtTime(0, at + 0.6, 1.2);
+			roll.connect(low).connect(env).connect(ctx.destination);
+			roll.start(at, Math.random() * 1.5); // ponytail: centre pane only, so no sync needed
+			roll.stop(at + 7);
+		},
 		/** Lower and duller as the aircraft climbs: 220 Hz on the ground to 110 Hz at 12 km. */
 		setAltitude(altitudeM: number) {
 			filter.frequency.setTargetAtTime(220 - Math.min(1, Math.max(0, altitudeM / 12_000)) * 110, ctx.currentTime, 0.5);
 		}
+	};
+}
+
+/**
+ * A storm's lightning, seen and heard: the glass flashes (#flash, brighter at night), and the
+ * drone rolls thunder at the speed of sound from where it struck. Returns, per frame, the
+ * strike in world metres for the clouds to light (or null). `pin` is the clouds' centre.
+ */
+export function lightning(seed: number, pin: [x: number, z: number], drone: { thunder(delaySec: number, distM: number): void } | null) {
+	const flashEl = document.querySelector<HTMLElement>('#flash')!;
+	let [heard, shown] = [0, 0];
+	return (wallSec: number, from: { x: number; z: number }, dark: number) => {
+		const strike = strikeAt(seed, wallSec);
+		const opacity = strike ? strike.flash * (0.03 + 0.09 * dark) : 0;
+		if (opacity !== shown) flashEl.style.opacity = String((shown = opacity)); // only while it changes
+		if (!strike) return null;
+		const [x, z] = [pin[0] + strike.x, pin[1] + strike.z];
+		if (strike.startSec !== heard) {
+			heard = strike.startSec;
+			const distM = Math.hypot(x - from.x, z - from.z);
+			drone?.thunder(Math.max(0, strike.startSec + distM / SOUND_MPS - wallSec), distM);
+		}
+		return { x, z, flash: strike.flash };
 	};
 }
 

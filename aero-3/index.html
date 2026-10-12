@@ -45,6 +45,7 @@
 			}
 			/* Rain on the glass: still drops painted once to a canvas (cabin.ts), plus a few that run.
 			   Water lenses the scene upside down: dark above, a bright rim below, one glint. Dimmer at night. */
+			#flash { z-index: 1; background: #dfe8ff; opacity: 0; mix-blend-mode: screen; } /* lightning: cabin.ts lightning() */
 			#rain { z-index: 1; }
 			#rain canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: calc(1 - 0.65 * var(--night)); }
 			#rain span {
@@ -94,6 +95,7 @@
 	</head>
 	<body>
 		<canvas id="world"></canvas>
+		<div id="flash" class="cabin" aria-hidden="true"></div>
 		<div id="rain" class="cabin" hidden aria-hidden="true"></div>
 		<div id="frame" class="cabin" aria-hidden="true"></div>
 		<div id="blind" class="cabin" aria-hidden="true"><span></span><time></time><small></small></div>

@@ -40,6 +40,12 @@ const NIGHT_FLOOR = new Color3(0.03, 0.035, 0.05);
 const MOON = new Color3(0.62, 0.72, 1);
 /** City light catches clouds within about this far of the pin; past it the deck is moonlit only. */
 const CITY_SIGMA_M = 30_000;
+/** A strike's blue-white, and how far through the deck it lights the clouds around it. */
+const BOLT = new Color3(0.85, 0.9, 1);
+const BOLT_SIGMA_M = 12_000;
+
+/** Pure: how much a lightning strike (storm.ts) lights a puff `distM` from it. */
+export const boltTerm = (flash: number, distM: number) => flash * 3 * Math.exp(-((distM / BOLT_SIGMA_M) ** 2));
 
 /**
  * Pure: the night additions for one puff (Slice 5). Why they exist: after dusk the
@@ -156,8 +162,9 @@ export async function createClouds(
 		 * `toSun` is the unit vector to the sun; `dark` 0 by day, 1 at night. `toMoon`
 		 * points at the moon with `moonGain` its light (moonlightAt, already dark-gated;
 		 * 0 with ?moon=0); `cityGlow` is dark x the city's lamp factor for the upglow.
+		 * `bolt` is a lightning strike in the deck (world x, z), lighting the puffs around it.
 		 */
-		update(nowMs: number, toSun: Vector3, dark: number, toMoon: Vector3, moonGain: number, cityGlow: number) {
+		update(nowMs: number, toSun: Vector3, dark: number, toMoon: Vector3, moonGain: number, cityGlow: number, bolt: { x: number; z: number; flash: number } | null = null) {
 			const shift = (nowMs / 1000) * weather.wind; // today's speed, toward today's direction
 			sun.diffuse.scaleToRef(Math.min(1, sun.intensity), sunColor);
 			const ambient = scene.ambientColor;
@@ -182,12 +189,13 @@ export async function createClouds(
 				// After dusk the moon and the city below take over (nightTerms): moonlit body
 				// plus a moon side, and sodium upglow falling off with distance from the pin.
 				const { moonBody, city } = nightTerms(Vector3.Dot(p.normal, toMoon), moonGain, cityGlow, Math.hypot(x - center[0], z - center[1]));
+				const flash = bolt ? boltTerm(bolt.flash, Math.hypot(x - bolt.x, z - bolt.z)) : 0;
 				const alpha = p.alpha * Math.max(0, edge) * (1 - smoothstep(190_000, 300_000, far));
 				s.isVisible = alpha > 0.01; // faded out at the wrap edge or past 190 km: skip the draw
 				s.color!.set(
-					Math.min(1, (ambient.r + sunColor.r * lit) * p.shade + NIGHT_FLOOR.r + MOON.r * moonBody * p.shade + UNDERGLOW.r * city),
-					Math.min(1, (ambient.g + sunColor.g * lit) * p.shade + NIGHT_FLOOR.g + MOON.g * moonBody * p.shade + UNDERGLOW.g * city),
-					Math.min(1, (ambient.b + sunColor.b * lit) * p.shade + NIGHT_FLOOR.b + MOON.b * moonBody * p.shade + UNDERGLOW.b * city),
+					Math.min(1, (ambient.r + sunColor.r * lit) * p.shade + NIGHT_FLOOR.r + MOON.r * moonBody * p.shade + UNDERGLOW.r * city + BOLT.r * flash),
+					Math.min(1, (ambient.g + sunColor.g * lit) * p.shade + NIGHT_FLOOR.g + MOON.g * moonBody * p.shade + UNDERGLOW.g * city + BOLT.g * flash),
+					Math.min(1, (ambient.b + sunColor.b * lit) * p.shade + NIGHT_FLOOR.b + MOON.b * moonBody * p.shade + UNDERGLOW.b * city + BOLT.b * flash),
 					alpha // no aerial perspective on sprites, so the distant ones fade into the haze
 				);
 			}

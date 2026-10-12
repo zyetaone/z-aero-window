@@ -16,7 +16,7 @@ export function readParams(search: string) {
 		place: q.get('place'),
 		/** Pin the local solar hour, 0-24; NaN follows the wall or real time. */
 		clock: num('clock', NaN),
-		/** Pin today's regime: clear, fair, scattered, towering, cirrus, hazy, overcast. */
+		/** Pin today's regime: clear, fair, scattered, towering, cirrus, hazy, overcast, storm. */
 		weather: q.get('weather'),
 		/** Pin the cruise, m over the ground; NaN flies the visit's own. */
 		alt: num('alt', NaN),

@@ -31,12 +31,14 @@ type Regime = {
 const ALL: Layout[] = ['scatter', 'streets', 'front', 'clumps'];
 const REGIMES: Record<string, Regime> = {
 	clear: { weight: 0.14, cover: [0.1, 0.3, 0.3], size: 1, sun: 1.05, haze: 0.7, rain: 0, contrast: 1.22, mie: 0.45, layouts: ['scatter'] },
-	fair: { weight: 0.28, cover: [0.6, 0.8, 0.6], size: 0.9, sun: 1, haze: 0.9, rain: 0, contrast: 1.15, mie: 0.6, layouts: ALL },
-	scattered: { weight: 0.22, cover: [1, 1, 1], size: 1, sun: 0.95, haze: 1, rain: 0, contrast: 1.1, mie: 0.75, layouts: ALL },
+	fair: { weight: 0.25, cover: [0.6, 0.8, 0.6], size: 0.9, sun: 1, haze: 0.9, rain: 0, contrast: 1.15, mie: 0.6, layouts: ALL },
+	scattered: { weight: 0.21, cover: [1, 1, 1], size: 1, sun: 0.95, haze: 1, rain: 0, contrast: 1.1, mie: 0.75, layouts: ALL },
 	towering: { weight: 0.1, cover: [1.3, 1.3, 0.5], size: 1.35, sun: 0.9, haze: 1.1, rain: 0.4, contrast: 1.2, mie: 0.8, layouts: ['scatter', 'front', 'clumps'] },
 	cirrus: { weight: 0.08, cover: [0.3, 0.6, 2.5], size: 1, sun: 0.9, haze: 1.2, rain: 0, contrast: 1.05, mie: 1, layouts: ['scatter', 'streets'] },
 	hazy: { weight: 0.11, cover: [0.4, 0.5, 0.8], size: 1, sun: 0.75, haze: 1.8, rain: 0, contrast: 0.95, mie: 2, layouts: ['scatter'] },
-	overcast: { weight: 0.07, cover: [1.5, 1.5, 0.3], size: 1.2, sun: 0.6, haze: 1.4, rain: 1, contrast: 1, mie: 1.6, layouts: ['scatter'] }
+	overcast: { weight: 0.06, cover: [1.5, 1.5, 0.3], size: 1.2, sun: 0.6, haze: 1.4, rain: 1, contrast: 1, mie: 1.6, layouts: ['scatter'] },
+	// Lightning (storm.ts) under a dark, heaped deck, rain on the glass every time.
+	storm: { weight: 0.05, cover: [1.4, 1.5, 0.2], size: 1.3, sun: 0.55, haze: 1.5, rain: 1, contrast: 1.08, mie: 1.8, layouts: ['front', 'clumps'] }
 };
 
 export const REGIME_NAMES = Object.keys(REGIMES);
@@ -82,7 +84,7 @@ export function weatherFor(place: string, ms: number, named?: string | null): We
 		wind: 4 + 10 * r(5),
 		windDir: 2 * Math.PI * r(11),
 		lights: 0.85 + 0.3 * r(6),
-		build: ({ towering: 1, scattered: 0.4, fair: 0.2 } as Record<string, number>)[name] ?? 0,
-		grey: ({ overcast: 0.8, towering: 0.4, hazy: 0.3 } as Record<string, number>)[name] ?? 0.1 * r(7)
+		build: ({ storm: 1, towering: 1, scattered: 0.4, fair: 0.2 } as Record<string, number>)[name] ?? 0,
+		grey: ({ storm: 0.9, overcast: 0.8, towering: 0.4, hazy: 0.3 } as Record<string, number>)[name] ?? 0.1 * r(7)
 	};
 }

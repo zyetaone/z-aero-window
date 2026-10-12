@@ -21,7 +21,7 @@ import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Scene } from '@babylonjs/core/scene';
 import { Atmosphere } from '@babylonjs/addons/atmosphere';
 import { createHud } from './cabin/hud.ts';
-import { adminQr, cabinDrone, cabinOverlay, loneGestures } from './cabin/cabin.ts';
+import { adminQr, cabinDrone, cabinOverlay, lightning, loneGestures } from './cabin/cabin.ts';
 import { playAudioPlaylist, showVideo } from './cabin/media.ts';
 import { RAD } from './math.ts';
 import { keepAlive } from './ops/kiosk.ts';
@@ -136,7 +136,7 @@ const wing = !P.wing ? null : await createWing(scene, plan.seat);
 const tracks = wall.media?.audio ?? []; // `?.`: a wall stored before media keeps playing
 const clip = wall.media?.video ?? null;
 // A pushed playlist replaces the synthesised drone (same gate: centre/solo, ?audio=0 off).
-const drone = P.audio && (P.role ?? 'center') === 'center' && !tracks.length ? cabinDrone() : null;
+const drone = P.audio && (P.role ?? 'center') === 'center' && !tracks.length ? cabinDrone(0.6, weather.rain) : null;
 if ((P.role ?? 'center') === 'center' && P.audio && tracks.length) playAudioPlaylist(tracks, P.wall);
 if (clip) showVideo(clip, P.wall); // muted everywhere: a video wall is one image, not three soundtracks
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
@@ -181,6 +181,7 @@ adminQr(P.wall);
 // Lone pane only (no ?role=): blind-drag departures and the tap clock stay local,
 // so they can never split a wall. Wall panes get the QR hold and nothing else.
 if (!P.role) loneGestures(placeId);
+const storm = weather.name === 'storm' ? lightning(weather.seed, [pinX, pinZ], drone) : null;
 // A new push: every pane lowers the blind and reloads into it on the wall's applyAt second.
 let changeover = false;
 setInterval(async () => {
@@ -231,7 +232,7 @@ engine.runRenderLoop(() => {
 	if (aim.at) camera.setTarget(aim.at);
 	cabin.update(now / 1000, dark, skyMs);
 
-	clouds.update(now, toSun.set(s.x, s.y, s.z), dark, toMoon, moonGain, dark * weather.lights);
+	clouds.update(now, toSun.set(s.x, s.y, s.z), dark, toMoon, moonGain, dark * weather.lights, storm?.(now / 1000, camera.position, dark));
 	stars.update(skyMs, light.stars);
 	moon.update(skyMs, s, dark);
 	drone?.setAltitude(camera.position.y);
