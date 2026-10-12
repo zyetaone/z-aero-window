@@ -41,14 +41,20 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
   are seeded per visit, a slow climb, bank into the turn, the seat on the inside, the gaze panning
   ±18°. The camera is aircraft × seat quaternions. Tested.
 - `src/flight/weather.ts` (`weatherFor`) — one object per place and UTC day: regime (clear, fair, scattered, towering,
-  cirrus, hazy, overcast), sun strength, haze, rain, cloud deck height and wind, heap and grey,
+  cirrus, hazy, overcast, storm), sun strength, haze, rain, cloud deck height and wind, heap and grey,
   night-light gain. `?weather=` pins the regime.
+- `src/flight/storm.ts` (`strikeAt`) — lightning on a storm day, pure on the wall clock (aero-2's): one
+  chance a second, a return stroke, a dip and a re-strike, 4-30 km from the pin, so all panes flash on
+  the same frame. `cabin.ts` `lightning()` turns it into a faint #flash on the glass (brighter at night),
+  the strike's light in the clouds (`clouds.ts` `boltTerm`) and thunder on the drone at 343 m/s.
+  Screenshots of a strike need a frozen `Date.now` (it is gone before a live screenshot lands).
 - `src/cabin/cabin.ts` — aero-2's synthesised cabin drone (centre or solo pane only, `?audio=0` off,
-  cutoff falls with altitude), and DOM over the canvas (CSS in index.html): the window rim darkening with the
+  cutoff falls with altitude; a rain hiss on rainy days, thunder in storms), and DOM over the canvas (CSS in index.html): the window rim darkening with the
   light, rain on rainy days (still drops painted once to a canvas, seeded per pane, plus five
   runners; no backdrop-filter), and the blind. The blind is closed in the markup, lifts after 30
   frames and 12 s after the later of the slot start and the wall push it loaded into (so panes lift
-  together), and comes down 6 s before every 10-min slot boundary, where main.ts reloads.
+  together), and comes down 6 s before every 10-min slot boundary, where main.ts reloads; while
+  it closes it reads "here → next" when the rotation moves on.
   A pane that boots inside a push's 10 s lead waits for its applyAt before building.
 - `src/cabin/hud.ts` — the time-of-day slider, the Lights panel, the place picker. The HUD is off on a wall pane (any `?role=`), on elsewhere; `?hud=0|1` overrides.
 - `/api/status` answers 503 (`page: building|failed`) until the server has bundled the page once
@@ -156,7 +162,8 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
 - `server.ts` — `Bun.serve` with HTML-import bundling and `{ dir }` tile routes. No Vite, no SvelteKit.
 - `server.ts` fleet: `/api/status` carries `fps` (the page POSTs `/api/fps` from loopback every 30 s)
   and `commit` for `deploy/pi/health-check.sh`; `/api/fleet/heartbeat` takes its heartbeat (bearer
-  `AERO_FLEET_TOKEN`, fail-closed; dev loopback open) into an in-memory table `/admin` shows.
+  `AERO_FLEET_TOKEN`, fail-closed; dev loopback open) into an in-memory table `/admin` shows,
+  headed by `fleet.ts` `rollUp` (live panes only: count, hottest, throttling, average fps).
   `src/ops/kiosk.ts`: the same 30 s tick posts fps, reloads a visible page that drew no frame
   (through `recover()`'s budget) and polls `/api/thermal` to shed pixels on a hot Pi.
   `src/cabin/credits.ts` is the one attribution list: the blind (while down) and `/admin`'s footer.
@@ -168,6 +175,9 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
   URL params beat the wall. Panes take `?role=left|center|right` (±24°).
   A push may also carry the five Lights gains (street, building, far 0-2; haze, glow 0-1), which
   REPLACE the pane's defaults (never multiply; a lone pane's sliders still edit them), and media.
+  And a `mode`: null flies; `blind` holds every blind down (place, time, credits); `standby` is black
+  glass. Both draw one frame then only the blind's clock, silence the sound and the clip, and keep
+  the render loop counting so the stall watchdog sees a live page. Standby skips the slot reload.
 - `src/ops/media.ts` + `/api/media` + `/media/*` — the operator's music and clips in `MEDIA_DIR`
   (`./data/media`, gitignored; `AERO_MEDIA_MB`, 50). `GET` lists, `POST` uploads one multipart file
   (token-gated like the wall; length refused before the body is read; bare names, mp3/wav/ogg/mp4/
