@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test';
 import { MAX_MEDIA_IDS, MAX_PUSH_BYTES, NO_GAINS, NO_MEDIA, parsePush, PRESETS } from './wall.ts';
 
 test('a push takes known places, regimes and hours, and nothing else', () => {
-	expect(parsePush({ place: 'dubai', weather: 'hazy', clock: 21.5 })).toEqual({ place: 'dubai', weather: 'hazy', clock: 21.5, gains: { ...NO_GAINS }, media: { audio: [], video: null } });
-	expect(parsePush({})).toEqual({ place: null, weather: null, clock: null, gains: { ...NO_GAINS }, media: { ...NO_MEDIA } });
+	expect(parsePush({ place: 'dubai', weather: 'hazy', clock: 21.5 })).toEqual({ place: 'dubai', weather: 'hazy', clock: 21.5, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null });
+	expect(parsePush({})).toEqual({ place: null, weather: null, clock: null, gains: { ...NO_GAINS }, media: { ...NO_MEDIA }, mode: null });
 	expect(parsePush({ place: 'constructor' })).toBeNull();
 	expect(parsePush({ place: '../etc' })).toBeNull();
 	expect(parsePush({ weather: 'snow' })).toBeNull();
@@ -25,7 +25,7 @@ test('gains are optional and default to null (the pane keeps its own)', () => {
 
 test('gains round-trip inside their slider ranges', () => {
 	const gains = { street: 1.5, building: 0, far: 2, haze: 0.3, glow: 1 };
-	expect(parsePush({ gains })).toEqual({ place: null, weather: null, clock: null, gains, media: { audio: [], video: null } });
+	expect(parsePush({ gains })).toEqual({ place: null, weather: null, clock: null, gains, media: { audio: [], video: null }, mode: null });
 });
 
 test('a bad gain fails the whole push, like a bad place or hour', () => {
@@ -82,7 +82,18 @@ test('a maximal media push still fits the 1024-byte wall budget', () => {
 		weather: 'towering',
 		clock: 21.5,
 		gains: { street: 2, building: 2, far: 2, haze: 1, glow: 1 },
-		media: { audio: Array.from({ length: MAX_MEDIA_IDS }, (_, i) => id(i)), video: 'clip-0123456789abcdef.mp4' }
+		media: { audio: Array.from({ length: MAX_MEDIA_IDS }, (_, i) => id(i)), video: 'clip-0123456789abcdef.mp4' },
+		mode: 'standby'
 	})!;
 	expect(JSON.stringify(push).length).toBeLessThan(MAX_PUSH_BYTES);
+});
+
+test('the wall flies, holds its blinds down, or stands by dark; nothing else', () => {
+	expect(parsePush({})!.mode).toBeNull();
+	expect(parsePush({ mode: 'blind' })!.mode).toBe('blind');
+	expect(parsePush({ mode: 'standby' })!.mode).toBe('standby');
+	expect(parsePush({ mode: 'party' })).toBeNull();
+	expect(parsePush({ mode: 1 })).toBeNull();
+	// A wall stored before modes existed still parses, as flying.
+	expect(parsePush({ place: 'dubai', weather: null, clock: null, gains: NO_GAINS, media: NO_MEDIA })!.mode).toBeNull();
 });

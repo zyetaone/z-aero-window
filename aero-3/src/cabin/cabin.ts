@@ -20,9 +20,10 @@ const READY_FRAMES = 30; // and not before the scene has drawn this many frames
 /**
  * `pane` seeds this window's rain. `openAfter` (wall seconds) is the wall push this page loaded into:
  * the blind lifts LAG_SEC after the later of it and the slot start, so after a push every pane
- * reveals on the same second rather than whenever its own scene finished building.
+ * reveals on the same second rather than whenever its own scene finished building. `next` is the
+ * place after this one: the closing blind reads "this → next" when the wall is moving on.
  */
-export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon: number, pane: number, openAfter = 0) {
+export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon: number, pane: number, openAfter = 0, next = place) {
 	const [blind, drops] = ['#blind', '#rain'].map((s) => document.querySelector<HTMLElement>(s)!) as [HTMLElement, HTMLElement];
 	const clockEl = document.querySelector<HTMLElement>('#clock')!;
 	blind.hidden = !blinds;
@@ -31,23 +32,26 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 	clockEl.querySelector('span')!.textContent = placeName(place); // the tap clock (loneGestures): same visit, same city
 	if (rain) beads(drops, pane);
 
-	let [frames, last, held, night, clock] = [0, 0, false, '', ''];
+	let [frames, last, held, night, clock, title] = [0, 0, false, '', '', placeName(place)];
 	return {
-		/** Down now and stay down: a wall push is about to reload the page. */
+		/** Down now and stay down: a wall push is about to reload the page, or the wall is in 'blind' mode. */
 		hold() {
 			held = true;
 			blind.classList.remove('open');
 		},
 		/** Once per frame; touches the DOM four times a second at most. */
 		update(wallSec: number, dark: number, skyMs = wallSec * 1000) {
-			if (++frames < READY_FRAMES || wallSec - last < 0.25 || held) return;
+			if (++frames < READY_FRAMES || wallSec - last < 0.25) return;
 			last = wallSec;
 			// Steps of 0.05, and only on change: each write repaints the full-pane rim and rain.
 			const n = (Math.round(dark * 20) / 20).toFixed(2);
 			if (n !== night) document.documentElement.style.setProperty('--night', (night = n));
 			const phase = ((wallSec % DWELL_SEC) + DWELL_SEC) % DWELL_SEC;
 			const since = wallSec - Math.max(wallSec - phase, openAfter);
-			blind.classList.toggle('open', phase < DWELL_SEC - BLIND_LEAD_SEC && since >= LAG_SEC);
+			const leaving = phase >= DWELL_SEC - BLIND_LEAD_SEC;
+			if (!held) blind.classList.toggle('open', !leaving && since >= LAG_SEC);
+			const t2 = leaving && !held && next !== place ? `${placeName(place)} → ${placeName(next)}` : placeName(place);
+			if (t2 !== title) blind.querySelector('span')!.textContent = title = t2;
 			const hour = solarHour(skyMs, lon); // the sky's hour: a pinned clock shows its own time, not the wall's
 			const t = hhmm(hour);
 			if (t !== clock) {

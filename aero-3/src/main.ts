@@ -28,7 +28,7 @@ import { keepAlive } from './ops/kiosk.ts';
 import { fetchWall, NO_WALL } from './ops/wall.ts';
 import { readParams } from './flight/params.ts';
 import { SEAT_PITCH } from './flight/path.ts';
-import { slotAt } from './flight/places.ts';
+import { destinationAt, DWELL_SEC, slotAt } from './flight/places.ts';
 import { planFlight } from './flight/plan.ts';
 import { lightingAt, moonlightAt, type Knobs } from './world/lighting.ts';
 import { BUILDING_CAP, createBuildings } from './world/city/buildings.ts';
@@ -57,7 +57,10 @@ if (wall.applyAt * 1000 > Date.now()) await new Promise((r) => setTimeout(r, wal
 // the page reloads behind it, which also frees every buffer of the last visit. ?blind=0 holds one.
 const plan = planFlight(P, wall, Date.now());
 const { slot: bootSlot, placeId, pinnedPlace, lat, lon, groundM, track, weather, paneYaw } = plan;
-if (P.blind) setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && location.reload(), 1000);
+// Standby draws nothing, so it has no visit to move on from: it waits for the next push.
+const { mode } = wall;
+if (P.blind && mode !== 'standby') setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && location.reload(), 1000);
+document.documentElement.classList.toggle('standby', mode === 'standby');
 // The atmosphere's day exposure (?sky=, 1.7): at 1 a clear afternoon rendered dark slate. See lighting.ts.
 const knobs: Knobs = { sky: P.sky, lift: P.lift, lamps: P.lamps, carpet: P.carpet, moonlight: P.moonlight };
 const clock = { pinned: plan.clock }; // the HUD's slider writes it
@@ -136,9 +139,11 @@ const wing = !P.wing ? null : await createWing(scene, plan.seat);
 const tracks = wall.media?.audio ?? []; // `?.`: a wall stored before media keeps playing
 const clip = wall.media?.video ?? null;
 // A pushed playlist replaces the synthesised drone (same gate: centre/solo, ?audio=0 off).
-const drone = P.audio && (P.role ?? 'center') === 'center' && !tracks.length ? cabinDrone(0.6, weather.rain) : null;
-if ((P.role ?? 'center') === 'center' && P.audio && tracks.length) playAudioPlaylist(tracks, P.wall);
-if (clip) showVideo(clip, P.wall); // muted everywhere: a video wall is one image, not three soundtracks
+// Blinds down or standby: no sound and no clip, only the flight under the blind (or nothing).
+const sound = !mode && P.audio && (P.role ?? 'center') === 'center';
+const drone = sound && !tracks.length ? cabinDrone(0.6, weather.rain) : null;
+if (sound && tracks.length) playAudioPlaylist(tracks, P.wall);
+if (clip && !mode) showVideo(clip, P.wall); // muted everywhere: a video wall is one image, not three soundtracks
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
 // towns on the far ring past the roads (city/lights.ts).
 const lights = createLights(roads ?? [], terrain.project, terrain.groundAt, scene, buildings?.roofLights, terrain.sites, buildings?.windows, P.caps ? [pinX, pinZ] : null);
@@ -175,7 +180,8 @@ const toMoon = new Vector3();
 let moonGain = 0;
 const [aircraft, seat] = [new Quaternion(), new Quaternion()];
 camera.rotationQuaternion = new Quaternion();
-const cabin = cabinOverlay(P.blind, weather.rain, placeId, lon, P.role ? ['left', 'center', 'right'].indexOf(P.role) + 1 : 0, wall.applyAt);
+const cabin = cabinOverlay(P.blind, weather.rain, placeId, lon, P.role ? ['left', 'center', 'right'].indexOf(P.role) + 1 : 0, wall.applyAt, pinnedPlace ?? destinationAt((bootSlot + 1) * DWELL_SEC));
+if (mode) cabin.hold();
 document.querySelector<HTMLElement>('#frame')!.hidden = !P.frame;
 adminQr(P.wall);
 // Lone pane only (no ?role=): blind-drag departures and the tap clock stay local,
@@ -198,6 +204,9 @@ engine.runRenderLoop(() => {
 	if (++frames === 60) document.documentElement.dataset.ready = '1';
 	const now = Date.now();
 	const skyMs = clock.pinned === null ? now : atSolarHour(now, lon, clock.pinned);
+	// Blinds down or standby: one frame drawn for the bench's ready mark, then only the blind's clock.
+	// `frames` keeps counting, so the stall watchdog (ops/kiosk.ts) still sees a live page.
+	if (mode && frames > 60) return cabin.update(now / 1000, 0, skyMs);
 	const s = sunAt(skyMs, lat, lon);
 	sunLight.direction.set(-s.x, -s.y, -s.z);
 

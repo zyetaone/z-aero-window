@@ -49,19 +49,26 @@ export const MAX_MEDIA_IDS = 8;
 /** Bare store names (server.ts mediaName): no slashes, audio/video extensions. */
 export const MEDIA_ID = /^[A-Za-z0-9][A-Za-z0-9._%-]{0,63}$/;
 
-export type Push = { place: string | null; weather: string | null; clock: number | null; gains: Gains; media: Media };
+/**
+ * What the wall shows: null flies (the default); 'blind' holds every blind down (the place,
+ * the time and the credits on it); 'standby' is a dark wall that draws nothing, for after hours.
+ */
+export const MODES = ['blind', 'standby'] as const;
+export type Mode = (typeof MODES)[number];
+
+export type Push = { place: string | null; weather: string | null; clock: number | null; gains: Gains; media: Media; mode: Mode | null };
 export type Wall = Push & { version: number; applyAt: number };
 
-export const NO_WALL: Wall = { version: 0, applyAt: 0, place: null, weather: null, clock: null, gains: NO_GAINS, media: NO_MEDIA };
+export const NO_WALL: Wall = { version: 0, applyAt: 0, place: null, weather: null, clock: null, gains: NO_GAINS, media: NO_MEDIA, mode: null };
 export const LEAD_SEC = 10;
 
 /** Named scenes for /admin, aero-2's presets as wall pushes: one tap fills the form. Gains and media stay default (a preset only fills the form; the operator sets them by hand). */
 export const PRESETS: Record<string, Push> = {
-	'Golden hour': { place: 'dubai', weather: 'fair', clock: 17.6, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
-	'Alpine dawn': { place: 'himalayas', weather: 'clear', clock: 6.5, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
-	'Gulf midnight': { place: 'dubai', weather: 'clear', clock: 23, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
-	'Storm transit': { place: 'mumbai', weather: 'storm', clock: 15, gains: { ...NO_GAINS }, media: { audio: [], video: null } },
-	'City lights': { place: 'hyderabad', weather: 'scattered', clock: 21, gains: { ...NO_GAINS }, media: { audio: [], video: null } }
+	'Golden hour': { place: 'dubai', weather: 'fair', clock: 17.6, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
+	'Alpine dawn': { place: 'himalayas', weather: 'clear', clock: 6.5, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
+	'Gulf midnight': { place: 'dubai', weather: 'clear', clock: 23, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
+	'Storm transit': { place: 'mumbai', weather: 'storm', clock: 15, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
+	'City lights': { place: 'hyderabad', weather: 'scattered', clock: 21, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null }
 };
 export const MAX_PUSH_BYTES = 1024;
 
@@ -82,7 +89,8 @@ function parseMediaId(value: unknown): string | null | false {
 /** An operator's push, checked field by field; null if any field is wrong. */
 export function parsePush(body: unknown): Push | null {
 	if (typeof body !== 'object' || body === null) return null;
-	const { place = null, weather = null, clock = null, gains = null, media = null } = body as Record<string, unknown>;
+	const { place = null, weather = null, clock = null, gains = null, media = null, mode = null } = body as Record<string, unknown>;
+	if (mode !== null && !MODES.includes(mode as Mode)) return null;
 	if (place !== null && !(typeof place === 'string' && Object.hasOwn(PLACES, place))) return null;
 	if (weather !== null && !(typeof weather === 'string' && REGIME_NAMES.includes(weather))) return null;
 	if (clock !== null && !(typeof clock === 'number' && clock >= 0 && clock <= 24)) return null;
@@ -106,7 +114,7 @@ export function parsePush(body: unknown): Push | null {
 	}
 	const video = parseMediaId(m.video);
 	if (video === false) return null;
-	return { place, weather, clock, gains: { street, building, far, haze, glow }, media: { audio: tracks, video } };
+	return { place, weather, clock, gains: { street, building, far, haze, glow }, media: { audio: tracks, video }, mode: mode as Mode | null };
 }
 
 /** The wall as `origin` serves it, or NO_WALL if it can't be had in time: a pane never waits on it. */
