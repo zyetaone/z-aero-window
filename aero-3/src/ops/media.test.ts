@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { listMedia, mediaUrl, parseIdList, parseMediaId } from './media.ts';
+import { playheadAt } from '#cabin/media.ts';
 
 test('IDs are bare store names, never paths or URLs', () => {
 	expect(parseMediaId('dawn-chorus.mp3')).toBe('dawn-chorus.mp3');
@@ -26,4 +27,12 @@ test('IDs resolve against the wall origin, never the pane', () => {
 
 test('an unreachable store lists nothing: panes never wait on it', async () => {
 	expect(await listMedia('http://127.0.0.1:9')).toEqual([]);
+});
+
+test('a clip on the wall clock: three panes seed the same frame, and no duration means no seek', () => {
+	expect(playheadAt(30, 12)).toBeCloseTo(6);
+	expect(playheadAt(1_000_030, 12)).toBe(playheadAt(1_000_030, 12));
+	expect(playheadAt(5, 12)).toBe(5);
+	expect(playheadAt(100, NaN)).toBeNull();
+	expect(playheadAt(100, 0)).toBeNull();
 });

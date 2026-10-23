@@ -35,7 +35,17 @@ export function playAudioPlaylist(ids: string[], origin: string, volume = 0.6) {
 	load();
 }
 
-/** One muted clip looped over the glass, under the blind (index.html z-order). */
+/** A playhead this far off the wall is pulled back: a Pi seek costs hundreds of ms, so no thrashing under it. */
+export const DRIFT_SEC = 1;
+
+/**
+ * Where a clip that has looped since t = 0 should be at `wallSec` (aero-2's media-clock, reduced to
+ * one clip): three panes that each seed and hold this show one frame. Null until the duration is known.
+ */
+export const playheadAt = (wallSec: number, durationSec: number) =>
+	Number.isFinite(durationSec) && durationSec > 0 ? ((wallSec % durationSec) + durationSec) % durationSec : null;
+
+/** One muted clip looped over the glass, under the blind (index.html z-order), on the wall clock. */
 export function showVideo(id: string, origin: string) {
 	const el = document.createElement('video');
 	el.src = mediaUrl(origin, id);
@@ -44,6 +54,13 @@ export function showVideo(id: string, origin: string) {
 	el.playsInline = true;
 	Object.assign(el.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', objectFit: 'cover', zIndex: '2' });
 	el.addEventListener('error', () => el.remove()); // no file, no element: the flight shows through
+	// Seed the playhead from the wall, then pull it back once a second if decode stalls let it drift.
+	const sync = () => {
+		const at = playheadAt(Date.now() / 1000, el.duration);
+		if (at !== null && !el.seeking && el.readyState >= 1 && Math.abs(el.currentTime - at) > DRIFT_SEC) el.currentTime = at;
+	};
+	el.addEventListener('loadedmetadata', sync);
+	const timer = setInterval(() => (el.isConnected ? sync() : clearInterval(timer)), 1000);
 	document.body.append(el);
 	el.play().catch(() => {});
 }
