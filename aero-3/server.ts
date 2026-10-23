@@ -17,6 +17,7 @@ import { networkInterfaces } from 'node:os';
 import index from './index.html';
 import admin from './admin.html';
 import { LEAD_SEC, MAX_PUSH_BYTES, MEDIA_ID, NO_WALL, parsePush, type Wall } from './src/ops/wall.ts';
+import { WeatherCache } from './src/ops/live-weather.ts';
 import { MAX_DEVICES, MAX_HEARTBEAT_BYTES, parseHeartbeat, type FleetRow } from './src/ops/fleet.ts';
 
 const IMAGERY_DIR = Bun.env.IMAGERY_DIR ?? '../data/tiles/sentinel2';
@@ -79,6 +80,11 @@ function authorised(req: Request, token: string) {
 	return got.length === want.length && timingSafeEqual(got, want);
 }
 
+const num = (s: string | null) => (s !== null && s !== '' && Number.isFinite(Number(s)) ? Number(s) : null);
+// Live sky weather (src/ops/live-weather.ts): Open-Meteo through this server, so every pane that
+// polls the wall origin shares one cache. Offline-first: stale serves, nothing serves 503.
+const weatherCache = new WeatherCache();
+
 const PORT = Number(Bun.env.PORT ?? 3300);
 const server = Bun.serve({
 	port: PORT,
@@ -97,6 +103,24 @@ const server = Bun.serve({
 			),
 		// { action: 'ok' | 'shed', tempC, ... } from health-check.sh; 'ok' when there is no file (a Mac, a fresh boot).
 		'/api/thermal': async () => Response.json(await Bun.file(THERMAL_FILE).json().catch(() => ({ action: 'ok' })), { headers: { 'Cache-Control': 'no-store' } }),
+		// The pane's one boot fetch (ops/live-weather.ts), same-origin or from the wall origin; CORS
+		// open like /api/wall, because the side panes read it from the centre Pi's server.
+		'/api/weather': async (req) => {
+			const url = new URL(req.url);
+			const lat = num(url.searchParams.get('lat'));
+			const lon = num(url.searchParams.get('lon'));
+			const cors = { 'Access-Control-Allow-Origin': '*' };
+			if (lat === null || lon === null || lat < -90 || lat > 90 || lon < -180 || lon > 180)
+				return Response.json({ error: 'lat and lon query params required (-90..90, -180..180)' }, { status: 400, headers: { ...cors, 'Cache-Control': 'no-store' } });
+			const out = await weatherCache.get(lat, lon);
+			if (out === null) return Response.json({ error: 'weather provider unreachable' }, { status: 503, headers: { ...cors, 'Cache-Control': 'no-store' } });
+			// A stale stand-in must not carry the 60 s shared-cache lifetime a live reading gets:
+			// a proxy would be entitled to pin hour-old weather as current.
+			const { fetchedAt: _, ...reading } = out;
+			return Response.json(out.stale ? { ...reading, fromCache: true, stale: true } : { ...reading, fromCache: out.fromCache }, {
+				headers: { ...cors, 'Cache-Control': out.stale ? 'no-store' : 'public, max-age=60' }
+			});
+		},
 		'/api/wall': {
 			// The other panes poll this from their own origin.
 			GET: () => Response.json(wall, { headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' } }),

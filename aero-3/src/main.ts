@@ -26,10 +26,11 @@ import { playAudioPlaylist, showVideo } from './cabin/media.ts';
 import { RAD } from './math.ts';
 import { keepAlive } from './ops/kiosk.ts';
 import { fetchWall, NO_WALL } from './ops/wall.ts';
+import { fetchLiveWeather } from './ops/live-weather.ts';
 import { readParams } from './flight/params.ts';
 import { SEAT_PITCH } from './flight/path.ts';
 import { destinationAt, DWELL_SEC, slotAt } from './flight/places.ts';
-import { planFlight } from './flight/plan.ts';
+import { planFlight, planPlace } from './flight/plan.ts';
 import { lightingAt, moonlightAt, type Knobs } from './world/lighting.ts';
 import { BUILDING_CAP, createBuildings } from './world/city/buildings.ts';
 import { createHaze } from './world/city/haze.ts';
@@ -55,12 +56,21 @@ if (wall.applyAt * 1000 > Date.now()) await new Promise((r) => setTimeout(r, wal
 // Every visit slot (10 min) is a fresh flight: a new city when following the rotation, a new
 // direction and today's weather either way (flight/plan.ts). The blind closes over the boundary and
 // the page reloads behind it, which also frees every buffer of the last visit. ?blind=0 holds one.
-const plan = planFlight(P, wall, Date.now());
-const { slot: bootSlot, placeId, pinnedPlace, lat, lon, groundM, track, weather, paneYaw } = plan;
-// Standby draws nothing, so it has no visit to move on from: it waits for the next push.
-// ponytail: it still builds the whole scene once before going dark; skip the build if standby ever runs hot.
+const nowMs = Date.now();
+const { placeId, lat, lon } = planPlace(P, wall, nowMs);
+// The live sky (ops/live-weather.ts): one fetch per visit, from the origin the wall comes from, so
+// every pane shares the wall server's 10-minute cache and flies one reading. It applies here, at the
+// visit boundary, never at a fetch-resolve second; offline (or a slow server) means the daily static.
+// An operator pin outranks live, so a pinned visit never asks (the smoke test's ?weather=, presets).
+const live = !(P.weather || wall.weather) ? await fetchLiveWeather(P.wall, lat, lon) : null;
+const plan = planFlight(P, wall, nowMs, live);
+const { slot: bootSlot, pinnedPlace, groundM, track, weather, paneYaw } = plan;
+// Neither mode has a visit to move on from: blind holds the fabric down, standby draws nothing, so the
+// slot reload would only rebuild a scene nobody can see. Both wait for the next push — the push that
+// lifts them (a version bump) reloads into the current slot anyway.
+// ponytail: both modes still build the whole scene once before going dark; skip the build if either runs hot.
 const { mode } = wall;
-if (P.blind && mode !== 'standby') setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && location.reload(), 1000);
+if (P.blind && !mode) setInterval(() => slotAt(Date.now() / 1000) !== bootSlot && location.reload(), 1000);
 document.documentElement.classList.toggle('standby', mode === 'standby');
 // The atmosphere's day exposure (?sky=, 1.7): at 1 a clear afternoon rendered dark slate. See lighting.ts.
 const knobs: Knobs = { sky: P.sky, lift: P.lift, lamps: P.lamps, carpet: P.carpet, moonlight: P.moonlight };

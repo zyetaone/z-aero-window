@@ -167,6 +167,12 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
   `src/ops/kiosk.ts`: the same 30 s tick posts fps, reloads a visible page that drew no frame
   (through `recover()`'s budget) and polls `/api/thermal` to shed pixels on a hot Pi.
   `src/cabin/credits.ts` is the one attribution list: the blind (while down) and `/admin`'s footer.
+- `src/ops/live-weather.ts` + `/api/weather` — Open-Meteo through the server (aero-2's port): the
+  wall server holds one cache (0.1° cell, 10 min fresh, stale to the hour, 64 cells), and every
+  pane fetches it once per visit, at boot, from the wall origin — the reading APPLIES at the visit
+  boundary, never at a fetch-resolve second. URL > wall > live > today (a pinned visit never asks).
+  Offline is the premise: stale serves, nothing serves 503, the daily static stands. No mid-slot
+  re-roll: the clouds are built once per visit, so live weather is per-visit by construction.
 - `src/ops/wall.ts` + `/api/wall` + `/admin` — what an operator pushes to every pane: place, weather,
   clock (null = default). The server keeps it in `WALL_FILE` (`./data/wall.json`, written via a
   rename); `POST` needs `Authorization: Bearer $AERO_ADMIN_TOKEN` and is off (503) without one.
@@ -276,8 +282,9 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
 
 1. **Window** — done: flight, day character, blind, rim, rain, white buildings, house lights.
 2. **Wall** — done: pane roles, the operator push, `/admin`, error-reload budget.
-3. **Cabin** — done: the wing, the cabin drone, the moon. Left: live weather (Open-Meteo through
-   the server, applied per visit), only if the fleet has internet.
+3. **Cabin** — done: the wing, the cabin drone, the moon, live weather (Open-Meteo through the
+   server, applied per visit — `ops/live-weather.ts`; only when the fleet has internet, which is
+   exactly the offline-first premise: no fetch, the daily static stands).
 4. **Ship** — done: aero-3 fits the existing deploy contract unchanged (`bun run build` writes a
    two-line `build/index.js`, `bun run serve` runs it, `/api/status` answers the updater's probe),
    so `aero-app.service` and `aero-updater.sh` need no edits. `install.sh --app aero-3 --wall
