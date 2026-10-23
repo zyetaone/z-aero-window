@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { NO_WALL } from '#ops/wall.ts';
 import { readParams } from './params.ts';
 import { planFlight, planPlace } from './plan.ts';
+import { MOODS, PLACES } from './places.ts';
+import { weatherFor } from './weather.ts';
 
 const at = Date.UTC(2026, 9, 6, 12, 3);
 
@@ -19,6 +21,16 @@ test('the URL beats the wall, and the wall beats the rotation', () => {
 	expect(planFlight(readParams(''), wall, at)).toMatchObject({ placeId: 'himalayas', clock: 6.5 });
 	expect(planFlight(readParams('?place=dubai&clock=21&seat=ahead'), wall, at)).toMatchObject({ placeId: 'dubai', clock: 21, seat: 'ahead' });
 	expect(planFlight(readParams('?place=atlantis&seat=roof'), NO_WALL, at).pinnedPlace).toBeNull();
+});
+
+test('every mood names a place, and a mood shows in the weather it colours', () => {
+	for (const id of Object.keys(MOODS)) expect(Object.hasOwn(PLACES, id), id).toBe(true);
+	const day = Date.UTC(2026, 9, 6);
+	// Phoenix sits its deck 800 m higher and sleeps darker than the default; Dubai glows.
+	expect(weatherFor('phoenix', day, 'fair').deckM).toBeGreaterThan(1_300 + 800 - 1);
+	expect(weatherFor('dubai', day, 'fair').lights).toBeGreaterThan(1.25 * 0.85 - 1e-9);
+	expect(weatherFor('mumbai', day, 'fair').deckM).toBeGreaterThanOrEqual(600);
+	expect(planFlight(readParams('?place=himalayas'), NO_WALL, at).seatPitch).toBeLessThan(planFlight(readParams('?place=dubai'), NO_WALL, at).seatPitch);
 });
 
 test('planPlace picks the same place planFlight flies, so the live fetch hits the right city', () => {

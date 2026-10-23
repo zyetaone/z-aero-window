@@ -7,9 +7,9 @@
 import type { Wall } from '#ops/wall.ts';
 import { hash, RAD } from '#math.ts';
 import { weatherFor } from './weather.ts';
-import { pathFor } from './path.ts';
+import { pathFor, SEAT_PITCH } from './path.ts';
 import type { Params } from './params.ts';
-import { destinationAt, DWELL_SEC, PLACES, slotAt } from './places.ts';
+import { destinationAt, DWELL_SEC, moodOf, PLACES, slotAt } from './places.ts';
 
 const ORBIT_M = 9000;
 // The outer two panes look 24° off the centre (aero-2's parallax); ?yaw= sets it exactly.
@@ -52,6 +52,8 @@ export function planFlight(P: Params, wall: Wall, nowMs: number, live: string | 
 		weather: weatherFor(placeId, slot * DWELL_SEC * 1000, P.weather || wall.weather || live),
 		seat: (SEATS as readonly string[]).includes(P.seat ?? '') ? (P.seat as Seat) : seatFor(hash(slot * 0x9e3779b1 + 7)),
 		paneYaw: (P.yaw ?? (P.role ? (ROLE_YAW[P.role] ?? 0) : 0)) * RAD,
+		/** How far below the horizon the window looks: the seat's, tipped by the place's mood (a coast lifts to the horizon). */
+		seatPitch: SEAT_PITCH + moodOf(placeId).pitchDeg * RAD,
 		/** The pinned solar hour, or null to follow the real sun. */
 		clock: Number.isNaN(P.clock) ? wall.clock : P.clock
 	};

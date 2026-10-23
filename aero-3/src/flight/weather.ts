@@ -8,6 +8,7 @@
  * still agree. `?weather=` pins a regime.
  */
 import { hash } from '#math.ts';
+import { moodOf } from './places.ts';
 
 /** How the near and mid clouds are arranged: anywhere, in rows along the wind, massed on one side, in a few groups. */
 export type Layout = 'scatter' | 'streets' | 'front' | 'clumps';
@@ -73,8 +74,11 @@ export function weatherFor(place: string, ms: number, named?: string | null): We
 		name = REGIME_NAMES.find((k) => r(0) < (acc += REGIMES[k]!.weight)) ?? 'fair';
 	}
 	const { weight: _, rain, layouts, ...regime } = REGIMES[name]!;
+	const mood = moodOf(place); // the place's own air, deck, cloud and night glow on top of the day's
 	return {
 		...regime,
+		cover: [regime.cover[0] * mood.cover, regime.cover[1] * mood.cover, regime.cover[2]],
+		haze: regime.haze * (0.9 + mood.dust),
 		name,
 		seed,
 		// A little of each day's own: never the same punch or the same blue twice.
@@ -82,10 +86,10 @@ export function weatherFor(place: string, ms: number, named?: string | null): We
 		mie: regime.mie * (0.85 + 0.3 * r(9)),
 		rain: r(3) < rain,
 		layout: layouts[Math.floor(r(10) * layouts.length)]!,
-		deckM: 1_300 + 1_200 * r(4),
+		deckM: Math.max(600, 1_300 + 1_200 * r(4) + mood.deckM),
 		wind: 4 + 10 * r(5),
 		windDir: 2 * Math.PI * r(11),
-		lights: 0.85 + 0.3 * r(6),
+		lights: (0.85 + 0.3 * r(6)) * mood.glow,
 		build: ({ storm: 1, towering: 1, scattered: 0.4, fair: 0.2 } as Record<string, number>)[name] ?? 0,
 		grey: ({ storm: 0.9, overcast: 0.8, towering: 0.4, hazy: 0.3 } as Record<string, number>)[name] ?? 0.1 * r(7),
 		turbulence: ({ storm: 2, towering: 1.6, overcast: 1.2, scattered: 1, hazy: 0.9, fair: 0.8, cirrus: 0.8 } as Record<string, number>)[name] ?? 0.6

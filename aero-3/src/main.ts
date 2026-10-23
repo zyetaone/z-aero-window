@@ -28,7 +28,6 @@ import { keepAlive } from './ops/kiosk.ts';
 import { fetchWall, NO_WALL } from './ops/wall.ts';
 import { fetchLiveWeather } from './ops/live-weather.ts';
 import { readParams } from './flight/params.ts';
-import { SEAT_PITCH } from './flight/path.ts';
 import { rideAt } from './flight/motion.ts';
 import { destinationAt, DWELL_SEC, slotAt } from './flight/places.ts';
 import { planFlight, planPlace } from './flight/plan.ts';
@@ -251,7 +250,7 @@ engine.runRenderLoop(() => {
 	const ride = P.ride ? rideAt(weather.seed, now / 1000, weather.turbulence, altM - groundM) : STILL;
 	camera.position.set(x, altM + ride.heaveM - terrain.drop(x, z), z);
 	Quaternion.RotationYawPitchRollToRef(p.heading, ride.pitch, -p.bank + ride.roll, aircraft);
-	Quaternion.RotationYawPitchRollToRef(p.look + paneYaw, SEAT_PITCH, 0, seat);
+	Quaternion.RotationYawPitchRollToRef(p.look + paneYaw, plan.seatPitch, 0, seat);
 	aircraft.multiplyToRef(seat, camera.rotationQuaternion!);
 	wing?.update(camera.position, aircraft, Math.sign(Math.sin(p.look)) || 1, now, dark);
 	if (aim.moon) aim.at = scene.getMeshByName('moon')!.position;
