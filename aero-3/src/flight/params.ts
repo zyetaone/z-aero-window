@@ -49,6 +49,8 @@ export function readParams(search: string) {
 		glow: !off('glow'),
 		trees: !off('trees'),
 		wing: !off('wing'),
+		/** Rough air, bumps and the cabin's breathing (flight/motion.ts); off holds the camera on the path (shots). */
+		ride: !off('ride'),
 		/**
 		 * Perf caps (buildings, street lamps): OFF until the Pi bench says they are needed. Measured
 		 * 2026-10-06, the building cap keeps the 25k footprints nearest the pin, so the city ends

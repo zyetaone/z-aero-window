@@ -59,6 +59,8 @@ export type Weather = Omit<Regime, 'weight' | 'rain' | 'layouts'> & {
 	build: number;
 	/** How grey the deck runs: 0 bright white, 1 leaden. */
 	grey: number;
+	/** Rough air under the seat (flight/motion.ts): 0.6 a clear day, 2 a storm. */
+	turbulence: number;
 };
 
 export function weatherFor(place: string, ms: number, named?: string | null): Weather {
@@ -85,6 +87,7 @@ export function weatherFor(place: string, ms: number, named?: string | null): We
 		windDir: 2 * Math.PI * r(11),
 		lights: 0.85 + 0.3 * r(6),
 		build: ({ storm: 1, towering: 1, scattered: 0.4, fair: 0.2 } as Record<string, number>)[name] ?? 0,
-		grey: ({ storm: 0.9, overcast: 0.8, towering: 0.4, hazy: 0.3 } as Record<string, number>)[name] ?? 0.1 * r(7)
+		grey: ({ storm: 0.9, overcast: 0.8, towering: 0.4, hazy: 0.3 } as Record<string, number>)[name] ?? 0.1 * r(7),
+		turbulence: ({ storm: 2, towering: 1.6, overcast: 1.2, scattered: 1, hazy: 0.9, fair: 0.8, cirrus: 0.8 } as Record<string, number>)[name] ?? 0.6
 	};
 }
