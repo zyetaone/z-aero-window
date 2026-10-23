@@ -188,7 +188,9 @@ const server = Bun.serve({
 		'/api/error': {
 			async POST(req, srv) {
 				if (!LOOPBACK.includes(srv.requestIP(req)?.address ?? '')) return new Response('local only', { status: 403 });
-				lastError = (await req.text()).replace(/["\\\n\r]/g, ' ').slice(0, 200);
+				// Stamped with the pane's wall time: the string lives until restart, so /admin can tell a fresh error from this morning's.
+				const at = new Date().toTimeString().slice(0, 5);
+				lastError = `${at} ${(await req.text()).replace(/["\\\n\r]/g, ' ')}`.slice(0, 200);
 				return new Response(null, { status: 204 });
 			}
 		},
