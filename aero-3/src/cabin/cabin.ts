@@ -18,6 +18,14 @@ const LAG_SEC = 12; // and up no sooner than this after it, so panes lift togeth
 const READY_FRAMES = 30; // and not before the scene has drawn this many frames
 
 /**
+ * The blind's label: the place, or "this → next" in the last seconds before the boundary while the
+ * wall is moving on. `held` (a push is about to reload, or the wall is in 'blind' mode) pins the
+ * label to the current place: a held blind says where you are, not where it is going.
+ */
+export const blindTitle = (place: string, next: string, leaving: boolean, held: boolean) =>
+	leaving && !held && next !== place ? `${placeName(place)} → ${placeName(next)}` : placeName(place);
+
+/**
  * `pane` seeds this window's rain. `openAfter` (wall seconds) is the wall push this page loaded into:
  * the blind lifts LAG_SEC after the later of it and the slot start, so after a push every pane
  * reveals on the same second rather than whenever its own scene finished building. `next` is the
@@ -50,7 +58,7 @@ export function cabinOverlay(blinds: boolean, rain: boolean, place: string, lon:
 			const since = wallSec - Math.max(wallSec - phase, openAfter);
 			const leaving = phase >= DWELL_SEC - BLIND_LEAD_SEC;
 			if (!held) blind.classList.toggle('open', !leaving && since >= LAG_SEC);
-			const t2 = leaving && !held && next !== place ? `${placeName(place)} → ${placeName(next)}` : placeName(place);
+			const t2 = blindTitle(place, next, leaving, held);
 			if (t2 !== title) blind.querySelector('span')!.textContent = title = t2;
 			const hour = solarHour(skyMs, lon); // the sky's hour: a pinned clock shows its own time, not the wall's
 			const t = hhmm(hour);
