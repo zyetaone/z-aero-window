@@ -160,6 +160,11 @@ if command -v journalctl >/dev/null 2>&1; then
 	LAST_ERROR="$(journalctl -u aero-app.service -p err -n 1 --no-pager -o cat 2>/dev/null \
 		| head -c 200 | tr -d '"\\' || true)"
 fi
+# The page's own last thrown error, when the app reports one (aero-3's /api/status lastError;
+# aero-1's status has no such field and the scrape is empty): a browser error never reaches the
+# journal, and it is the one line that says why a pane went dark.
+PAGE_ERROR="$(echo "${STATUS_JSON:-}" | tr ',' '\n' | command grep -o '"lastError":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
+[[ -n "${PAGE_ERROR}" ]] && LAST_ERROR="page: ${PAGE_ERROR}"
 
 # Kiosk restarts since boot — NRestarts counts EVERY restart, including the
 # systemctl restart the updater performs on every release, so on an actively

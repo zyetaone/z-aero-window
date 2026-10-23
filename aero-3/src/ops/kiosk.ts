@@ -33,6 +33,12 @@ recover.once = false;
 export function keepAlive(engine: AbstractEngine, baseScale: number, frames: () => number) {
 	addEventListener('unhandledrejection', recover, { once: true });
 	engine.onContextLostObservable.add(recover);
+	// The page's own last error goes to this pane's server (/api/status lastError), which
+	// health-check.sh carries in the heartbeat: a dark pane is diagnosed from /admin, not over ssh.
+	const report = (what: string) => fetch('/api/error', { method: 'POST', body: what.slice(0, 200) }).catch(() => {});
+	addEventListener('error', (e: ErrorEvent) => report(e.message || String(e.error)));
+	addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => report(String(e.reason?.message ?? e.reason)));
+	engine.onContextLostObservable.add(() => report('WebGL context lost'));
 	const state = { shedding: false };
 	let framesAt = 0;
 	setInterval(async () => {

@@ -51,8 +51,10 @@ const ADMIN_TOKEN = Bun.env.AERO_ADMIN_TOKEN ?? '';
 // Each Pi's health-check.sh heartbeat to the wall Pi: a lower-privilege token than the admin one.
 const FLEET_TOKEN = Bun.env.AERO_FLEET_TOKEN ?? '';
 const fleet = new Map<string, FleetRow>();
-// What this pane's page last measured (POST /api/fps from the kiosk on this machine).
+// What this pane's page last measured (POST /api/fps from the kiosk on this machine), and the
+// last error it threw (POST /api/error), for the heartbeat.
 let fps = 0;
+let lastError = '';
 // The checkout the updater put here; health-check.sh reports it.
 const COMMIT = Bun.env.AERO_COMMIT ?? Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'], { stderr: 'ignore' }).stdout.toString().trim();
 const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
@@ -97,7 +99,7 @@ const server = Bun.serve({
 		// The updater's health probe (deploy/aero-updater.sh) and health-check.sh read this.
 		'/api/status': () =>
 			Response.json(
-				{ ok: page === 'ok', app: 'aero-3', page, fps, commit: COMMIT, uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version, lan: lan(), port: PORT, data: mounted.map(([route]) => route.slice(1, -2)) },
+				{ ok: page === 'ok', app: 'aero-3', page, fps, lastError, commit: COMMIT, uptimeSec: Math.round((Date.now() - startedAt) / 1000), wallVersion: wall.version, lan: lan(), port: PORT, data: mounted.map(([route]) => route.slice(1, -2)) },
 				// The side panes read it from the centre Pi for the admin QR.
 				{ status: page === 'ok' ? 200 : 503, headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' } }
 			),
@@ -135,7 +137,7 @@ const server = Bun.serve({
 				try {
 					push = parsePush(JSON.parse(text));
 				} catch {}
-				if (!push) return new Response('expected { place, weather, clock, gains, media }: a known place, a known regime, an hour 0-24, gains street/building/far 0-2 haze/glow 0-1, media store IDs (8 audio, 1 video), or null', { status: 400 });
+				if (!push) return new Response('expected { place, weather, clock, gains, media }: a known place, a known regime, an hour 0-24, gains street/building/far 0-2 haze/glow/volume 0-1, media store IDs (8 audio, 1 video), or null', { status: 400 });
 				wall = { ...push, version: wall.version + 1, applyAt: Math.ceil(Date.now() / 1000) + LEAD_SEC };
 				const tmp = `${WALL_FILE}.${wall.version}.tmp`; // one per push: two overlapping pushes must not share it
 				await Bun.write(tmp, JSON.stringify(wall));
@@ -178,6 +180,15 @@ const server = Bun.serve({
 				if (!LOOPBACK.includes(srv.requestIP(req)?.address ?? '')) return new Response('local only', { status: 403 });
 				const n = Number(await req.text());
 				fps = Number.isFinite(n) ? Math.max(0, Math.min(240, Math.round(n * 10) / 10)) : 0;
+				return new Response(null, { status: 204 });
+			}
+		},
+		// The kiosk's page reports its last thrown error (ops/kiosk.ts); one line, quotes stripped so
+		// health-check.sh's grep scrape of /api/status stays whole.
+		'/api/error': {
+			async POST(req, srv) {
+				if (!LOOPBACK.includes(srv.requestIP(req)?.address ?? '')) return new Response('local only', { status: 403 });
+				lastError = (await req.text()).replace(/["\\\n\r]/g, ' ').slice(0, 200);
 				return new Response(null, { status: 204 });
 			}
 		},
