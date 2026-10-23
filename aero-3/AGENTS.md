@@ -43,6 +43,12 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
 - `src/flight/weather.ts` (`weatherFor`) — one object per place and UTC day: regime (clear, fair, scattered, towering,
   cirrus, hazy, overcast, storm), sun strength, haze, rain, cloud deck height and wind, heap and grey,
   night-light gain. `?weather=` pins the regime.
+- `src/flight/motion.ts` (`rideAt`) — the ride under the seat, pure in (visit seed, wall second):
+  rough air as slow noise in pitch, roll and heave, a bump some 12 s windows that rings down, the
+  22 s breathing swell. Today's regime sets the turbulence (`weather.turbulence`, 0.6 clear to 2
+  storm), thinned above 12 km. Hashed off the wall clock so three panes bump on one second with one
+  sign (aero-1 rolled the sign per pane). main.ts folds it into the aircraft quaternion, so the wing
+  rides with the airframe and the world moves. `?ride=0` holds the path (shots, the bench).
 - `src/flight/storm.ts` (`strikeAt`) — lightning on a storm day, pure on the wall clock (aero-2's): one
   chance a second, a return stroke, a dip and a re-strike, 4-30 km from the pin, so all panes flash on
   the same frame. `cabin.ts` `lightning()` turns it into a faint #flash on the glass (brighter at night),
@@ -60,7 +66,9 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
 - `/api/status` answers 503 (`page: building|failed`) until the server has bundled the page once
   at startup, so a page that fails to build fails the updater's probe and rolls back.
   `?blind=0` holds one visit (screenshots, smoke).
-- `src/flight/places.ts` — the place table and aero-2's rotation, ported as is: 600 s per city, the day's
+- `src/flight/places.ts` — the place table, each place's mood (`MOODS`, aero-2's PLACE_MOODS: night glow,
+  cloud base offset, cloud count, dust and window pitch, folded into `weatherFor`'s one object and the
+  plan's `seatPitch`; direction left out, the seat is on the inside of the turn either way), and aero-2's rotation, ported as is: 600 s per city, the day's
   order a Fisher-Yates shuffle seeded by the day number. Each slot is a visit: with no `?place=`
   a new city, either way a new flight. The Himalayas are `?place=` only.
 - One sea (ground/maps.ts `paintSea`): where the terrain says sea floor, cloud and no-data in the
@@ -167,6 +175,10 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
   `src/ops/kiosk.ts`: the same 30 s tick posts fps, reloads a visible page that drew no frame
   (through `recover()`'s budget) and polls `/api/thermal` to shed pixels on a hot Pi.
   `src/cabin/credits.ts` is the one attribution list: the blind (while down) and `/admin`'s footer.
+  The page's last thrown error (window errors, unhandled rejections, a lost GL context) goes to
+  `/api/error` on its own server (loopback only), rides `/api/status` as `lastError`, and
+  health-check.sh carries it in the heartbeat ahead of the journal line: `/admin`'s note column is
+  how a dark pane is diagnosed without ssh.
 - `src/ops/live-weather.ts` + `/api/weather` — Open-Meteo through the server (aero-2's port): the
   wall server holds one cache (0.1° cell, 10 min fresh, stale to the hour, 64 cells), and every
   pane fetches it once per visit, at boot, from the wall origin — the reading APPLIES at the visit
@@ -282,7 +294,9 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
 
 1. **Window** — done: flight, day character, blind, rim, rain, white buildings, house lights.
 2. **Wall** — done: pane roles, the operator push, `/admin`, error-reload budget.
-3. **Cabin** — done: the wing, the cabin drone, the moon, live weather (Open-Meteo through the
+3. **Cabin** — done: the wing, the cabin drone, the moon, the ride (`flight/motion.ts`), the Milky
+   Way (`sky/stars.ts`, 9k faint points in the star mesh), the cabin volume as a wall gain, a mood per
+   place (`places.ts` MOODS), a pushed clip on the wall clock (`cabin/media.ts` `playheadAt`), live weather (Open-Meteo through the
    server, applied per visit — `ops/live-weather.ts`; only when the fleet has internet, which is
    exactly the offline-first premise: no fetch, the daily static stands).
 4. **Ship** — done: aero-3 fits the existing deploy contract unchanged (`bun run build` writes a
@@ -302,6 +316,23 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
    Left: more places (a pin, an orbit radius, a buildings pack), after the Pi numbers. Admin QR done: hold the glass 15 s for the wall Pi's `/admin` (`src/cabin/qr.ts`).
 
 ## Not built yet
+
+Reviewed against aero-1 and aero-2 (2026-10-23) and left out on purpose:
+- **Authored scenario routes** (aero-1's 21 waypoint paths): a content project that changes the
+  flight model's shape, not a port. The seeded orbit is the model until the Pi numbers are in.
+- **More places** (Pacific, Sahara, above the clouds): each needs its own imagery, terrain and
+  lights pack; none exists. Add with `tools/fetch-terrain.ts` and a Sentinel-2 pull, after Phase 5.
+- **Destination whisper, oval frame toggle, flight readout panel, boot lockup**: the blind already
+  reads "here → next", the rim is the frame, the HUD is the readout, the closed blind is the boot frame.
+- **Engine vibration** (aero-1's 7 Hz sines): at the Pi's frame rate it aliases to noise.
+- **Downtown pass** (aero-2's 2-min low loop over the pin): the clearance floor is 2 km over the
+  highest ground and the cloud base is 1.3-2.5 km, so a low pass flies into the sprite deck. Needs a
+  deck-aware descent and a real-Chrome look first; the low cruise band (3.5 km, a quarter of visits)
+  is the near view until then.
+- **Screensaver slideshow, look controls, minimap, destination card, night CSS grade**: aero-2
+  surfaces for a lone pane or a MapLibre workaround; the grade wants a side-by-side before porting.
+- **Admin OTA trigger, mDNS discovery, device bindings, slideshow mode, wing alignment knobs**:
+  operator tooling the shared updater, the centre-Pi wall and `?role=` already cover.
 
 The Phase 5 Pi measurement, before more layers: Dubai is 1.1M building vertices and ~300k lights. Add them only
 after the Pi numbers say this stack is worth growing.
