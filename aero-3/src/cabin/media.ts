@@ -11,10 +11,10 @@
 import { mediaUrl } from '#ops/media.ts';
 
 /** Loop IDs in order, skipping files that fail to load. Off kiosk, the first tap starts it. */
-export function playAudioPlaylist(ids: string[], origin: string) {
+export function playAudioPlaylist(ids: string[], origin: string, volume = 0.6) {
 	if (!ids.length) return;
 	const el = document.createElement('audio');
-	el.volume = 0.8;
+	el.volume = volume;
 	let i = 0;
 	const load = () => {
 		el.src = mediaUrl(origin, ids[i]!);

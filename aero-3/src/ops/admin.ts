@@ -11,7 +11,7 @@ const form = document.querySelector('form')!;
 const status = document.querySelector('output')!;
 const [preset, place, weather, mode] = ['preset', 'place', 'weather', 'mode'].map((n) => form.elements.namedItem(n)) as HTMLSelectElement[];
 const clockInput = form.elements.namedItem('clock') as HTMLInputElement;
-const gainNames = ['street', 'building', 'far', 'haze', 'glow'] as const;
+const gainNames = ['street', 'building', 'far', 'haze', 'glow', 'volume'] as const;
 const gainInputs = gainNames.map((n) => form.elements.namedItem(n) as HTMLInputElement);
 const fillGains = (g: Wall['gains']) => gainInputs.forEach((input, i) => {
 	const v = (g ?? {})[gainNames[i]!];
@@ -85,7 +85,7 @@ form.addEventListener('submit', async (event) => {
 			place: data.get('place') || null,
 			weather: data.get('weather') || null,
 			clock: clock === '' ? null : Number(clock),
-			gains: { street: numOrNull('street'), building: numOrNull('building'), far: numOrNull('far'), haze: numOrNull('haze'), glow: numOrNull('glow') },
+			gains: { street: numOrNull('street'), building: numOrNull('building'), far: numOrNull('far'), haze: numOrNull('haze'), glow: numOrNull('glow'), volume: numOrNull('volume') },
 			media: { audio: parseIdList(String(data.get('audio') ?? '')), video: parseMediaId(String(data.get('video') ?? '')) },
 			mode: data.get('mode') || null
 		})

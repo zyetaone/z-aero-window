@@ -154,8 +154,9 @@ const clip = wall.media?.video ?? null;
 // A pushed playlist replaces the synthesised drone (same gate: centre/solo, ?audio=0 off).
 // Blinds down or standby: no sound and no clip, only the flight under the blind (or nothing).
 const sound = !mode && P.audio && (P.role ?? 'center') === 'center';
-const drone = sound && !tracks.length ? cabinDrone(0.6, weather.rain) : null;
-if (sound && tracks.length) playAudioPlaylist(tracks, P.wall);
+const volume = wall.gains?.volume ?? 0.6; // the operator's one knob for the cabin's sound (wall.ts gains)
+const drone = sound && !tracks.length ? cabinDrone(volume, weather.rain) : null;
+if (sound && tracks.length) playAudioPlaylist(tracks, P.wall, volume);
 if (clip && !mode) showVideo(clip, P.wall); // muted everywhere: a video wall is one image, not three soundtracks
 // Street lamps along the road pack, roof lights and lit windows on the buildings, and NASA-derived
 // towns on the far ring past the roads (city/lights.ts).

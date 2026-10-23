@@ -31,9 +31,11 @@ export type Gains = {
 	haze: number | null;
 	/** Bloom, 0..1. */
 	glow: number | null;
+	/** The cabin's sound (drone, thunder, playlist), 0..1; null is the pane's 0.6. */
+	volume: number | null;
 };
 
-export const NO_GAINS: Gains = { street: null, building: null, far: null, haze: null, glow: null };
+export const NO_GAINS: Gains = { street: null, building: null, far: null, haze: null, glow: null, volume: null };
 
 /**
  * Slice 4: what the panes play. Bare store names (/api/media), never URLs:
@@ -101,7 +103,8 @@ export function parsePush(body: unknown): Push | null {
 	const far = parseGain(g.far, 0, 2);
 	const haze = parseGain(g.haze, 0, 1);
 	const glow = parseGain(g.glow, 0, 1);
-	if (street === false || building === false || far === false || haze === false || glow === false) return null;
+	const volume = parseGain(g.volume, 0, 1);
+	if (street === false || building === false || far === false || haze === false || glow === false || volume === false) return null;
 	if (media !== null && media !== undefined && (typeof media !== 'object' || media === null || Array.isArray(media))) return null;
 	const m = (media ?? {}) as Record<string, unknown>;
 	const audio = m.audio ?? [];
@@ -114,7 +117,7 @@ export function parsePush(body: unknown): Push | null {
 	}
 	const video = parseMediaId(m.video);
 	if (video === false) return null;
-	return { place, weather, clock, gains: { street, building, far, haze, glow }, media: { audio: tracks, video }, mode: mode as Mode | null };
+	return { place, weather, clock, gains: { street, building, far, haze, glow, volume }, media: { audio: tracks, video }, mode: mode as Mode | null };
 }
 
 /** The wall as `origin` serves it, or NO_WALL if it can't be had in time: a pane never waits on it. */

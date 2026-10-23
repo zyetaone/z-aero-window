@@ -24,7 +24,7 @@ test('gains are optional and default to null (the pane keeps its own)', () => {
 });
 
 test('gains round-trip inside their slider ranges', () => {
-	const gains = { street: 1.5, building: 0, far: 2, haze: 0.3, glow: 1 };
+	const gains = { street: 1.5, building: 0, far: 2, haze: 0.3, glow: 1, volume: 0.4 };
 	expect(parsePush({ gains })).toEqual({ place: null, weather: null, clock: null, gains, media: { audio: [], video: null }, mode: null });
 });
 
@@ -35,6 +35,7 @@ test('a bad gain fails the whole push, like a bad place or hour', () => {
 		{ far: Number.NaN },
 		{ haze: 1.5 },
 		{ glow: Number.POSITIVE_INFINITY },
+		{ volume: 1.2 },
 		{ street: '1' },
 		{ haze: true },
 		'bright',
@@ -44,7 +45,7 @@ test('a bad gain fails the whole push, like a bad place or hour', () => {
 });
 
 test('a maximal gains push stays far under the 1024-byte wall budget', () => {
-	const push = parsePush({ place: 'himalayas', weather: 'towering', clock: 21.5, gains: { street: 2, building: 2, far: 2, haze: 1, glow: 1 } })!;
+	const push = parsePush({ place: 'himalayas', weather: 'towering', clock: 21.5, gains: { street: 2, building: 2, far: 2, haze: 1, glow: 1, volume: 1 } })!;
 	expect(JSON.stringify(push).length).toBeLessThan(MAX_PUSH_BYTES);
 });
 
@@ -81,7 +82,7 @@ test('a maximal media push still fits the 1024-byte wall budget', () => {
 		place: 'himalayas',
 		weather: 'towering',
 		clock: 21.5,
-		gains: { street: 2, building: 2, far: 2, haze: 1, glow: 1 },
+		gains: { street: 2, building: 2, far: 2, haze: 1, glow: 1, volume: 1 },
 		media: { audio: Array.from({ length: MAX_MEDIA_IDS }, (_, i) => id(i)), video: 'clip-0123456789abcdef.mp4' },
 		mode: 'standby'
 	})!;
