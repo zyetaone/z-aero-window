@@ -280,7 +280,12 @@ http://<centre-pi>:3000`; it keeps the tokens, writes `AERO_APP_SUBDIR=aero-3` a
 buildings/roads/models/media. 4. Open `/admin` on the centre Pi from a phone: the pane's heartbeat
 row appears within five minutes with an fps; push `scale 2` if it is under 10. 5. The other two
 panes only after that number reads well. The updater then tracks `release` as before, installing
-the CI prebuilt for each sha. The data folders the server
+the CI prebuilt for each sha. Order matters: the prebuilt allowlist and the Bun-floor read live in
+the updater the Pi runs, so push main, let CI promote `release`, and only then install on site;
+a cutover from an older `release` builds on-device (works, slower). The first install's `bun
+install` (install.sh step 4) still needs the network; a LAN-only site skips the updater's network
+after that by copying CI's `dist-prebuilt/aero-3.tar.gz{,.sha256}` to the pen drive as
+`/media/aero/prebuilt/build-<sha>/` (package-build.sh's header). The data folders the server
 finds at startup are served, the rest 404, so a Pi without a pack still boots. Measure with
 `tools/pi-bench.ts` (usage in its header). Or run the binary from a directory where `../data/tiles/sentinel2`,
 `../aero-2/data/tiles/terrarium` and `../aero-2/data/tiles/viirs` exist, or set
