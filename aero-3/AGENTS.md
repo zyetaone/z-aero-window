@@ -200,6 +200,8 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
   rising); /admin solves today's hour for it at the place (`ephemeris.ts` `hourAtSunElevation`),
   falling back to the preset's clock when the sun never gets there. /admin also lists each role's
   URL on this wall's LAN address (from `/api/status` lan + port).
+  'Hop now' pins a different city than the form's (`cabin.ts` `pickOtherPlace`) and submits the same
+  form, so everything else stays as set; 'Rotation' returns to the clock.
   And a `mode`: null flies; `blind` holds every blind down (place, time, credits); `standby` is black
   glass. Both draw one frame then only the blind's clock, silence the sound and the clip, and keep
   the render loop counting so the stall watchdog sees a live page. Standby skips the slot reload.

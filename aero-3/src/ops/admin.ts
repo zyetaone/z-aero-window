@@ -5,6 +5,7 @@ import { REGIME_NAMES } from '#flight/weather.ts';
 import { fetchWall, PRESET_SUN, PRESETS, type Wall } from './wall.ts';
 import { listMedia, parseIdList, parseMediaId, uploadMedia } from './media.ts';
 import { CREDITS } from '#cabin/credits.ts';
+import { pickOtherPlace } from '#cabin/cabin.ts';
 import { rollUp, STALE_SEC, type FleetRow } from './fleet.ts';
 
 const form = document.querySelector('form')!;
@@ -24,6 +25,11 @@ for (const id of Object.keys(PLACES)) place!.add(new Option(placeName(id), id));
 for (const [label, value] of [['Flying', ''], ['Blinds down', 'blind'], ['Standby (dark)', 'standby']]) mode!.add(new Option(label, value));
 weather!.add(new Option("Today's weather", ''));
 for (const name of REGIME_NAMES) weather!.add(new Option(name, name));
+// "Hop now": a different city than the one pinned (or shown), pushed through the same form.
+document.querySelector<HTMLButtonElement>('#hop')!.addEventListener('click', () => {
+	place!.value = pickOtherPlace(Object.keys(PLACES), place!.value || null, Math.random());
+	form.requestSubmit();
+});
 
 /** Empty means default; a set gain replaces the pane's own (wall.ts: override, never multiply). */
 const gainText = (g: Wall['gains']) => {
