@@ -89,7 +89,10 @@ const mix = {
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const engine = await createEngine(canvas, P.webgpu, P.aa);
-const baseScale = P.scale;
+// The URL knob (dev) wins; else the operator's pushed scale, read here because a push reloads the pane.
+const baseScale = P.scale !== 1 ? P.scale : (wall.scale ?? 1);
+// A pinned altitude above ground, same rule: the URL's for dev, else the operator's; NaN flies the cruise band.
+const pinnedAlt = Number.isNaN(P.alt) ? (wall.alt ?? Number.NaN) : P.alt;
 engine.setHardwareScalingLevel(baseScale);
 // A kiosk has no one to press reload (ops/kiosk.ts): failed boots and lost contexts reload, a hot Pi sheds.
 let frames = 0;
@@ -245,7 +248,7 @@ engine.runRenderLoop(() => {
 	// The aircraft (heading, bank), then the seat in it: turned to the window, looking a little down.
 	const p = track.pose(now / 1000);
 	const [x, z] = [pinX + p.x, pinZ + p.z];
-	const altM = Math.max(groundM + (Number.isNaN(P.alt) ? track.cruiseM + p.climbM : P.alt), floorM);
+	const altM = Math.max(groundM + (Number.isNaN(pinnedAlt) ? track.cruiseM + p.climbM : pinnedAlt), floorM);
 	// The air under the airframe (flight/motion.ts), on the wall clock like the path: three panes, one bump.
 	const ride = P.ride ? rideAt(weather.seed, now / 1000, weather.turbulence, altM - groundM) : STILL;
 	camera.position.set(x, altM + ride.heaveM - terrain.drop(x, z), z);

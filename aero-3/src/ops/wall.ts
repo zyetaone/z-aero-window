@@ -58,19 +58,35 @@ export const MEDIA_ID = /^[A-Za-z0-9][A-Za-z0-9._%-]{0,63}$/;
 export const MODES = ['blind', 'standby'] as const;
 export type Mode = (typeof MODES)[number];
 
-export type Push = { place: string | null; weather: string | null; clock: number | null; gains: Gains; media: Media; mode: Mode | null };
+/** Altitude above ground a push can pin, metres: the floor keeps the deck under the wing, the ceiling is the cruise band's top. */
+export const ALT_RANGE = [500, 15_000] as const;
+/** Render scale a push can set, 1 = full resolution, 2 = half: the one remote perf lever once the Pis fly. */
+export const SCALE_RANGE = [1, 3] as const;
+
+export type Push = {
+	place: string | null;
+	weather: string | null;
+	clock: number | null;
+	/** Metres above ground, null follows the cruise band (the URL's ?alt= still wins). */
+	alt: number | null;
+	/** Hardware scaling level, null is the pane's 1 (?scale= still wins). Applied at the reload a push causes. */
+	scale: number | null;
+	gains: Gains;
+	media: Media;
+	mode: Mode | null;
+};
 export type Wall = Push & { version: number; applyAt: number };
 
-export const NO_WALL: Wall = { version: 0, applyAt: 0, place: null, weather: null, clock: null, gains: NO_GAINS, media: NO_MEDIA, mode: null };
+export const NO_WALL: Wall = { version: 0, applyAt: 0, place: null, weather: null, clock: null, alt: null, scale: null, gains: NO_GAINS, media: NO_MEDIA, mode: null };
 export const LEAD_SEC = 10;
 
 /** Named scenes for /admin, aero-2's presets as wall pushes: one tap fills the form. Gains and media stay default (a preset only fills the form; the operator sets them by hand). */
 export const PRESETS: Record<string, Push> = {
-	'Golden hour': { place: 'dubai', weather: 'fair', clock: 17.6, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
-	'Alpine dawn': { place: 'himalayas', weather: 'clear', clock: 6.5, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
-	'Gulf midnight': { place: 'dubai', weather: 'clear', clock: 23, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
-	'Storm transit': { place: 'mumbai', weather: 'storm', clock: 15, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
-	'City lights': { place: 'hyderabad', weather: 'scattered', clock: 21, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null }
+	'Golden hour': { place: 'dubai', weather: 'fair', clock: 17.6, alt: null, scale: null, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
+	'Alpine dawn': { place: 'himalayas', weather: 'clear', clock: 6.5, alt: null, scale: null, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
+	'Gulf midnight': { place: 'dubai', weather: 'clear', clock: 23, alt: null, scale: null, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
+	'Storm transit': { place: 'mumbai', weather: 'storm', clock: 15, alt: null, scale: null, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
+	'City lights': { place: 'hyderabad', weather: 'scattered', clock: 21, alt: null, scale: null, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null }
 };
 export const MAX_PUSH_BYTES = 1024;
 
@@ -91,11 +107,14 @@ function parseMediaId(value: unknown): string | null | false {
 /** An operator's push, checked field by field; null if any field is wrong. */
 export function parsePush(body: unknown): Push | null {
 	if (typeof body !== 'object' || body === null) return null;
-	const { place = null, weather = null, clock = null, gains = null, media = null, mode = null } = body as Record<string, unknown>;
+	const { place = null, weather = null, clock = null, alt = null, scale = null, gains = null, media = null, mode = null } = body as Record<string, unknown>;
 	if (mode !== null && !MODES.includes(mode as Mode)) return null;
 	if (place !== null && !(typeof place === 'string' && Object.hasOwn(PLACES, place))) return null;
 	if (weather !== null && !(typeof weather === 'string' && REGIME_NAMES.includes(weather))) return null;
 	if (clock !== null && !(typeof clock === 'number' && clock >= 0 && clock <= 24)) return null;
+	const altM = parseGain(alt, ALT_RANGE[0], ALT_RANGE[1]);
+	const scaleLevel = parseGain(scale, SCALE_RANGE[0], SCALE_RANGE[1]);
+	if (altM === false || scaleLevel === false) return null;
 	if (gains !== null && gains !== undefined && (typeof gains !== 'object' || gains === null || Array.isArray(gains))) return null;
 	const g = (gains ?? {}) as Record<string, unknown>;
 	const street = parseGain(g.street, 0, 2);
@@ -117,7 +136,7 @@ export function parsePush(body: unknown): Push | null {
 	}
 	const video = parseMediaId(m.video);
 	if (video === false) return null;
-	return { place, weather, clock, gains: { street, building, far, haze, glow, volume }, media: { audio: tracks, video }, mode: mode as Mode | null };
+	return { place, weather, clock, alt: altM, scale: scaleLevel, gains: { street, building, far, haze, glow, volume }, media: { audio: tracks, video }, mode: mode as Mode | null };
 }
 
 /** The wall as `origin` serves it, or NO_WALL if it can't be had in time: a pane never waits on it. */

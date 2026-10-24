@@ -11,6 +11,8 @@ const form = document.querySelector('form')!;
 const status = document.querySelector('output')!;
 const [preset, place, weather, mode] = ['preset', 'place', 'weather', 'mode'].map((n) => form.elements.namedItem(n)) as HTMLSelectElement[];
 const clockInput = form.elements.namedItem('clock') as HTMLInputElement;
+const [altInput, scaleInput] = ['alt', 'scale'].map((n) => form.elements.namedItem(n) as HTMLInputElement) as [HTMLInputElement, HTMLInputElement];
+const numText = (v: number | null | undefined) => (v === null || v === undefined ? '' : String(v));
 const gainNames = ['street', 'building', 'far', 'haze', 'glow', 'volume'] as const;
 const gainInputs = gainNames.map((n) => form.elements.namedItem(n) as HTMLInputElement);
 const fillGains = (g: Wall['gains']) => gainInputs.forEach((input, i) => {
@@ -42,7 +44,7 @@ const mediaText = (m: Wall['media']) => {
 
 const describe = (w: Wall) =>
 	w.version
-		? `Wall v${w.version}: ${w.mode === 'standby' ? 'STANDBY, ' : w.mode === 'blind' ? 'BLINDS DOWN, ' : ''}${w.place ?? 'rotation'}, ${w.weather ?? "today's weather"}, ${w.clock === null ? 'real time' : `${hhmm(w.clock)} local`}${gainText(w.gains)}${mediaText(w.media)}`
+		? `Wall v${w.version}: ${w.mode === 'standby' ? 'STANDBY, ' : w.mode === 'blind' ? 'BLINDS DOWN, ' : ''}${w.place ?? 'rotation'}, ${w.weather ?? "today's weather"}, ${w.clock === null ? 'real time' : `${hhmm(w.clock)} local`}${w.alt === null ? '' : `, ${w.alt} m`}${w.scale === null || w.scale === 1 ? '' : `, scale ${w.scale}`}${gainText(w.gains)}${mediaText(w.media)}`
 		: 'Nothing pushed yet: panes follow the rotation.';
 
 const current = await fetchWall('');
@@ -50,7 +52,9 @@ status.textContent = describe(current);
 place!.value = current.place ?? '';
 weather!.value = current.weather ?? '';
 mode!.value = current.mode ?? '';
-clockInput.value = current.clock === null ? '' : String(current.clock);
+clockInput.value = numText(current.clock);
+altInput.value = numText(current.alt);
+scaleInput.value = numText(current.scale);
 fillGains(current.gains);
 audioInput.value = (current.media?.audio ?? []).join(', ');
 videoInput.value = current.media?.video ?? '';
@@ -64,7 +68,9 @@ preset!.addEventListener('change', () => {
 	place!.value = scene.place ?? '';
 	weather!.value = scene.weather ?? '';
 	mode!.value = scene.mode ?? '';
-	clockInput.value = scene.clock === null ? '' : String(scene.clock);
+	clockInput.value = numText(scene.clock);
+	altInput.value = numText(scene.alt);
+	scaleInput.value = numText(scene.scale);
 	fillGains(scene.gains);
 	audioInput.value = (scene.media?.audio ?? []).join(', ');
 	videoInput.value = scene.media?.video ?? '';
@@ -85,6 +91,8 @@ form.addEventListener('submit', async (event) => {
 			place: data.get('place') || null,
 			weather: data.get('weather') || null,
 			clock: clock === '' ? null : Number(clock),
+			alt: numOrNull('alt'),
+			scale: numOrNull('scale'),
 			gains: { street: numOrNull('street'), building: numOrNull('building'), far: numOrNull('far'), haze: numOrNull('haze'), glow: numOrNull('glow'), volume: numOrNull('volume') },
 			media: { audio: parseIdList(String(data.get('audio') ?? '')), video: parseMediaId(String(data.get('video') ?? '')) },
 			mode: data.get('mode') || null

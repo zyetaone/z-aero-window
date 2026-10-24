@@ -2,14 +2,19 @@ import { expect, test } from 'bun:test';
 import { MAX_MEDIA_IDS, MAX_PUSH_BYTES, NO_GAINS, NO_MEDIA, parsePush, PRESETS } from './wall.ts';
 
 test('a push takes known places, regimes and hours, and nothing else', () => {
-	expect(parsePush({ place: 'dubai', weather: 'hazy', clock: 21.5 })).toEqual({ place: 'dubai', weather: 'hazy', clock: 21.5, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null });
-	expect(parsePush({})).toEqual({ place: null, weather: null, clock: null, gains: { ...NO_GAINS }, media: { ...NO_MEDIA }, mode: null });
+	expect(parsePush({ place: 'dubai', weather: 'hazy', clock: 21.5 })).toEqual({ place: 'dubai', weather: 'hazy', clock: 21.5, alt: null, scale: null, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null });
+	expect(parsePush({})).toEqual({ place: null, weather: null, clock: null, alt: null, scale: null, gains: { ...NO_GAINS }, media: { ...NO_MEDIA }, mode: null });
 	expect(parsePush({ place: 'constructor' })).toBeNull();
 	expect(parsePush({ place: '../etc' })).toBeNull();
 	expect(parsePush({ weather: 'snow' })).toBeNull();
 	expect(parsePush({ clock: 25 })).toBeNull();
 	expect(parsePush({ clock: '9' })).toBeNull();
 	expect(parsePush(null)).toBeNull();
+});
+
+test('altitude and render scale round-trip inside their ranges, and nothing else', () => {
+	expect(parsePush({ alt: 3_500, scale: 2 })).toMatchObject({ alt: 3_500, scale: 2 });
+	for (const bad of [{ alt: 100 }, { alt: 20_000 }, { alt: '3500' }, { scale: 0.5 }, { scale: 4 }, { scale: Number.NaN }]) expect(parsePush(bad), JSON.stringify(bad)).toBeNull();
 });
 
 test('every preset is a push the server would accept', () => {
@@ -25,7 +30,7 @@ test('gains are optional and default to null (the pane keeps its own)', () => {
 
 test('gains round-trip inside their slider ranges', () => {
 	const gains = { street: 1.5, building: 0, far: 2, haze: 0.3, glow: 1, volume: 0.4 };
-	expect(parsePush({ gains })).toEqual({ place: null, weather: null, clock: null, gains, media: { audio: [], video: null }, mode: null });
+	expect(parsePush({ gains })).toEqual({ place: null, weather: null, clock: null, alt: null, scale: null, gains, media: { audio: [], video: null }, mode: null });
 });
 
 test('a bad gain fails the whole push, like a bad place or hour', () => {

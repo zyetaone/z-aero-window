@@ -137,7 +137,7 @@ const server = Bun.serve({
 				try {
 					push = parsePush(JSON.parse(text));
 				} catch {}
-				if (!push) return new Response('expected { place, weather, clock, gains, media }: a known place, a known regime, an hour 0-24, gains street/building/far 0-2 haze/glow/volume 0-1, media store IDs (8 audio, 1 video), or null', { status: 400 });
+				if (!push) return new Response('expected { place, weather, clock, alt, scale, gains, media }: a known place, a known regime, an hour 0-24, alt 500-15000 m, scale 1-3, gains street/building/far 0-2 haze/glow/volume 0-1, media store IDs (8 audio, 1 video), or null', { status: 400 });
 				wall = { ...push, version: wall.version + 1, applyAt: Math.ceil(Date.now() / 1000) + LEAD_SEC };
 				const tmp = `${WALL_FILE}.${wall.version}.tmp`; // one per push: two overlapping pushes must not share it
 				await Bun.write(tmp, JSON.stringify(wall));
