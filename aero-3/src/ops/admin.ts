@@ -1,8 +1,8 @@
 /** The /admin page: one form that pushes a wall (src/ops/wall.ts). The token stays in the form, never in storage. */
 import { PLACES, placeName } from '#flight/places.ts';
-import { hhmm } from '#world/sky/ephemeris.ts';
+import { hhmm, hourAtSunElevation } from '#world/sky/ephemeris.ts';
 import { REGIME_NAMES } from '#flight/weather.ts';
-import { fetchWall, PRESETS, type Wall } from './wall.ts';
+import { fetchWall, PRESET_SUN, PRESETS, type Wall } from './wall.ts';
 import { listMedia, parseIdList, parseMediaId, uploadMedia } from './media.ts';
 import { CREDITS } from '#cabin/credits.ts';
 import { rollUp, STALE_SEC, type FleetRow } from './fleet.ts';
@@ -68,7 +68,11 @@ preset!.addEventListener('change', () => {
 	place!.value = scene.place ?? '';
 	weather!.value = scene.weather ?? '';
 	mode!.value = scene.mode ?? '';
-	clockInput.value = numText(scene.clock);
+	// A sun-height preset: today's hour for it at the place, else the preset's fallback clock.
+	const sun = PRESET_SUN[preset!.value];
+	const [lat, lon] = PLACES[scene.place ?? ''] ?? [];
+	const solved = sun && lat !== undefined ? hourAtSunElevation(Date.now(), lat, lon!, sun.elevDeg, sun.rising) : null;
+	clockInput.value = solved === null ? numText(scene.clock) : solved.toFixed(2);
 	altInput.value = numText(scene.alt);
 	scaleInput.value = numText(scene.scale);
 	fillGains(scene.gains);
@@ -179,3 +183,17 @@ async function showFleet() {
 }
 showFleet();
 setInterval(showFleet, 30_000);
+
+/** Each pane's URL on this wall's LAN address (aero-2's launch links): open one here to check a role, or paste it into a kiosk. */
+async function showLinks() {
+	const s = (await fetch('/api/status').then((r) => r.json()).catch(() => null)) as { lan: string | null; port: number } | null;
+	if (!s?.lan) return;
+	const origin = `http://${s.lan}:${s.port}`;
+	const host = document.querySelector('#links')!;
+	host.replaceChildren('Panes on this wall: ');
+	for (const role of ['left', 'center', 'right']) {
+		const a = Object.assign(document.createElement('a'), { textContent: role, href: `${origin}/?role=${role}&wall=${origin}`, target: '_blank', rel: 'noopener' });
+		host.append(a, role === 'right' ? '' : ' · ');
+	}
+}
+showLinks();

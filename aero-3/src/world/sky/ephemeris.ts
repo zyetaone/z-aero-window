@@ -57,6 +57,24 @@ export const atSolarHour = (ms: number, lonDeg: number, hour: number) =>
 export const siderealDeg = (ms: number, lonDeg: number) =>
 	(280.46061837 + 360.98564736629 * (ms / DAY_MS - 10_957.5) + lonDeg) % 360;
 
+/**
+ * The solar hour today at which the sun stands `elevDeg` high, setting (afternoon) or rising
+ * (morning); null when it never gets there (a polar day, a tropical noon asked for 80°). A fixed
+ * clock is a correct sunset for only part of the year; this is aero-2's elevation preset, reduced.
+ * Bisection on sunAt: elevation is monotonic on each side of solar noon.
+ */
+export function hourAtSunElevation(ms: number, latDeg: number, lonDeg: number, elevDeg: number, rising = false): number | null {
+	const el = (h: number) => sunAt(atSolarHour(ms, lonDeg, h), latDeg, lonDeg).elevationDeg - elevDeg;
+	let [lo, hi] = rising ? [0, 12] : [12, 24]; // elevation rises over the morning, falls over the afternoon
+	if (Math.sign(el(lo)) === Math.sign(el(hi))) return null;
+	for (let i = 0; i < 40; i++) {
+		const mid = (lo + hi) / 2;
+		if (Math.sign(el(mid)) === Math.sign(el(lo))) lo = mid;
+		else hi = mid;
+	}
+	return (lo + hi) / 2;
+}
+
 export type Moon = Sun & { illumination: number };
 
 /**

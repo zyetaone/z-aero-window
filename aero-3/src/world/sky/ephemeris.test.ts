@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { atSolarHour, siderealDeg, solarHour, sunAt } from './ephemeris.ts';
+import { atSolarHour, hourAtSunElevation, siderealDeg, solarHour, sunAt } from './ephemeris.ts';
 
 const MARCH_EQUINOX = Date.UTC(2026, 2, 20);
 const at = (hour: number, lon = 78.4) => atSolarHour(MARCH_EQUINOX, lon, hour);
@@ -30,4 +30,19 @@ test('the moon is full on 26 Oct 2026 and new on 10 Oct 2026', () => {
 	const { moonAt } = require('./ephemeris.ts');
 	expect(moonAt(Date.parse('2026-10-26T04:00Z'), 17.44, 78.38).illumination).toBeGreaterThan(0.98);
 	expect(moonAt(Date.parse('2026-10-10T17:00Z'), 17.44, 78.38).illumination).toBeLessThan(0.02);
+});
+
+test('the hour at a sun elevation lands on it, moves with the season, and is null when unreachable', () => {
+	const [lat, lon] = [25.15, 55.19]; // Dubai
+	const june = Date.UTC(2026, 5, 21);
+	const december = Date.UTC(2026, 11, 21);
+	for (const [ms, rising] of [[june, false], [december, false], [june, true]] as const) {
+		const h = hourAtSunElevation(ms, lat, lon, 6, rising)!;
+		expect(h).not.toBeNull();
+		expect(sunAt(atSolarHour(ms, lon, h), lat, lon).elevationDeg).toBeCloseTo(6, 3);
+		expect(rising ? h < 12 : h > 12).toBe(true);
+	}
+	expect(hourAtSunElevation(june, lat, lon, 6)! - hourAtSunElevation(december, lat, lon, 6)!).toBeGreaterThan(1); // a longer June afternoon
+	expect(hourAtSunElevation(june, lat, lon, 89)).toBeNull(); // Dubai's sun never stands overhead
+	expect(hourAtSunElevation(june, 80, 0, -10)).toBeNull(); // polar day: never that low
 });

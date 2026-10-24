@@ -88,6 +88,15 @@ export const PRESETS: Record<string, Push> = {
 	'Storm transit': { place: 'mumbai', weather: 'storm', clock: 15, alt: null, scale: null, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null },
 	'City lights': { place: 'hyderabad', weather: 'scattered', clock: 21, alt: null, scale: null, gains: { ...NO_GAINS }, media: { audio: [], video: null }, mode: null }
 };
+/**
+ * Presets whose hour is a sun height, solved per place and day in /admin (ephemeris
+ * hourAtSunElevation): 17.6 is a Gulf golden hour in March and broad daylight in June. The clock
+ * in PRESETS stays as the fallback when the sun never gets there.
+ */
+export const PRESET_SUN: Record<string, { elevDeg: number; rising: boolean }> = {
+	'Golden hour': { elevDeg: 6, rising: false },
+	'Alpine dawn': { elevDeg: -2, rising: true }
+};
 export const MAX_PUSH_BYTES = 1024;
 
 /** One gain: null (default) or a finite number in range; anything else fails the push. */
