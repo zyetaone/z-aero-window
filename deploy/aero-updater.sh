@@ -276,7 +276,7 @@ use_prebuilt() {
     local sha="$1" app stage src want got
     app="$(basename "${APP_DIR}")"
     [[ "${PREBUILT_BASE}" != "off" ]] || return 1
-    [[ "${app}" == "aero-1" || "${app}" == "aero-2" ]] || return 1
+    [[ "${app}" == "aero-1" || "${app}" == "aero-2" || "${app}" == "aero-3" ]] || return 1
     stage="${REPO_DIR}/.prebuilt"
     rm -rf "${stage}" && mkdir -p "${stage}" || return 1
 
@@ -644,8 +644,16 @@ bun_meets_floor() {
 # full consumed every arriving release and served an ever-older build while
 # HEAD claimed currency, and "wait for a newer release" was as wrong an answer
 # to "you freed the disk" as it is to "you upgraded Bun".)
-if [[ -f "${APP_DIR}/package.json" ]] && command grep -q '"@sveltejs/adapter-bun"' "${APP_DIR}/package.json"; then
-    BUN_FLOOR="1.4.0"
+# The floor an app needs: its package.json `engines.bun` (aero-3), else 1.4.0 when it
+# builds with @sveltejs/adapter-bun (aero-1/2). Apps declaring neither skip the check.
+BUN_FLOOR=""
+if [[ -f "${APP_DIR}/package.json" ]]; then
+    BUN_FLOOR="$(command grep -o '"bun"[[:space:]]*:[[:space:]]*">=[[:space:]]*[0-9][0-9.]*' "${APP_DIR}/package.json" 2>/dev/null | command grep -o '[0-9][0-9.]*$' | head -n1 || true)"
+    if [[ -z "${BUN_FLOOR}" ]] && command grep -q '"@sveltejs/adapter-bun"' "${APP_DIR}/package.json"; then
+        BUN_FLOOR="1.4.0"
+    fi
+fi
+if [[ -n "${BUN_FLOOR}" ]]; then
     # `timeout` so a wedged runtime — corrupt binary, a hung sudo — cannot
     # strand this run inside the reset→restore window, where the
     # TimeoutStartSec SIGKILL would land with HEAD == REMOTE and consume the
@@ -654,9 +662,9 @@ if [[ -f "${APP_DIR}/package.json" ]] && command grep -q '"@sveltejs/adapter-bun
     # floor check and the run skips safely, which is the right direction.
     BUN_HAVE="$(as_app_user timeout 10 "${BUN_BIN}" --version 2>/dev/null || echo "unavailable")"
     if ! bun_meets_floor "${BUN_HAVE}" "${BUN_FLOOR}"; then
-        log "SKIP: this app builds with @sveltejs/adapter-bun, which needs Bun >= ${BUN_FLOOR}."
+        log "SKIP: this app needs Bun >= ${BUN_FLOOR} (package.json engines, or @sveltejs/adapter-bun)."
         log "      ${BUN_BIN} reports '${BUN_HAVE}'. Below that floor every build fails inside"
-        log "      the adapter and this sha would be banned after two attempts, with the cause"
+        log "      the runtime and this sha would be banned after two attempts, with the cause"
         log "      buried in a Bun.serve stack trace — so it is checked before install, not"
         log "      discovered during it. The release is fine; the runtime is not."
         log "      Upgrade the runtime, then the next poll retries this commit:"

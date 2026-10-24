@@ -325,6 +325,26 @@ jobs:
           curl -sf -o /dev/null http://127.0.0.1:3300/
           curl -sf -o /dev/null http://127.0.0.1:3300/admin
 
+      # Same contract as aero-1/2: the updater installs this instead of a `bun install` of
+      # Babylon over the Pi's network. aero-3 inlines nothing; the input is recorded so a
+      # Pi's config.env (which exports it) matches.
+      - name: Package fleet prebuilt
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          VITE_TILE_SERVER_URL: /api/tiles
+        run: bash ../deploy/package-build.sh aero-3
+
+      - name: Upload fleet prebuilt
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilt-aero-3
+          path: dist-prebuilt/aero-3.tar.gz*
+          if-no-files-found: warn
+          retention-days: 3
+
   # ── Release promotion ────────────────────────────────────────────────────
   # The Pi fleet's daily updater tracks the `release` branch, NOT main.
   # This job is the deploy gate: only a green main run moves `release`.
@@ -377,7 +397,7 @@ jobs:
           gh release create "build-${GITHUB_SHA}" prebuilt/* --repo "$REPO" \
             --target "$GITHUB_SHA" --prerelease --latest=false \
             --title "Fleet build ${GITHUB_SHA:0:8}" \
-            --notes "CI-built aero-1 / aero-2 for ${GITHUB_SHA}. Installed by deploy/aero-updater.sh; not for humans."
+            --notes "CI-built aero-1 / aero-2 / aero-3 for ${GITHUB_SHA}. Installed by deploy/aero-updater.sh; not for humans."
           # Keep the newest 15 so a rollback a few releases back still finds
           # its build; older ones fall back to an on-device build.
           gh release list --repo "$REPO" --limit 200 --json tagName,createdAt \

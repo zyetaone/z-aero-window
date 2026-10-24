@@ -16,7 +16,7 @@
 # caller sets them (CI: the fleet defaults) — this script only records them.
 set -euo pipefail
 
-APP="${1:?usage: package-build.sh <aero-1|aero-2>}"
+APP="${1:?usage: package-build.sh <aero-1|aero-2|aero-3>}"
 ROOT="$(git rev-parse --show-toplevel)"
 APP_DIR="${ROOT}/${APP}"
 OUT="${OUT_DIR:-${ROOT}/dist-prebuilt}"
@@ -30,6 +30,10 @@ case "${APP}" in
     # it, and the updater treats a set VITE_* the build never recorded as a
     # mismatch — so it is recorded here, or no aero-2 Pi would ever match.
     aero-2) INPUTS="PUBLIC_TILE_SERVER_URL PUBLIC_WALL_ORIGIN AERO_MEDIA_ORIGINS VITE_TILE_SERVER_URL VITE_MAPBOX_TOKEN" ;;
+    # aero-3 inlines nothing (Bun bundles the page at runtime), but the same
+    # config.env exports VITE_TILE_SERVER_URL on every Pi, so it is recorded
+    # for the same reason as aero-2's — or no aero-3 Pi would ever match.
+    aero-3) INPUTS="VITE_TILE_SERVER_URL VITE_MAPBOX_TOKEN" ;;
     *) echo "unknown app: ${APP}" >&2; exit 2 ;;
 esac
 
