@@ -44,7 +44,7 @@ const mediaText = (m: Wall['media']) => {
 
 const describe = (w: Wall) =>
 	w.version
-		? `Wall v${w.version}: ${w.mode === 'standby' ? 'STANDBY, ' : w.mode === 'blind' ? 'BLINDS DOWN, ' : ''}${w.place ?? 'rotation'}, ${w.weather ?? "today's weather"}, ${w.clock === null ? 'real time' : `${hhmm(w.clock)} local`}${w.alt === null ? '' : `, ${w.alt} m`}${w.scale === null || w.scale === 1 ? '' : `, scale ${w.scale}`}${gainText(w.gains)}${mediaText(w.media)}`
+		? `Wall v${w.version}: ${w.mode === 'standby' ? 'STANDBY, ' : w.mode === 'blind' ? 'BLINDS DOWN, ' : ''}${w.place ?? 'rotation'}, ${w.weather ?? "today's weather"}, ${w.clock === null ? 'real time' : `${hhmm(w.clock)} local`}${w.alt == null ? '' : `, ${w.alt} m`}${w.scale == null || w.scale === 1 ? '' : `, scale ${w.scale}`}${gainText(w.gains)}${mediaText(w.media)}`
 		: 'Nothing pushed yet: panes follow the rotation.';
 
 const current = await fetchWall('');
