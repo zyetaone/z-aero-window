@@ -191,8 +191,15 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
   Panes read it at boot (2 s timeout, then none) from `?wall=<origin>` or their own server, poll
   every 5 s, and on a new version lower the blind and reload on its `applyAt` second (10 s ahead).
   URL params beat the wall. Panes take `?role=left|center|right` (±24°).
-  A push may also carry the five Lights gains (street, building, far 0-2; haze, glow 0-1), which
+  A push may also carry the six gains (street, building, far 0-2; haze, glow, volume 0-1), which
   REPLACE the pane's defaults (never multiply; a lone pane's sliders still edit them), and media.
+  And `alt` (500-15000 m above ground, the pin `?alt=` makes; the clearance floor still clamps)
+  and `scale` (1-3, the hardware scaling level `?scale=` sets; 2 is half the pixels): both read at
+  the reload a push causes, both behind the URL knob. Scale is the remote perf lever for the Pi
+  cutover. `PRESET_SUN` names a sun height for 'Golden hour' (6°, setting) and 'Alpine dawn' (-2°,
+  rising); /admin solves today's hour for it at the place (`ephemeris.ts` `hourAtSunElevation`),
+  falling back to the preset's clock when the sun never gets there. /admin also lists each role's
+  URL on this wall's LAN address (from `/api/status` lan + port).
   And a `mode`: null flies; `blind` holds every blind down (place, time, credits); `standby` is black
   glass. Both draw one frame then only the blind's clock, silence the sound and the clip, and keep
   the render loop counting so the stall watchdog sees a live page. Standby skips the slot reload.
@@ -263,7 +270,17 @@ bun run compile             # dist/aero-3: one linux-arm64 binary, page bundled 
 ```
 
 On a Pi: `sudo bash deploy/pi/install.sh --app aero-3 --role left|center|right --wall
-http://<centre-pi>:3000` (the centre Pi holds the wall; `/admin` there). The data folders the server
+http://<centre-pi>:3000` (the centre Pi holds the wall; `/admin` there).
+
+**Cutover runbook, one Pi first** (phase 5 has no numbers yet; aero-1 on a Pi 5 is 2-3 fps, so the
+first aero-3 pane is the measurement): 1. `bun aero-3/tools/ship-pack.ts <kiosk-user>@<pi>` (the
+data, ~320 MB, resumable). 2. On the Pi, `install.sh --app aero-3 --role <role> --wall
+http://<centre-pi>:3000`; it keeps the tokens, writes `AERO_APP_SUBDIR=aero-3` and the kiosk URL.
+3. `curl http://<pi>:3000/api/status`: `ok`, `page ok`, `data` lists imagery/terrain/lights/
+buildings/roads/models/media. 4. Open `/admin` on the centre Pi from a phone: the pane's heartbeat
+row appears within five minutes with an fps; push `scale 2` if it is under 10. 5. The other two
+panes only after that number reads well. The updater then tracks `release` as before, installing
+the CI prebuilt for each sha. The data folders the server
 finds at startup are served, the rest 404, so a Pi without a pack still boots. Measure with
 `tools/pi-bench.ts` (usage in its header). Or run the binary from a directory where `../data/tiles/sentinel2`,
 `../aero-2/data/tiles/terrarium` and `../aero-2/data/tiles/viirs` exist, or set
@@ -306,7 +323,10 @@ Svelte; copy aero-2's pure modules where they exist, rewrite its components.
    URL carries `&wall=`. CI's `aero-3` job gates `release`. Thermal shedding reads
    health-check.sh's `/run/aero/thermal.json` via `/api/thermal`. `bun tools/ship-pack.ts <user@pi>` rsyncs
    the ~320 MB aero-3 reads (Sentinel-2 z7/8/11/12, Terrarium z8/10, VIIRS z8, roads, OSM
-   buildings), restarts the app and checks `/api/status` `data` lists every route.
+   buildings), restarts the app and checks `/api/status` `data` lists every route. CI packages
+   `prebuilt-aero-3` (build/ + production node_modules, 17 MB) like aero-1/2, so a cut-over Pi
+   installs the CI build instead of a `bun install` of Babylon over the wall LAN; the updater reads
+   the Bun floor from package.json `engines.bun` (1.4.0, what CI pins). Cutover runbook: Run, below.
 5. **Pi gate** — `frame-cost.mjs` on a Pi 5 for every place, day and night, before phase 6.
    Levers if it is slow: `?caps=1` (built, off by default: `capFootprints` keeps 25k footprints
    by distance then area, `thinStreetLamps` 150k street lamps; measured, the building cap ends
@@ -331,6 +351,17 @@ Reviewed against aero-1 and aero-2 (2026-10-23) and left out on purpose:
   is the near view until then.
 - **Screensaver slideshow, look controls, minimap, destination card, night CSS grade**: aero-2
   surfaces for a lone pane or a MapLibre workaround; the grade wants a side-by-side before porting.
+- **Dusk sun glare** (aero-2's CSS radiance): the atmosphere already paints the dusk horizon band,
+  and a screen-space bloom would have to track the sun across three pane yaws. Not the small port
+  it looks like. **Glass reflection and night vignette**: already here (`#frame::before/::after`).
+- **Per-device targeted push, operator quality mode, kiosk telemetry panel, hotkeys, wiki**: the
+  wall is one server and roles already differ; the `scale` push is the quality lever; `?debug`
+  and /admin's fps column are the telemetry.
+- **WiFi reset route** (aero-1/2): a brick risk whose portal guard aero-1's own notes say was never
+  installed; the shared `deploy/` owns WiFi. **Memory-pressure guard**: a journal line, not a fix.
+- **In-visit sky drift** (aero-1's tickRandomize): the ride and the cloud motion already animate
+  the view; clouds are built once per visit by design (live weather applies per visit).
+- **USB media import** (aero-2): worth it only at a site without internet; asked, not built.
 - **Admin OTA trigger, mDNS discovery, device bindings, slideshow mode, wing alignment knobs**:
   operator tooling the shared updater, the centre-Pi wall and `?role=` already cover.
 
