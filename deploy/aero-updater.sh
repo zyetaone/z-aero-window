@@ -646,11 +646,12 @@ bun_meets_floor() {
 # to "you freed the disk" as it is to "you upgraded Bun".)
 # The floor an app needs: its package.json `engines.bun` (aero-3), else 1.4.0 when it
 # builds with @sveltejs/adapter-bun (aero-1/2). Apps declaring neither skip the check.
+ADAPTER_BUN_FLOOR="1.4.0" # @sveltejs/adapter-bun's engines.bun; aero-2/tests/bun-floor-engine.test.ts pins it to the adapter
 BUN_FLOOR=""
 if [[ -f "${APP_DIR}/package.json" ]]; then
     BUN_FLOOR="$(command grep -o '"bun"[[:space:]]*:[[:space:]]*">=[[:space:]]*[0-9][0-9.]*' "${APP_DIR}/package.json" 2>/dev/null | command grep -o '[0-9][0-9.]*$' | head -n1 || true)"
     if [[ -z "${BUN_FLOOR}" ]] && command grep -q '"@sveltejs/adapter-bun"' "${APP_DIR}/package.json"; then
-        BUN_FLOOR="1.4.0"
+        BUN_FLOOR="${ADAPTER_BUN_FLOOR}"
     fi
 fi
 if [[ -n "${BUN_FLOOR}" ]]; then
