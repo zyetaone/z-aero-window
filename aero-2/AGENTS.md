@@ -3,7 +3,7 @@
 The rewrite: SvelteKit 2 + Svelte 5 runes, MapLibre (not Cesium), no CRDT.
 Pre-ship. `aero-1/` is what the Pi fleet runs today.
 
-Canonical architecture: **`docs/ARCHITECTURE.md`** (repo root, shared).
+Canonical architecture: **`aero-2/docs/ARCHITECTURE.md`** (the repo-root one is aero-1's).
 Root `AGENTS.md` describes **aero-1** — most of its Cesium, fleet-SSE and
 `$lib/model` material does not apply here.
 
@@ -83,6 +83,25 @@ upload, update), `AERO_FLEET_TOKEN` (heartbeat POST), `AERO_WIFI_RESET_TOKEN`
 (purge Wi-Fi and reboot). `lib/server/fs-guard.ts` (`safeResolveWithin`) guards every
 path built from a name the process did not generate; `media-store.ts` is
 exempt because it generates its names (content hash + extension).
+
+## Known and recorded (2026-10-25 review), not fixed: this app is a reference
+
+- The wall push's loopback exemption (`routes/api/wall`) trusts adapter-bun's client address,
+  which comes from `ADDRESS_HEADER` when that is set. Never set `ADDRESS_HEADER` in config.env:
+  a no-token push would become header-spoofable from the LAN.
+- `lib/server/wall-store.ts` restarts the version counter at 0 on a CORRUPT `data/wall.json`
+  (a parser-rejected one now keeps its version); panes drop snapshots at or below the version
+  they applied, so after such a reset the next N pushes are ignored until the panes reload.
+- `lib/server/grain.ts` imports `mulberry32` from `display/flight/flight-path.ts`, against
+  `docs/ARCHITECTURE.md` §1's "server imports nothing from display"; nothing enforces that rule.
+- `lib/server/cors.ts` still admits 100.64/10 for Tailscale; the fleet decision is LAN only.
+- `media-store.ts` streams with `Readable.toWeb(createReadStream)` without the closed-guard the
+  tile route grew after a client abort killed the process; unverified on Bun.
+- `getAppCommit` in `lib/server/update.ts` has no caller outside its test.
+- Tests that read outside `aero-2/`: `tests/bun-floor-engine.test.ts` (deploy/aero-updater.sh:
+  `bun_meets_floor()` at column 0 and `^ADAPTER_BUN_FLOOR="x.y.z"`), `tests/geojson.test.ts`
+  (`../data/{buildings,roads,towns}/denver.geojson`, no skip), `tests/pack-coverage.test.ts` and
+  the tile tests (skip when the pack is absent). A change to those shapes reddens this job.
 
 ## Shared working tree
 

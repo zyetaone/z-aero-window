@@ -10,7 +10,7 @@ import { defineEnvVars } from '@sveltejs/kit/env';
  *
  * The SERVER-side variables (`TILE_DIR`, `AERO_TILE_REMOTE_FALLBACK`) are
  * deliberately NOT here. `lib/server/tiles.ts` takes `env` as an injected
- * parameter, which is what lets `tests/server/tiles.test.ts` assert the
+ * parameter, which is what lets `tests/tiles.test.ts` assert the
  * fail-closed behaviour directly — including the `NODE_ENV` fallback, which no
  * declarative schema can express. Injection is the better tool for that job.
  */

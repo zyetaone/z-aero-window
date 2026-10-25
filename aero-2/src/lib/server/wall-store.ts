@@ -51,7 +51,10 @@ export function readWall(path = DEFAULT_WALL_PATH): WallSnapshot {
 		const state = parseWallState(raw.state);
 		const version = typeof raw.version === 'number' && raw.version >= 0 ? raw.version : 0;
 		const applyAtWallSec = typeof raw.applyAtWallSec === 'number' ? raw.applyAtWallSec : 0;
-		if (!state || version === 0) return { version: 0, applyAtWallSec: 0, state: EMPTY };
+		// A state this build cannot parse (a field renamed between releases) keeps its
+		// version: panes drop any snapshot at or below the version they applied, so a
+		// counter that restarted at 1 would have the next N pushes silently ignored.
+		if (!state) return { version, applyAtWallSec: 0, state: EMPTY };
 		return { version, applyAtWallSec, state };
 	} catch {
 		// A corrupt file must not wedge the wall. Falling back to "never pushed"
