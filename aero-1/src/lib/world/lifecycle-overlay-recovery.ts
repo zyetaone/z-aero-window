@@ -86,8 +86,8 @@ export function startOverlayRecovery(opts: OverlayRecoveryOptions): () => void {
 	const threshold = opts.fpsMinThreshold ?? FPS_MIN_THRESHOLD;
 	const required = opts.slowChecksRequired ?? CONSECUTIVE_CHECKS;
 	let consecutiveSlow = 0;
-	// Latch: once fired, don't re-fire disableOverlay (a config patch + fleet
-	// broadcast) on every interval while the slowness persists. A healthy
+	// Latch: once fired, don't re-fire disableOverlay (a persisted config
+	// patch; the kiosk runs no peer-sync, so nothing is broadcast) on every interval while the slowness persists. A healthy
 	// check resets the latch so a LATER sustained regression re-fires.
 	let reported = false;
 

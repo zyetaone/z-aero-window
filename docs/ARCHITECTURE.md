@@ -150,7 +150,7 @@ Edge panes          pure view (no tab, no open-blind HUD)
 |---|---|---|
 | BlindInfoCard | blind closed | every pane (furniture on the shade) |
 | TelemetryOverlay whisper | blind open + en route | `showsOpenPassengerHud(role, hudVisible)` |
-| SidePanel tab | operator invite | `showsOpsChrome(role, opsMode)` |
+| SidePanel tab | operator invite | `showsOpsChrome(opsMode, isDev)` |
 | ALT / GS / LOCAL | SidePanel header only | same as SidePanel |
 | CabinClock | single tap, `shell.clockVisible` | fleet-synced config |
 
@@ -164,7 +164,7 @@ components.
 |---|---|
 | `isGroupLeader(role)` | center \| solo — autopilot + director broadcast |
 | `isEdgePane(role)` | left \| right — share scene, hide edge UI |
-| `showsOpsChrome(role, opsMode)` | SidePanel tab; edge needs `?ops=1` |
+| `showsOpsChrome(opsMode, isDev)` | SidePanel tab; edge needs `?ops=1` |
 | `showsOpenPassengerHud(role, hudVisible)` | open-blind whisper |
 | `isOpsModeParam(search)` | parse `?ops=1\|true` |
 

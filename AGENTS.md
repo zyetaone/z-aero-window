@@ -370,7 +370,7 @@ Shell must not re-inline left/right checks. Use helpers in
 `src/lib/fleet/parallax.svelte.ts`:
 
 - `isGroupLeader` / `isEdgePane` — flight leadership vs edge pane
-- `showsOpsChrome(role, opsMode)` — SidePanel tab visibility
+- `showsOpsChrome(opsMode, isDev)` — SidePanel tab visibility (role plays no part; a dev build shows it)
 - `showsOpenPassengerHud(role, hudVisible)` — open-blind destination whisper
 - `isOpsModeParam(search)` — `?ops=1|true` escape hatch for edge ops
 
@@ -395,7 +395,7 @@ Budget: ~1.2 GB per Pi. See `docs/ADR-002-zero-cost-caching-strategy.md`.
 
 ## Pi 5 deployment
 
-- **Deploy gate**: the fleet updater (`deploy/aero-updater.sh`, daily timer) tracks
+- **Deploy gate**: the fleet updater (`deploy/aero-updater.sh`, 15-minute timer) tracks
   the **`release`** branch, which CI fast-forwards only after check + tests + build
   pass on `main`. A red commit never deploys. The updater rolls back (reset +
   rebuild + restart) on install/build/post-restart-probe failure. `release` is
