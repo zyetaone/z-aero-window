@@ -67,6 +67,7 @@ export class DeviceClient {
 	// (rather than the previous #peers) so an mDNS blip doesn't read as a
 	// rejoin — see #refreshPeers.
 	#peersSeen = new Set<string>();
+	#peersPolled = false;
 	#bootTime = Date.now();
 	#destroyed = false;
 	// Track pending director_decision setTimeouts so we can cancel them on
@@ -200,7 +201,13 @@ export class DeviceClient {
 			// peer that merely blips out of one /api/devices response — mDNS is
 			// not perfectly stable — doesn't get counted as a rejoin every time
 			// it flickers.
-			const rejoined = next.filter((p) => !this.#peersSeen.has(p.deviceId));
+			// The first poll after THIS browser loaded seeds the set and resyncs
+			// nobody: a leader whose own page reloaded (liveness watchdog, a crash)
+			// would otherwise see every peer as rejoined and drag a correct wall to
+			// its boot city. A follower that reboots later is still caught.
+			const first = !this.#peersPolled;
+			this.#peersPolled = true;
+			const rejoined = first ? [] : next.filter((p) => !this.#peersSeen.has(p.deviceId));
 			this.#peers = next;
 			for (const p of next) this.#peersSeen.add(p.deviceId);
 

@@ -61,22 +61,34 @@ export function publish(event: SseEvent): void {
  * Replay buffered events to a callback. Called once per new subscriber
  * before live events start flowing. Preserves insertion order.
  *
- * Only the MOST RECENT buffered `command` is replayed: commands carry
- * wall-clock instants (e.g. director_decision transitionAtMs), so replaying
- * the whole history on reconnect would fire up to BUFFER_SIZE stale,
- * long-past-due scene flips in a burst. config_patch events replay in full —
- * CRDT LWW rejects stale patches, so those are harmless.
+ * Only the MOST RECENT buffered `command` OF EACH KIND is replayed: commands
+ * carry wall-clock instants (e.g. director_decision transitionAtMs), so
+ * replaying the whole history on reconnect would fire up to BUFFER_SIZE stale,
+ * long-past-due scene flips in a burst. Per kind, not one overall: ambient
+ * set_config arrives every few minutes and hops every 7-15, so "the last
+ * command" was almost never the scene, and a follower whose browser reloaded
+ * sat on the show-opening city until the next hop. A late director_decision
+ * applies immediately (client.svelte.ts), so replaying the last one is the
+ * resync. config_patch events replay in full — CRDT LWW rejects stale patches,
+ * so those are harmless.
  */
 export function replayTo(fn: (event: SseEvent) => void): void {
-	let lastCommandIdx = -1;
-	for (let i = buffer.length - 1; i >= 0; i--) {
-		if (buffer[i].type === 'command') { lastCommandIdx = i; break; }
+	const lastOfKind = new Map<string, number>();
+	for (let i = 0; i < buffer.length; i++) {
+		if (buffer[i].type === 'command') lastOfKind.set(commandKind(buffer[i]), i);
 	}
+	const keep = new Set(lastOfKind.values());
 	for (let i = 0; i < buffer.length; i++) {
 		const event = buffer[i];
-		if (event.type === 'command' && i !== lastCommandIdx) continue;
+		if (event.type === 'command' && !keep.has(i)) continue;
 		try { fn(event); } catch { /* subscriber exploded — skip */ }
 	}
+}
+
+/** The command's own `type` (set_scene, director_decision, set_config, …); unknown shapes share one slot. */
+function commandKind(event: SseEvent): string {
+	const t = (event.data as { type?: unknown } | null)?.type;
+	return typeof t === 'string' ? t : '';
 }
 
 /** Register a callback. Returns an unsubscribe function. */

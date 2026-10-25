@@ -96,7 +96,7 @@ describe('sse-bus', () => {
 			expect(received[2]).toEqual({ type: 'config_patch', data: { path: 'b', value: 2 } });
 		});
 
-		it('replayTo replays all config patches but only the latest command', () => {
+		it('replayTo replays all config patches and the latest command of each kind', () => {
 			publish({ type: 'command', data: { type: 'set_scene', location: 'dubai' } });
 			publish({ type: 'config_patch', data: { path: 'a', value: 1 } });
 			publish({ type: 'command', data: { type: 'set_scene', location: 'london' } });
@@ -106,10 +106,13 @@ describe('sse-bus', () => {
 			const received: SseEvent[] = [];
 			replayTo((ev) => received.push(ev));
 
-			expect(received).toHaveLength(3);
+			// The stale set_scene (dubai) is dropped; london survives set_mode, so a
+			// browser that reloads after a hop lands on the hop, not the boot city.
+			expect(received).toHaveLength(4);
 			expect(received[0]).toEqual({ type: 'config_patch', data: { path: 'a', value: 1 } });
-			expect(received[1]).toEqual({ type: 'config_patch', data: { path: 'b', value: 2 } });
-			expect(received[2]).toEqual({ type: 'command', data: { type: 'set_mode', mode: 'night' } });
+			expect(received[1]).toEqual({ type: 'command', data: { type: 'set_scene', location: 'london' } });
+			expect(received[2]).toEqual({ type: 'config_patch', data: { path: 'b', value: 2 } });
+			expect(received[3]).toEqual({ type: 'command', data: { type: 'set_mode', mode: 'night' } });
 		});
 
 		it('ring buffer evicts oldest when capacity exceeded', () => {
