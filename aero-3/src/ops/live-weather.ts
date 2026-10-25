@@ -39,8 +39,9 @@
  */
 import { REGIME_NAMES } from '#flight/weather.ts';
 
-/** A fresh reading serves panes this long; past it the route asks upstream again. */
+/** A reading serves every boot in the same 10-minute slot (the grid the visits run on); the next slot asks upstream again. */
 export const CACHE_TTL_MS = 10 * 60 * 1000;
+const sameSlot = (a: number, b: number) => Math.floor(a / CACHE_TTL_MS) === Math.floor(b / CACHE_TTL_MS);
 /** A stale reading may stand in for a dead provider this long, then it is weather no more. */
 export const STALE_MAX_MS = 60 * 60 * 1000;
 /** Eleven places, a few rotations, an admin preview: 64 cells is an order of magnitude of headroom. */
@@ -155,7 +156,7 @@ export class WeatherCache {
 		// not write for hours — a day-old reading must not serve as "stale".
 		const cached = this.#cache.get(key);
 		const hit = cached && now - cached.fetchedAt <= STALE_MAX_MS ? cached : undefined;
-		if (hit && now - hit.fetchedAt < CACHE_TTL_MS) return { ...hit, fromCache: true, stale: false };
+		if (hit && sameSlot(now, hit.fetchedAt)) return { ...hit, fromCache: true, stale: false };
 
 		const reading = await fetchReading(lat, lon, fetchFn);
 		if (reading) {

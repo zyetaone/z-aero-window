@@ -24,6 +24,27 @@ export function recover() {
 }
 recover.once = false;
 
+// The page's own last error goes to this pane's server (/api/status lastError), which
+// health-check.sh carries in the heartbeat: a dark pane is diagnosed from /admin, not over ssh.
+const report = (what: string) => fetch('/api/error', { method: 'POST', body: what.slice(0, 200) }).catch(() => {});
+let booting = true;
+
+/**
+ * main.ts's first statement: a boot that throws before the engine exists (Chromium up before the
+ * GPU, a failed fetch of the page's own data) still reports and reloads. Past boot, an uncaught
+ * error is reported only; a rejection still reloads, as before.
+ */
+export function guardBoot() {
+	addEventListener('error', (e: ErrorEvent) => {
+		report(e.message || String(e.error));
+		if (booting) recover();
+	});
+	addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
+		report(String(e.reason?.message ?? e.reason));
+		recover();
+	});
+}
+
 /**
  * Watch the pane. Returns the live state the render loop reads (`shedding`: health-check.sh,
  * served at /api/thermal, says the Pi is hot — fewer pixels, and lighting.ts drops bloom and haze).
@@ -31,18 +52,15 @@ recover.once = false;
  * hang, a lost context that never fired its event). Hidden tabs throttle rAF, so they are spared.
  */
 export function keepAlive(engine: AbstractEngine, baseScale: number, frames: () => number) {
-	addEventListener('unhandledrejection', recover, { once: true });
+	booting = false;
 	engine.onContextLostObservable.add(recover);
-	// The page's own last error goes to this pane's server (/api/status lastError), which
-	// health-check.sh carries in the heartbeat: a dark pane is diagnosed from /admin, not over ssh.
-	const report = (what: string) => fetch('/api/error', { method: 'POST', body: what.slice(0, 200) }).catch(() => {});
-	addEventListener('error', (e: ErrorEvent) => report(e.message || String(e.error)));
-	addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => report(String(e.reason?.message ?? e.reason)));
 	engine.onContextLostObservable.add(() => report('WebGL context lost'));
 	const state = { shedding: false };
-	let framesAt = 0;
+	let [framesAt, idle] = [0, 0];
 	setInterval(async () => {
-		if (!document.hidden && frames() === framesAt) recover();
+		// The scene builds for a minute or more on a Pi before the first frame: the wedge check arms
+		// on that frame. A page that never draws one gets five minutes, then the reload budget.
+		if (!document.hidden && frames() === framesAt && (frames() > 0 || ++idle >= 10)) recover();
 		framesAt = frames();
 		fetch('/api/fps', { method: 'POST', body: String(engine.getFps()) }).catch(() => {});
 		const thermal = await fetch('/api/thermal').then((r) => r.json()).catch(() => null);

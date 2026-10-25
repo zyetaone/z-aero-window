@@ -60,7 +60,10 @@ const COMMIT = Bun.env.AERO_COMMIT ?? Bun.spawnSync(['git', 'rev-parse', '--shor
 const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
 // A compiled binary runs from Bun's embedded filesystem: never dev mode on a Pi, NODE_ENV or not.
 const DEV = Bun.env.NODE_ENV !== 'production' && !import.meta.path.startsWith('/$bunfs');
-let wall: Wall = await Bun.file(WALL_FILE).json().catch(() => NO_WALL);
+const stored = (await Bun.file(WALL_FILE).json().catch(() => null)) as Wall | null;
+// A wall from an older release (a place renamed, a regime gone) must not read as "nothing pushed"
+// while its version counts on: keep the number, drop the scene.
+let wall: Wall = stored && parsePush(stored) && Number.isFinite(stored.version) ? stored : { ...NO_WALL, version: Number(stored?.version) || 0 };
 // deploy/pi/health-check.sh writes the Pi's temperature and shed state here every few minutes.
 const THERMAL_FILE = Bun.env.AERO_THERMAL_STATE_PATH ?? '/run/aero/thermal.json';
 const startedAt = Date.now();
@@ -90,6 +93,7 @@ const weatherCache = new WeatherCache();
 const PORT = Number(Bun.env.PORT ?? 3300);
 const server = Bun.serve({
 	port: PORT,
+	maxRequestBodySize: MAX_MEDIA_BYTES + 65_536, // Bun's default is 128 MB; the checks below run after the body is read
 	// No in-page hot swap: the page reloads whole every visit anyway, and a long-running --hot
 	// server's HMR graph broke on a newly added import from outside the app (Oct 6).
 	development: DEV ? { hmr: false } : false,

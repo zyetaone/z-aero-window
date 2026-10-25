@@ -42,8 +42,9 @@ test('a provider payload parses to a reading, or null on anything unexpected', (
 	expect(parseOpenMeteo({ current: { weather_code: 95, cloud_cover: 'many' } })).toBeNull();
 });
 
-test('the cache is fresh for 10 min, stale to the hour, gone past it', async () => {
-	let t = 1_700_000_000_000;
+test('the cache serves one reading per 10-minute slot, stale to the hour, gone past it', async () => {
+	let t = 1_700_000_400_000; // a slot start (a multiple of 600 s), 200 s in below
+	const slotStart = t;
 	const cache = new WeatherCache(() => t);
 	let calls = 0;
 	const upstream = async () => {
@@ -53,12 +54,13 @@ test('the cache is fresh for 10 min, stale to the hour, gone past it', async () 
 	// Miss → upstream, fresh.
 	expect(await cache.get(17.44, 78.38, upstream)).toMatchObject({ weather: 'storm', fromCache: false, stale: false });
 	expect(calls).toBe(1);
-	// Same 0.1° cell (17.44 rounds to 17.4), inside the TTL: the cache answers, upstream is quiet.
-	t += 9 * 60_000;
+	// Same 0.1° cell (17.44 rounds to 17.4), same slot: the cache answers, upstream is quiet.
+	t += 9 * 60_000 + 59_000;
 	expect(await cache.get(17.44, 78.38, upstream)).toMatchObject({ weather: 'storm', fromCache: true });
 	expect(calls).toBe(1);
-	// Past the TTL the route asks again; provider down → the stale reading stands in, honestly.
-	t += 2 * 60_000;
+	// The next slot asks again even one second later: three panes booting around a boundary must
+	// not split on a reading fetched 599 s ago. Provider down → the stale reading stands in, honestly.
+	t = slotStart + 10 * 60_000 + 1_000;
 	expect(await cache.get(17.4, 78.4, down)).toMatchObject({ weather: 'storm', stale: true });
 	expect(calls).toBe(1);
 	// Past the stale ceiling: no weather at all (the route answers 503, the pane holds course).

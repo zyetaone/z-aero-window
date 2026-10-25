@@ -61,7 +61,8 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
   frames and 12 s after the later of the slot start and the wall push it loaded into (so panes lift
   together), and comes down 6 s before every 10-min slot boundary, where main.ts reloads; while
   it closes it reads "here → next" when the rotation moves on.
-  A pane that boots inside a push's 10 s lead waits for its applyAt before building.
+  A pane that boots inside a push's 10 s lead waits for its applyAt before building, at most 15 s:
+  applyAt is the centre's clock, and a centre running ahead must not hold a blind down for its skew.
 - `src/cabin/hud.ts` — the time-of-day slider, the Lights panel, the place picker. The HUD is off on a wall pane (any `?role=`), on elsewhere; `?hud=0|1` overrides.
 - `/api/status` answers 503 (`page: building|failed`) until the server has bundled the page once
   at startup, so a page that fails to build fails the updater's probe and rolls back.
@@ -172,8 +173,10 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
   and `commit` for `deploy/pi/health-check.sh`; `/api/fleet/heartbeat` takes its heartbeat (bearer
   `AERO_FLEET_TOKEN`, fail-closed; dev loopback open) into an in-memory table `/admin` shows,
   headed by `fleet.ts` `rollUp` (live panes only: count, hottest, throttling, average fps).
-  `src/ops/kiosk.ts`: the same 30 s tick posts fps, reloads a visible page that drew no frame
-  (through `recover()`'s budget) and polls `/api/thermal` to shed pixels on a hot Pi.
+  `src/ops/kiosk.ts`: `guardBoot()` is main.ts's first statement (an error before the engine
+  exists reports and reloads); the 30 s tick posts fps, reloads a visible page that stopped
+  drawing (armed by the first frame: a Pi builds Dubai for a minute or more; a page that never
+  draws one gets five minutes) and polls `/api/thermal` to shed pixels on a hot Pi.
   `src/cabin/credits.ts` is the one attribution list: the blind (while down) and `/admin`'s footer.
   The page's last thrown error (window errors, unhandled rejections, a lost GL context) goes to
   `/api/error` on its own server (loopback only), rides `/api/status` as `lastError`, and
@@ -188,8 +191,10 @@ Where things not built yet go: remote actions in `ops/`, a camera-pose model in 
 - `src/ops/wall.ts` + `/api/wall` + `/admin` — what an operator pushes to every pane: place, weather,
   clock (null = default). The server keeps it in `WALL_FILE` (`./data/wall.json`, written via a
   rename); `POST` needs `Authorization: Bearer $AERO_ADMIN_TOKEN` and is off (503) without one.
-  Panes read it at boot (2 s timeout, then none) from `?wall=<origin>` or their own server, poll
-  every 5 s, and on a new version lower the blind and reload on its `applyAt` second (10 s ahead).
+  Panes read it at boot (three 2 s tries, then none) from `?wall=<origin>` or their own server, poll
+  every 5 s, and on a new version lower the blind and reload on its `applyAt` second (10 s ahead,
+  capped at 15 s on the pane's clock). The server validates the stored wall.json at startup with
+  `parsePush`: a wall from an older release keeps its version and loses its scene.
   URL params beat the wall. Panes take `?role=left|center|right` (±24°).
   A push may also carry the six gains (street, building, far 0-2; haze, glow, volume 0-1), which
   REPLACE the pane's defaults (never multiply; a lone pane's sliders still edit them), and media.
@@ -278,6 +283,10 @@ http://<centre-pi>:3000` (the centre Pi holds the wall; `/admin` there).
 first aero-3 pane is the measurement): 1. `bun aero-3/tools/ship-pack.ts <kiosk-user>@<pi>` (the
 data, ~320 MB, resumable). 2. On the Pi, `install.sh --app aero-3 --role <role> --wall
 http://<centre-pi>:3000`; it keeps the tokens, writes `AERO_APP_SUBDIR=aero-3` and the kiosk URL.
+A side pane needs `AERO_ADMIN_URL=http://<centre-pi>:3000 AERO_FLEET_TOKEN=<the centre's, from its
+/etc/aero/config.env>` in front of that command on a fresh install: health-check.sh posts the
+heartbeat where AERO_ADMIN_URL says, with that token, and without both the row never reaches the
+centre's /admin (it lands in the pane's own server, or 401s).
 3. `curl http://<pi>:3000/api/status`: `ok`, `page ok`, `data` lists imagery/terrain/lights/
 buildings/roads/models/media. 4. Open `/admin` on the centre Pi from a phone: the pane's heartbeat
 row appears within five minutes with an fps; push `scale 2` if it is under 10. 5. The other two
@@ -369,6 +378,13 @@ Reviewed against aero-1 and aero-2 (2026-10-23) and left out on purpose:
 - **In-visit sky drift** (aero-1's tickRandomize): the ride and the cloud motion already animate
   the view; clouds are built once per visit by design (live weather applies per visit).
 - **USB media import** (aero-2): worth it only at a site without internet; asked, not built.
+- **From the 2026-10-25 review, deferred until a Pi shows the magnitude**: a wall-clock offset
+  (`/api/wall` returning `now`, every `Date.now()` through one `wallNow()`) for fake-hwclock Pis on a
+  LAN with no NTP (today: deploy owns the clock, the waits are capped); quantising the blind lift to
+  a 10 s grid once a build outlasts LAG_SEC; registering the wall poll before the build; a side
+  Pi's /admin refusing pushes nobody follows (302/409 when AERO_WALL_URL is another host, but
+  "self" is not cheap to decide); a data-pack manifest hash in `/api/status` before the second
+  pane (floorM and cloud bases come from each pane's own terrain tiles).
 - **Admin OTA trigger, mDNS discovery, device bindings, slideshow mode, wing alignment knobs**:
   operator tooling the shared updater, the centre-Pi wall and `?role=` already cover.
 

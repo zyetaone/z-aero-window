@@ -24,8 +24,8 @@ import { createHud } from './cabin/hud.ts';
 import { adminQr, cabinDrone, cabinOverlay, lightning, loneGestures } from './cabin/cabin.ts';
 import { playAudioPlaylist, showVideo } from './cabin/media.ts';
 import { RAD } from './math.ts';
-import { keepAlive } from './ops/kiosk.ts';
-import { fetchWall, NO_WALL } from './ops/wall.ts';
+import { guardBoot, keepAlive } from './ops/kiosk.ts';
+import { fetchWall, LEAD_SEC, NO_WALL } from './ops/wall.ts';
 import { fetchLiveWeather } from './ops/live-weather.ts';
 import { readParams } from './flight/params.ts';
 import { rideAt } from './flight/motion.ts';
@@ -43,6 +43,8 @@ import { createMoon } from './world/sky/moon.ts';
 import { createStars } from './world/sky/stars.ts';
 import { createWing } from './world/wing.ts';
 
+guardBoot(); // before anything can throw
+
 const CLEAR_M = 2_000; // over the highest terrain within 4 km of the track
 const STILL = { pitch: 0, roll: 0, heaveM: 0 }; // ?ride=0: the camera holds the path
 const GLOW = 0.35;
@@ -50,10 +52,13 @@ const GLOW = 0.35;
 const P = readParams(location.search);
 // The operator's wall (ops/wall.ts), from ?wall=<center Pi's origin> or this pane's own server. Read
 // before anything is chosen; unreachable within 2 s means no wall. URL params still win.
-const wall = await fetchWall(P.wall);
+let wall = await fetchWall(P.wall);
+for (let i = 0; i < 2 && wall === NO_WALL; i++) wall = await fetchWall(P.wall); // three tries: every pane asks on the same second
 // A push not yet due: wait for its second (the blind is closed in the markup), so a pane that boots
-// in the 10 s lead does not show the new scene before the others change over.
-if (wall.applyAt * 1000 > Date.now()) await new Promise((r) => setTimeout(r, wall.applyAt * 1000 - Date.now()));
+// in the 10 s lead does not show the new scene before the others change over. Capped: applyAt is
+// the centre's clock, and a centre running ahead of this Pi must not hold the blind down for its skew.
+const MAX_WAIT_MS = (LEAD_SEC + 5) * 1000;
+if (wall.applyAt * 1000 > Date.now()) await new Promise((r) => setTimeout(r, Math.min(MAX_WAIT_MS, wall.applyAt * 1000 - Date.now())));
 // Every visit slot (10 min) is a fresh flight: a new city when following the rotation, a new
 // direction and today's weather either way (flight/plan.ts). The blind closes over the boundary and
 // the page reloads behind it, which also frees every buffer of the last visit. ?blind=0 holds one.
@@ -210,7 +215,7 @@ setInterval(async () => {
 	const next = await fetchWall(P.wall);
 	if (changeover || next.version === wall.version || next === NO_WALL) return;
 	changeover = true;
-	const wait = next.applyAt * 1000 - Date.now();
+	const wait = Math.min(MAX_WAIT_MS, next.applyAt * 1000 - Date.now());
 	setTimeout(() => cabin.hold(), Math.max(0, wait - 3_000)); // the blind takes 2.4 s to come down
 	setTimeout(() => location.reload(), Math.max(0, wait));
 }, 5_000);
