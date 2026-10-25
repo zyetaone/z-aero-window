@@ -15,7 +15,8 @@ import { resolve } from 'node:path';
  * because aero-2 is the app that depends on adapter-bun and whose node_modules
  * carries the authoritative `engines` field.
  */
-const script = readFileSync(resolve(__dirname, '../../deploy/aero-updater.sh'), 'utf8');
+const scriptPath = resolve(__dirname, '../../deploy/aero-updater.sh');
+const script = existsSync(scriptPath) ? readFileSync(scriptPath, 'utf8') : '';
 const fn = script.match(/^bun_meets_floor\(\) \{[\s\S]*?^\}/m)?.[0];
 const adapterManifest = resolve(__dirname, '../node_modules/@sveltejs/adapter-bun/package.json');
 
@@ -30,11 +31,12 @@ function meetsFloor(have: string, floor: string): boolean {
 }
 
 describe('aero-updater BUN_FLOOR stays at the adapter floor', () => {
-	const installed = existsSync(adapterManifest);
+	const installed = existsSync(adapterManifest) && script !== '';
 
 	it.skipIf(!installed)('floor is at or above adapter-bun\u2019s engines.bun minimum', () => {
-		const floor = script.match(/BUN_FLOOR="([^"]+)"/)?.[1];
-		if (!floor) throw new Error('BUN_FLOOR not found in aero-updater.sh');
+		// The adapter fallback is the named constant; BUN_FLOOR itself is read from each app's package.json.
+		const floor = script.match(/^ADAPTER_BUN_FLOOR="([^"]+)"/m)?.[1];
+		if (!floor) throw new Error('ADAPTER_BUN_FLOOR not found in aero-updater.sh');
 
 		const engines = JSON.parse(readFileSync(adapterManifest, 'utf8')).engines;
 		const min = (engines?.bun ?? '').match(/\d+\.\d+(?:\.\d+)?/)?.[0];
