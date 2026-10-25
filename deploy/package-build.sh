@@ -70,5 +70,5 @@ fi
 
 mkdir -p "${OUT}"
 tar czf "${OUT}/${APP}.tar.gz" -C "${APP_DIR}" build -C "${STAGE}" node_modules .svelte-kit build-inputs.env COMMIT
-( cd "${OUT}" && sha256sum "${APP}.tar.gz" > "${APP}.tar.gz.sha256" )
+( cd "${OUT}" && { sha256sum "${APP}.tar.gz" 2>/dev/null || shasum -a 256 "${APP}.tar.gz"; } > "${APP}.tar.gz.sha256" ) # macOS has shasum only; same output
 echo "packaged ${OUT}/${APP}.tar.gz ($(du -h "${OUT}/${APP}.tar.gz" | cut -f1))"

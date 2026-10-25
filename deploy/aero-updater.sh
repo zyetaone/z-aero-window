@@ -43,6 +43,8 @@ if [[ -r /etc/aero/config.env ]]; then
     source /etc/aero/config.env
     set +a
 fi
+# Root runs git in a checkout the kiosk user owns: never its hooks.
+export GIT_CONFIG_PARAMETERS="'core.hooksPath=/dev/null'"
 
 INSTALL_DIR="${AERO_INSTALL_DIR:-/opt/zyeta-aero}"
 LOG_FILE="/var/log/aero-updater.log"
@@ -193,10 +195,13 @@ restart_services() {
 
 # Probe the app's own status endpoint. curl -f treats server.ts's
 # "no build found" 503 as failure, so a half-written build/ can't pass.
-# 12 × 5s = up to 60s for Bun + SvelteKit handler to come up.
+# 12 × 5s = up to 60s for Bun + SvelteKit handler to come up. AERO_PROBE_TRIES
+# (config.env) raises it: aero-3 answers 503 until Bun has bundled the Babylon
+# page on first request, untimed on a Pi, and install.sh writes 36 for that app.
 probe_health() {
-    local i
-    for ((i = 1; i <= 12; i++)); do
+    local i tries="${AERO_PROBE_TRIES:-12}"
+    [[ "${tries}" =~ ^[0-9]+$ ]] || tries=12
+    for ((i = 1; i <= tries; i++)); do
         if curl -fsS --max-time 3 "${PROBE_URL}" >/dev/null 2>&1; then
             return 0
         fi
@@ -509,7 +514,11 @@ fi
 # stick again, and the Pi would rebuild and restart every 15 minutes forever.
 # release is CI fast-forward-only, so "remote is behind HEAD" is never a
 # legitimate update — it is a stale source.
-if ! is_newer "${REMOTE}" "${LOCAL}"; then
+# From origin, a tip that HEAD is an ancestor of is also an update: CI fast-forwards
+# `release` to main's sha, whose committer time can be older than the current tip
+# (a branch merged late, two pushes in one second). The usb source keeps the time
+# rule alone; its comment says why ancestry is unsafe there.
+if ! is_newer "${REMOTE}" "${LOCAL}" && ! { [[ "${SOURCE}" == "origin" && "${LOCAL}" != "${REMOTE}" ]] && git merge-base --is-ancestor "${LOCAL}" "${REMOTE}" 2>/dev/null; }; then
     log "${SOURCE}/${BRANCH} (${REMOTE:0:8}) is behind HEAD (${LOCAL:0:8}) — nothing to apply"
     exit 0
 fi

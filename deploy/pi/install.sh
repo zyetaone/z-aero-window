@@ -205,6 +205,19 @@ if [[ ! -x "${BUN_BIN}" ]]; then
 	fi
 else
 	echo "  bun already installed at ${BUN_BIN}"
+	# aero-3 declares engines.bun >= 1.4.0 and the updater skips every release below it, so a
+	# fielded Pi imaged before the pin (unpinned bun.sh/install) must come up to the pinned version
+	# here, or the cutover install succeeds and the pane then sits on that commit forever.
+	HAVE_BUN="$(sudo -u "${PI_USER}" "${BUN_BIN}" --version 2>/dev/null || echo 0)"
+	if [[ "${AERO_APP_SUBDIR:-}" == "aero-3" && "$(printf '%s\n' "1.4.0" "${HAVE_BUN}" | sort -V | head -n1)" != "1.4.0" ]]; then
+		echo "  bun ${HAVE_BUN} is below aero-3's floor 1.4.0: installing ${BUN_VERSION}"
+		sudo -u "${PI_USER}" bash -c "curl -fsSL https://bun.sh/install | bash -s 'bun-v${BUN_VERSION}'"
+		INSTALLED_BUN="$(sudo -u "${PI_USER}" "${BUN_BIN}" --version)"
+		if [[ "${INSTALLED_BUN}" != "${BUN_VERSION}" ]]; then
+			echo "ERROR: expected bun ${BUN_VERSION}, got ${INSTALLED_BUN}" >&2
+			exit 1
+		fi
+	fi
 fi
 
 # ─── Step 3: Clone repo (idempotent — fetch+checkout if already present) ──────
@@ -282,7 +295,8 @@ sudo -u "${PI_USER}" bash -c "cd '${APP_DIR}' && VITE_TILE_SERVER_URL='${VITE_TI
 # ─── Step 5: Write environment config ─────────────────────────────────────────
 
 echo "[5/7] Writing environment config..."
-install -d -m 755 -o "${PI_USER}" -g "${PI_USER}" /etc/aero
+install -d -m 755 /etc/aero
+chown root:root /etc/aero # also on a fielded Pi (install -d leaves an existing dir alone): the updater sources config.env as root, and nothing running as the kiosk user writes here
 # Preserve hand-configured secrets across re-runs — regenerating this file
 # used to wipe them. AERO_ADMIN_URL silently killed the WAN heartbeat;
 # AERO_ADMIN_TOKEN silently 503s every admin endpoint (requireAdminToken is
@@ -466,6 +480,12 @@ if [[ -f /etc/aero/config.env ]] && ! command grep -q '^AERO_FLEET_TOKEN=.' /etc
 fi
 # The updater runs bun as AERO_USER and this installer reads it back on the
 # OTA path; a config.env from before either line existed gets both.
+# aero-3's first request bundles the Babylon page before /api/status answers 200; the updater's
+# probe gets three times its default window on that app (aero-updater.sh probe_health).
+if [[ -f /etc/aero/config.env && "${AERO_APP_SUBDIR:-}" == "aero-3" ]] && ! command grep -q '^AERO_PROBE_TRIES=.' /etc/aero/config.env; then
+	echo "AERO_PROBE_TRIES=36" >> /etc/aero/config.env
+	echo "  added AERO_PROBE_TRIES=36 to /etc/aero/config.env (aero-3's first-request page bundle)"
+fi
 if [[ -f /etc/aero/config.env ]] && ! command grep -q '^AERO_USER=.' /etc/aero/config.env; then
 	echo "AERO_USER=${PI_USER}" >> /etc/aero/config.env
 	echo "  added missing AERO_USER=${PI_USER} to /etc/aero/config.env"
@@ -753,8 +773,9 @@ cat > /etc/NetworkManager/conf.d/aero-no-powersave.conf <<EOF
 wifi.powersave = 2
 EOF
 
-# Screen blanking off for the kiosk session (idempotent grep-guard).
-if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
+# Screen blanking off for the kiosk session (idempotent grep-guard). Not on the units-only OTA
+# path: the boot partition is the one edit a git rollback cannot undo.
+if [[ "${UNITS_ONLY}" == false ]] && ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
 	backup_boot_file /boot/firmware/cmdline.txt
 	sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt || true
 fi

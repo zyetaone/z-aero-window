@@ -280,13 +280,16 @@ On a Pi: `sudo bash deploy/pi/install.sh --app aero-3 --role left|center|right -
 http://<centre-pi>:3000` (the centre Pi holds the wall; `/admin` there).
 
 **Cutover runbook, one Pi first** (phase 5 has no numbers yet; aero-1 on a Pi 5 is 2-3 fps, so the
-first aero-3 pane is the measurement): 1. `bun aero-3/tools/ship-pack.ts <kiosk-user>@<pi>` (the
-data, ~320 MB, resumable). 2. On the Pi, `install.sh --app aero-3 --role <role> --wall
+first aero-3 pane is the measurement): 0. `bun --version` on the Pi: below 1.4.0, install.sh
+upgrades it for `--app aero-3` (the updater skips every release under the floor). 1. `bun
+aero-3/tools/ship-pack.ts <kiosk-user>@<pi>` (the data, ~320 MB, resumable). 2. On the Pi, `install.sh --app aero-3 --role <role> --wall
 http://<centre-pi>:3000`; it keeps the tokens, writes `AERO_APP_SUBDIR=aero-3` and the kiosk URL.
 A side pane needs `AERO_ADMIN_URL=http://<centre-pi>:3000 AERO_FLEET_TOKEN=<the centre's, from its
 /etc/aero/config.env>` in front of that command on a fresh install: health-check.sh posts the
 heartbeat where AERO_ADMIN_URL says, with that token, and without both the row never reaches the
-centre's /admin (it lands in the pane's own server, or 401s).
+centre's /admin (it lands in the pane's own server, or 401s). On a Pi that already has a
+config.env, install.sh keeps its own token and URL: paste the centre's `AERO_FLEET_TOKEN` into the
+pane's `/etc/aero/config.env` by hand (health-check.sh defaults AERO_ADMIN_URL to AERO_WALL_URL).
 3. `curl http://<pi>:3000/api/status`: `ok`, `page ok`, `data` lists imagery/terrain/lights/
 buildings/roads/models/media. 4. Open `/admin` on the centre Pi from a phone: the pane's heartbeat
 row appears within five minutes with an fps; push `scale 2` if it is under 10. 5. The other two

@@ -39,6 +39,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # deploy/ lands on every Pi as root through the updater's units-only path; a quoting slip
+      # there used to ship green. shellcheck is preinstalled on ubuntu-latest.
+      - name: Shell syntax (deploy/)
+        working-directory: deploy
+        run: bash -n ./*.sh pi/*.sh && shellcheck -S warning ./*.sh pi/*.sh
+
       # This project uses Bun, not npm. `bun.lock` is the authoritative
       # lockfile. `package-lock.json` may exist in the tree for historical
       # reasons but is not the source of truth for CI installs.
